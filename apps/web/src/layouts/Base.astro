@@ -1,0 +1,49 @@
+---
+/**
+ * Layout raiz. Tema ESCURO por padrão (docs/05 §1.2, docs/06 §1), sem flash.
+ *
+ * "Sem flash" (aceite da task): o <html> já nasce com data-theme resolvido no
+ * SSR (dark). Um script inline síncrono no <head> aplica a preferência salva
+ * ANTES do primeiro paint — se e só se o usuário tiver escolhido explicitamente
+ * (localStorage 'theme'). localStorage é permitido SÓ para preferência de tema
+ * (CLAUDE.md). Sem preferência salva, mantém dark (nunca segue o SO aqui para
+ * não piscar; o CSS de tokens já cobre prefers-color-scheme quando não há
+ * data-theme — mas como o SSR fixa data-theme="dark", o padrão é sempre dark e
+ * previsível). A alternância fica a cargo do ThemeToggle (task posterior).
+ *
+ * Este layout é scaffold para provar o build; a task de página pode substituí-lo.
+ */
+import '../styles/global.css';
+import BaseHead from '../components/BaseHead.astro';
+import Substrate from '../components/Substrate.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <BaseHead title={title} {...description ? { description } : {}} />
+    <script is:inline>
+      // No-flash: aplica preferência de tema salva antes do primeiro paint.
+      // Só toca no tema se houver escolha explícita; padrão permanece 'dark'.
+      try {
+        const saved = localStorage.getItem('theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        }
+      } catch (_) {
+        /* localStorage indisponível: mantém o dark padrão do SSR. */
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Pular para o conteúdo</a>
+    <Substrate />
+    <slot />
+  </body>
+</html>

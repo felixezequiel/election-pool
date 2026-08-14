@@ -1,0 +1,52 @@
+---
+/**
+ * Seção 08 — O QUE ESTE MODELO NÃO FAZ (docs/06 §2). `data.methodologyNotes`
+ * (docs/01 §10) NA ÍNTEGRA, sem resumir nem editar (task, docs/06 §2). A lista
+ * vem do dado — não é reescrita aqui — para permanecer literal e versionada.
+ */
+interface Props {
+  notes: string[];
+}
+const { notes } = Astro.props;
+---
+
+<section class="section" aria-labelledby="limits-title">
+  <div class="container">
+    <p class="label">Os limites</p>
+    <h2 id="limits-title" class="display-l limits-heading">O que este modelo não faz.</h2>
+    <p class="body limits-lead">
+      Um instrumento honesto diz onde não enxerga. Esta lista é a mesma da metodologia, sem
+      corte.
+    </p>
+    <ul class="limits-list">
+      {
+        notes.map((note) => (
+          <li class="body limits-item">{note}</li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .limits-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+  }
+  .limits-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 60ch;
+  }
+  .limits-list {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 68ch;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .limits-item {
+    position: relative;
+    padding-left: calc(var(--rhythm) * 3);
+    border-left: 2px solid var(--border-strong);
+  }
+</style>

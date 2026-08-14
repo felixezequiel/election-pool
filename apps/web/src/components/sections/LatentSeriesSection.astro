@@ -1,0 +1,72 @@
+---
+/**
+ * Seção 03 — SÉRIE LATENTE (docs/06 §2). 1º turno, bleed 12 colunas: bandas
+ * dominantes, pontos das pesquisas por trás. O gráfico é o protagonista; o texto
+ * é comentário (docs/05 §4). SSR-completo: o SVG já aparece sem JS.
+ */
+import LatentBandChart from '../charts/LatentBandChart.astro';
+import Num from '../Num.astro';
+import type { ChartInputs } from '../../data/chart-inputs.js';
+
+interface Props {
+  firstRound: ChartInputs['firstRound'];
+}
+
+const { firstRound } = Astro.props;
+const hasSeries = firstRound.series.length > 0;
+---
+
+<section class="section" aria-labelledby="latent-title">
+  <div class="container">
+    <p class="label">Série de apoio estimado</p>
+    <h2 id="latent-title" class="display-l latent-heading">
+      A banda é o dado. A linha central é secundária.
+    </h2>
+    <p class="body latent-lead">
+      Cada faixa é o intervalo de <Num>90</Num>% do apoio estimado ao longo do tempo; a linha
+      discreta é a média. Os pontos por trás são as pesquisas individuais que alimentam a
+      estimativa.
+    </p>
+  </div>
+
+  {
+    hasSeries ? (
+      <div class="bleed substrate-plot latent-plot">
+        <div class="bleed-inner">
+          <LatentBandChart
+            id="latent-first"
+            title="Primeiro turno — série de apoio estimado, últimos 90 dias"
+            series={firstRound.series}
+            points={firstRound.points}
+            pollMeta={firstRound.pollMeta}
+          />
+        </div>
+      </div>
+    ) : (
+      <div class="container">
+        <p class="body-muted latent-empty">
+          Ainda não há série estimada para exibir. Assim que houver pesquisas na janela, a banda
+          aparece aqui.
+        </p>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .latent-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 24ch;
+  }
+  .latent-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .latent-plot {
+    margin-top: calc(var(--rhythm) * 4);
+  }
+  .latent-empty {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 60ch;
+  }
+</style>

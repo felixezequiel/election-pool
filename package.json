@@ -1,0 +1,40 @@
+{
+  "name": "election-pool",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint . && prettier --check .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm --filter @election-pool/web build",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:up": "pnpm --filter @election-pool/api db:up",
+    "db:down": "pnpm --filter @election-pool/api db:down",
+    "db:migrate": "pnpm --filter @election-pool/api db:migrate",
+    "db:seed": "pnpm --filter @election-pool/api db:seed",
+    "ingest:discover": "pnpm --filter @election-pool/api ingest:discover",
+    "ingest:harvest": "pnpm --filter @election-pool/api ingest:harvest",
+    "ingest:reparse": "pnpm --filter @election-pool/api ingest:reparse",
+    "ingest:approve": "pnpm --filter @election-pool/api ingest:approve",
+    "model:backtest": "pnpm --filter @election-pool/model model:backtest",
+    "model:run": "pnpm --filter @election-pool/api model:run",
+    "orchestrate": "pnpm --filter @election-pool/api orchestrate",
+    "render": "pnpm --filter @election-pool/api render",
+    "publish:rollback": "pnpm --filter @election-pool/api publish:rollback"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.17.0",
+    "@types/node": "22.10.5",
+    "eslint": "9.17.0",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.4.2",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.19.1",
+    "vitest": "2.1.8"
+  }
+}

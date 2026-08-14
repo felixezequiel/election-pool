@@ -1,0 +1,131 @@
+---
+/**
+ * Seção 06 — DIAGNÓSTICOS (docs/06 §2, §5). A seção com maior potencial de dano.
+ *
+ * Regra especial (docs/06 §5, docs/08 §4-5):
+ *  - Cada indicador aparece JUNTO da sua explicação inocente, no MESMO bloco
+ *    visual e no MESMO peso de tipo (não em tooltip, não em nota de rodapé).
+ *  - Gaveta: exibir sempre "X de Y registradas" ao lado da razão — <DiagnosticGauge>
+ *    recebe `denominator` renderizado no mesmo tamanho do valor.
+ *  - Herding: exibir sempre o `n` da janela + a linha de baixa potência com n pequeno.
+ *  - Vocabulário: só o aprovado ("registrada e não divulgada", "dispersão abaixo do
+ *    esperado"). Proibido "comprada/fraude/manipulada/suspeita/encomendada".
+ *
+ * Os textos abaixo são a explicação inocente OBRIGATÓRIA; o gauge é recipiente
+ * neutro (o vocabulário é responsabilidade deste texto, não do SVG).
+ */
+import DiagnosticGauge from '../charts/DiagnosticGauge.astro';
+import type { PublicData } from '@election-pool/contracts/public-data';
+
+interface Props {
+  diagnostics: PublicData['diagnostics'];
+  /** Índice id→nome legível de institutos (rótulos dos cortes). */
+  subjectNames: Map<string, string>;
+}
+
+const { diagnostics, subjectNames } = Astro.props;
+
+function subjectLabel(id: string): string {
+  // Nome mapeado (institutos) ou o próprio id (ex.: contratante sem cadastro).
+  // Não inventa dado: sem mapeamento, mostra o id como está.
+  return subjectNames.get(id) ?? id;
+}
+
+const kindLabel = { institute: 'Instituto', contractor: 'Contratante' } as const;
+---
+
+<section class="section" aria-labelledby="diag-title">
+  <div class="container">
+    <p class="label">Diagnósticos</p>
+    <h2 id="diag-title" class="display-l diag-heading">
+      Sinais que pedem contexto, não conclusões.
+    </h2>
+    <p class="body diag-lead">
+      Estes indicadores são descritivos. Nenhum deles altera o agregado e cada um tem uma
+      explicação legítima, exibida ao lado com o mesmo peso. Um sinal aqui é um convite a olhar
+      com cuidado, nunca uma acusação.
+    </p>
+
+    <h3 class="display-m diag-subhead">Taxa de gaveta</h3>
+    <p class="body-muted diag-subnote">
+      Proporção de pesquisas registradas no PesqEle cuja janela de divulgação já passou e que
+      não foram divulgadas. Uma taxa alta sobre poucos registros diz pouco — por isso o
+      denominador aparece junto.
+    </p>
+    <div class="diag-grid">
+      {
+        diagnostics.gaveta.map((g) => (
+          <DiagnosticGauge
+            id={`gaveta-${g.subjectKind}-${g.subjectId}`}
+            label={`${kindLabel[g.subjectKind]} — ${subjectLabel(g.subjectId)}`}
+            value={g.rate}
+            decimals={0}
+            suffix="%"
+            denominator={`${g.registered - g.disclosed} de ${g.registered} registradas`}
+          >
+            <p class="body diag-explain">
+              Registradas e não divulgadas. Pesquisas internas de campanha são registradas e
+              legitimamente nunca divulgadas — por isso um contratante de campanha pode ter taxa
+              alta sem que isso indique nada além do uso normal do instrumento.
+            </p>
+          </DiagnosticGauge>
+        ))
+      }
+    </div>
+
+    <h3 class="display-m diag-subhead">Herding</h3>
+    <p class="body-muted diag-subnote">
+      Compara a dispersão observada entre institutos com a dispersão que a teoria amostral prevê.
+      Uma razão abaixo do esperado sugere que os institutos estão convergindo entre si.
+    </p>
+    <div class="diag-grid">
+      {
+        diagnostics.herding.map((h, i) => (
+          <DiagnosticGauge
+            id={`herding-${i}`}
+            label="Dispersão observada sobre a esperada"
+            value={h.ratio * 100}
+            decimals={0}
+            suffix="%"
+            denominator={`n = ${h.nPolls} na janela`}
+            flagged={h.flagged}
+          >
+            <p class="body diag-explain">
+              Dispersão abaixo do esperado. Com n pequeno, o teste tem pouca potência: uma
+              amostra de poucas pesquisas produz razões instáveis mesmo quando nada de anômalo
+              ocorre. Leia o número junto do n.
+            </p>
+          </DiagnosticGauge>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .diag-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 24ch;
+  }
+  .diag-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .diag-subhead {
+    margin-top: calc(var(--rhythm) * 5);
+  }
+  .diag-subnote {
+    margin-top: calc(var(--rhythm) * 1);
+    max-width: 62ch;
+  }
+  .diag-grid {
+    margin-top: calc(var(--rhythm) * 3);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--gutter);
+  }
+  .diag-explain {
+    margin-top: calc(var(--rhythm) * 1.5);
+    color: var(--ink);
+  }
+</style>

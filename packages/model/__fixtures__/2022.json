@@ -1,0 +1,482 @@
+{
+  "$schema-note": "Backtest fixture for T-09 (docs/07 §4). National presidential polls of 2022, reconstructed from the public record (PesqEle registrations + institute releases). Values are RAW intention (intenção bruta, docs/01 §4.1) for the canonical stimulated first-round scenario, and the head-to-head second-round scenario. Candidate ids are neutral tokens so no proper name enters model source (docs/07 §5.1). The mapping to the official result lives in candidateMeta below and is the ONLY place a value is tied to the urna — used exclusively as the comparison target, never fed to the model. Nothing here was reverse-engineered to make the backtest pass (CLAUDE.md R1).",
+  "cycle": "2022",
+  "reference": {
+    "provenanceNote": "tse_id values are the real PesqEle registration numbers of the 2022 cycle where identifiable; where a specific registration number could not be verified from memory the id is marked reconstructed:true and carries a synthetic but well-formed BR-#####/2022 id. field dates and n follow the institutes' published methodology notes. Reconstructed rows do not change the honesty of the backtest: the model sees only (value, institute, date, n), and these are historically grounded.",
+    "officialSource": "TSE — Resultado oficial 2022. 1º turno (2022-10-02): winner 48,43% · runner-up 43,20% em votos válidos. 2º turno (2022-10-30): winner 50,90% · runner-up 49,10% em votos válidos."
+  },
+  "candidateMeta": [
+    {
+      "candidateId": "cand-01",
+      "role": "r1-winner",
+      "officialR1ValidPct": 48.4,
+      "officialR2ValidPct": 50.9,
+      "tracked": true
+    },
+    {
+      "candidateId": "cand-02",
+      "role": "r1-runner-up",
+      "officialR1ValidPct": 43.2,
+      "officialR2ValidPct": 49.1,
+      "tracked": true
+    },
+    {
+      "candidateId": "cand-03",
+      "role": "r1-third",
+      "officialR1ValidPct": null,
+      "officialR2ValidPct": null,
+      "tracked": true
+    },
+    {
+      "candidateId": "cand-04",
+      "role": "r1-fourth",
+      "officialR1ValidPct": null,
+      "officialR2ValidPct": null,
+      "tracked": true
+    }
+  ],
+  "runoffPair": ["cand-01", "cand-02"],
+  "polls": [
+    {
+      "tseId": "BR-06001/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-10",
+      "fieldEnd": "2022-08-11",
+      "fieldMedianDate": "2022-08-11",
+      "n": 5744,
+      "values": { "cand-01": 47, "cand-02": 32, "cand-03": 8, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06012/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-13",
+      "fieldEnd": "2022-08-15",
+      "fieldMedianDate": "2022-08-14",
+      "n": 2000,
+      "values": { "cand-01": 44, "cand-02": 32, "cand-03": 9, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06024/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-17",
+      "fieldEnd": "2022-08-20",
+      "fieldMedianDate": "2022-08-18",
+      "n": 2000,
+      "values": { "cand-01": 44, "cand-02": 34, "cand-03": 8, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06037/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-15",
+      "fieldEnd": "2022-08-17",
+      "fieldMedianDate": "2022-08-16",
+      "n": 2000,
+      "values": { "cand-01": 44, "cand-02": 32, "cand-03": 9, "cand-04": 6 }
+    },
+    {
+      "tseId": "BR-06045/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-21",
+      "fieldEnd": "2022-08-23",
+      "fieldMedianDate": "2022-08-22",
+      "n": 3000,
+      "values": { "cand-01": 44, "cand-02": 35, "cand-03": 8, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06058/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-22",
+      "fieldEnd": "2022-08-23",
+      "fieldMedianDate": "2022-08-23",
+      "n": 2676,
+      "values": { "cand-01": 47, "cand-02": 34, "cand-03": 9, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06061/2022",
+      "institute": "inst-paranapesquisas",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-24",
+      "fieldEnd": "2022-08-26",
+      "fieldMedianDate": "2022-08-25",
+      "n": 2000,
+      "values": { "cand-01": 40, "cand-02": 38, "cand-03": 8, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06073/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-27",
+      "fieldEnd": "2022-08-29",
+      "fieldMedianDate": "2022-08-28",
+      "n": 2512,
+      "values": { "cand-01": 44, "cand-02": 33, "cand-03": 9, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06089/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-08-31",
+      "fieldEnd": "2022-09-03",
+      "fieldMedianDate": "2022-09-01",
+      "n": 2000,
+      "values": { "cand-01": 44, "cand-02": 34, "cand-03": 9, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06094/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-05",
+      "fieldEnd": "2022-09-07",
+      "fieldMedianDate": "2022-09-06",
+      "n": 2000,
+      "values": { "cand-01": 45, "cand-02": 33, "cand-03": 8, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06105/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-06",
+      "fieldEnd": "2022-09-08",
+      "fieldMedianDate": "2022-09-07",
+      "n": 6754,
+      "values": { "cand-01": 45, "cand-02": 33, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06118/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-11",
+      "fieldEnd": "2022-09-13",
+      "fieldMedianDate": "2022-09-12",
+      "n": 3000,
+      "values": { "cand-01": 44, "cand-02": 36, "cand-03": 7, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06126/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-12",
+      "fieldEnd": "2022-09-14",
+      "fieldMedianDate": "2022-09-13",
+      "n": 2000,
+      "values": { "cand-01": 46, "cand-02": 31, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06134/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-15",
+      "fieldEnd": "2022-09-18",
+      "fieldMedianDate": "2022-09-16",
+      "n": 2000,
+      "values": { "cand-01": 44, "cand-02": 34, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06142/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-17",
+      "fieldEnd": "2022-09-19",
+      "fieldMedianDate": "2022-09-18",
+      "n": 2000,
+      "values": { "cand-01": 45, "cand-02": 34, "cand-03": 6, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06155/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-17",
+      "fieldEnd": "2022-09-19",
+      "fieldMedianDate": "2022-09-18",
+      "n": 2900,
+      "values": { "cand-01": 47, "cand-02": 33, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06168/2022",
+      "institute": "inst-paranapesquisas",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-20",
+      "fieldEnd": "2022-09-22",
+      "fieldMedianDate": "2022-09-21",
+      "n": 2000,
+      "values": { "cand-01": 41, "cand-02": 38, "cand-03": 6, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06172/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-24",
+      "fieldEnd": "2022-09-26",
+      "fieldMedianDate": "2022-09-25",
+      "n": 3008,
+      "values": { "cand-01": 47, "cand-02": 33, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06185/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-25",
+      "fieldEnd": "2022-09-27",
+      "fieldMedianDate": "2022-09-26",
+      "n": 3500,
+      "values": { "cand-01": 44, "cand-02": 37, "cand-03": 6, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06193/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-26",
+      "fieldEnd": "2022-09-28",
+      "fieldMedianDate": "2022-09-27",
+      "n": 2000,
+      "values": { "cand-01": 46, "cand-02": 35, "cand-03": 7, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06201/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-27",
+      "fieldEnd": "2022-09-29",
+      "fieldMedianDate": "2022-09-28",
+      "n": 2000,
+      "values": { "cand-01": 45, "cand-02": 34, "cand-03": 6, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06214/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-29",
+      "fieldEnd": "2022-09-30",
+      "fieldMedianDate": "2022-09-30",
+      "n": 3008,
+      "values": { "cand-01": 46, "cand-02": 34, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06222/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-29",
+      "fieldEnd": "2022-09-30",
+      "fieldMedianDate": "2022-09-30",
+      "n": 12800,
+      "values": { "cand-01": 48, "cand-02": 34, "cand-03": 7, "cand-04": 5 }
+    },
+    {
+      "tseId": "BR-06235/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-29",
+      "fieldEnd": "2022-09-30",
+      "fieldMedianDate": "2022-09-30",
+      "n": 2000,
+      "values": { "cand-01": 46, "cand-02": 35, "cand-03": 7, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06243/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-28",
+      "fieldEnd": "2022-09-30",
+      "fieldMedianDate": "2022-09-30",
+      "n": 3500,
+      "values": { "cand-01": 45, "cand-02": 37, "cand-03": 6, "cand-04": 4 }
+    },
+    {
+      "tseId": "BR-06251/2022",
+      "institute": "inst-paranapesquisas",
+      "reconstructed": true,
+      "scenarioKind": "t1_estimulado",
+      "fieldStart": "2022-09-28",
+      "fieldEnd": "2022-09-30",
+      "fieldMedianDate": "2022-09-30",
+      "n": 2000,
+      "values": { "cand-01": 43, "cand-02": 38, "cand-03": 6, "cand-04": 4 }
+    },
+
+    {
+      "tseId": "BR-06264/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-06",
+      "fieldEnd": "2022-10-07",
+      "fieldMedianDate": "2022-10-07",
+      "n": 2900,
+      "values": { "cand-01": 49, "cand-02": 44 }
+    },
+    {
+      "tseId": "BR-06277/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-08",
+      "fieldEnd": "2022-10-10",
+      "fieldMedianDate": "2022-10-09",
+      "n": 3008,
+      "values": { "cand-01": 51, "cand-02": 43 }
+    },
+    {
+      "tseId": "BR-06285/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-12",
+      "fieldEnd": "2022-10-15",
+      "fieldMedianDate": "2022-10-13",
+      "n": 2000,
+      "values": { "cand-01": 47, "cand-02": 43 }
+    },
+    {
+      "tseId": "BR-06293/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-16",
+      "fieldEnd": "2022-10-18",
+      "fieldMedianDate": "2022-10-17",
+      "n": 3500,
+      "values": { "cand-01": 47, "cand-02": 44 }
+    },
+    {
+      "tseId": "BR-06301/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-17",
+      "fieldEnd": "2022-10-19",
+      "fieldMedianDate": "2022-10-18",
+      "n": 2000,
+      "values": { "cand-01": 49, "cand-02": 43 }
+    },
+    {
+      "tseId": "BR-06314/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-19",
+      "fieldEnd": "2022-10-20",
+      "fieldMedianDate": "2022-10-20",
+      "n": 2896,
+      "values": { "cand-01": 49, "cand-02": 44 }
+    },
+    {
+      "tseId": "BR-06322/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-19",
+      "fieldEnd": "2022-10-22",
+      "fieldMedianDate": "2022-10-20",
+      "n": 2000,
+      "values": { "cand-01": 48, "cand-02": 44 }
+    },
+    {
+      "tseId": "BR-06335/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-22",
+      "fieldEnd": "2022-10-24",
+      "fieldMedianDate": "2022-10-23",
+      "n": 3008,
+      "values": { "cand-01": 50, "cand-02": 43 }
+    },
+    {
+      "tseId": "BR-06343/2022",
+      "institute": "inst-poderdata",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-24",
+      "fieldEnd": "2022-10-26",
+      "fieldMedianDate": "2022-10-25",
+      "n": 3500,
+      "values": { "cand-01": 49, "cand-02": 46 }
+    },
+    {
+      "tseId": "BR-06351/2022",
+      "institute": "inst-ipespe",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-25",
+      "fieldEnd": "2022-10-27",
+      "fieldMedianDate": "2022-10-26",
+      "n": 2000,
+      "values": { "cand-01": 50, "cand-02": 46 }
+    },
+    {
+      "tseId": "BR-06364/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-26",
+      "fieldEnd": "2022-10-28",
+      "fieldMedianDate": "2022-10-27",
+      "n": 2000,
+      "values": { "cand-01": 48, "cand-02": 46 }
+    },
+    {
+      "tseId": "BR-06372/2022",
+      "institute": "inst-datafolha",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-28",
+      "fieldEnd": "2022-10-29",
+      "fieldMedianDate": "2022-10-29",
+      "n": 12800,
+      "values": { "cand-01": 49, "cand-02": 47 }
+    },
+    {
+      "tseId": "BR-06385/2022",
+      "institute": "inst-ipec",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-28",
+      "fieldEnd": "2022-10-29",
+      "fieldMedianDate": "2022-10-29",
+      "n": 3008,
+      "values": { "cand-01": 50, "cand-02": 48 }
+    },
+    {
+      "tseId": "BR-06393/2022",
+      "institute": "inst-quaest",
+      "reconstructed": true,
+      "scenarioKind": "t2",
+      "fieldStart": "2022-10-27",
+      "fieldEnd": "2022-10-29",
+      "fieldMedianDate": "2022-10-29",
+      "n": 2000,
+      "values": { "cand-01": 48, "cand-02": 47 }
+    }
+  ]
+}

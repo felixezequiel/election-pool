@@ -1,0 +1,99 @@
+/*
+ * Escala tipográfica (docs/05 §3.2) como classes utilitárias.
+ * Peso alto e largura variável são permitidos no display (personalidade moderna).
+ * Sentence case no corpo; .label em caixa alta como eyebrow de seção.
+ */
+
+.display-xl {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xl);
+  font-weight: 700;
+  font-stretch: 100%;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.display-l {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-l);
+  font-weight: 640;
+  font-stretch: 100%;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.display-m {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-m);
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Corpo usa --ink (não --ink-2): docs/05 §7 exige AAA no corpo, e em ambos os
+   temas --ink dá ≥17:1. --ink-2 (light 6.5:1) ficaria abaixo de AAA. --ink-2 é
+   reservado para texto de apoio/legenda (.body-muted), onde o piso é AA. */
+.body {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.body-s {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-s);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* Apoio/legenda: tom mais baixo, propositalmente secundário. Piso AA (≥4.5:1
+   em ambos os temas: dark 8.6:1, light 6.5:1). Não usar para prosa principal. */
+.body-muted {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-s);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* Label/eyebrow: mono pequeno em caixa alta. Cor --ink-2 (não --ink-3) para
+   manter AA em ambos os temas — --ink-3 no light (3.1:1) reprovaria texto
+   pequeno. --ink-3 fica só para elementos decorativos/desabilitados grandes. */
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-2);
+}
+
+/* data-xl e data usam mono; o alinhamento tabular vem do próprio .num (Num.astro),
+   mas fixamos aqui o mesmo variant para blocos de dado que não passam por <Num>
+   estruturalmente (ex.: rótulo grande de destaque). */
+.data-xl {
+  font-family: var(--font-mono);
+  font-size: var(--fs-data-xl);
+  font-weight: 500;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.data {
+  font-family: var(--font-mono);
+  font-size: var(--fs-data);
+  font-weight: 400;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}

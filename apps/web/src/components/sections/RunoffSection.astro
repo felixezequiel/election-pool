@@ -1,0 +1,68 @@
+---
+/**
+ * Seção 04 — SEGUNDO TURNO (docs/06 §2). Um LatentBandChart por par testado.
+ * Grade de 2 colunas a partir de 1024px; empilha abaixo disso. Cada par é uma
+ * série independente (docs/01 §3).
+ */
+import LatentBandChart from '../charts/LatentBandChart.astro';
+import type { ChartInputs } from '../../data/chart-inputs.js';
+
+interface Props {
+  runoffs: ChartInputs['runoffs'];
+}
+
+const { runoffs } = Astro.props;
+---
+
+{
+  runoffs.length > 0 && (
+    <section class="section" aria-labelledby="runoff-title">
+      <div class="container">
+        <p class="label">Segundo turno</p>
+        <h2 id="runoff-title" class="display-l runoff-heading">
+          Cada par testado, com a sua própria incerteza.
+        </h2>
+        <p class="body runoff-lead">
+          Quando as pesquisas simulam um segundo turno, tratamos cada par como uma série
+          separada. A leitura vale para o momento medido, não para o resultado final.
+        </p>
+        <div class="runoff-grid">
+          {runoffs.map((r, i) => (
+            <div class="runoff-cell substrate-plot">
+              <LatentBandChart
+                id={`latent-runoff-${i}`}
+                title={r.title}
+                series={r.series}
+                points={r.points}
+                pollMeta={r.pollMeta}
+                height={320}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+<style>
+  .runoff-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 24ch;
+  }
+  .runoff-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .runoff-grid {
+    margin-top: calc(var(--rhythm) * 4);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: calc(var(--rhythm) * 5) var(--gutter);
+  }
+  @media (min-width: 1024px) {
+    .runoff-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

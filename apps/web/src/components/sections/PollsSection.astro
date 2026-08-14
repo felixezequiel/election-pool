@@ -1,0 +1,86 @@
+---
+/**
+ * Seção 07 — AS PESQUISAS (docs/06 §2). PollStrip de todas as pesquisas da
+ * janela, `tse_id` SEMPRE visível (R6), link para a fonte (nunca o texto dela, R3).
+ *
+ * Estado vazio (docs/06 §4): sem pesquisa na janela, é CONVITE, não desculpa —
+ * "Nenhuma pesquisa nacional com campo encerrado nos últimos 45 dias. A última
+ * foi em DD/MM." Nunca "Ops, nada aqui!".
+ */
+import PollStrip from '../charts/PollStrip.astro';
+import Num from '../Num.astro';
+import { formatDayMonth, isoDateOnly } from '../charts/lib/format.js';
+import type { ChartInputs } from '../../data/chart-inputs.js';
+import { ACTIVE_WINDOW_DAYS } from '@election-pool/contracts/constants';
+
+interface Props {
+  stripRows: ChartInputs['stripRows'];
+  /** Data de campo encerrado da última pesquisa conhecida (ISO), para o estado vazio. */
+  lastPollFieldEnd: string | null;
+}
+
+const { stripRows, lastPollFieldEnd } = Astro.props;
+const hasPolls = stripRows.length > 0;
+---
+
+<section class="section" aria-labelledby="polls-title">
+  <div class="container">
+    <p class="label">As pesquisas</p>
+    <h2 id="polls-title" class="display-l polls-heading">
+      Toda pesquisa da janela, com o registro TSE à vista.
+    </h2>
+    <p class="body polls-lead">
+      Cada linha é uma pesquisa registrada no TSE. Mostramos o número de registro, o instituto,
+      o contratante, o tamanho da amostra e as datas de campo — e um link para a fonte. Nunca
+      reproduzimos o texto de terceiros; só o dado e o caminho até ele.
+    </p>
+
+    {
+      hasPolls ? (
+        <div class="polls-strip">
+          <PollStrip id="strip" title="Pesquisas da janela ativa" rows={stripRows} />
+        </div>
+      ) : (
+        <div class="card polls-empty">
+          <p class="body">
+            Nenhuma pesquisa nacional com campo encerrado nos últimos{' '}
+            <Num>{ACTIVE_WINDOW_DAYS}</Num> dias.
+            {lastPollFieldEnd && (
+              <span>
+                {' '}A última foi em{' '}
+                <time datetime={isoDateOnly(lastPollFieldEnd)}>
+                  <Num>{formatDayMonth(lastPollFieldEnd)}</Num>
+                </time>
+                .
+              </span>
+            )}
+          </p>
+          <p class="body-muted polls-empty-note">
+            Assim que uma nova pesquisa entrar na janela, ela aparece aqui — com o registro TSE.
+          </p>
+        </div>
+      )
+    }
+  </div>
+</section>
+
+<style>
+  .polls-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 26ch;
+  }
+  .polls-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .polls-strip {
+    margin-top: calc(var(--rhythm) * 4);
+  }
+  .polls-empty {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 62ch;
+  }
+  .polls-empty-note {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+</style>

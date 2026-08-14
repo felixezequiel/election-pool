@@ -1,0 +1,92 @@
+---
+/**
+ * Seção 10 — RODAPÉ (docs/06 §2). Gerado em · model_version · git_sha · licenças
+ * · fontes. `generatedAt` também aparece aqui (além do cabeçalho). Compartilhado
+ * por todas as rotas.
+ */
+import Num from '../Num.astro';
+import { isoDateOnly } from '../charts/lib/format.js';
+
+interface Props {
+  generatedAt: string;
+  modelVersion: string;
+  gitSha: string;
+}
+const { generatedAt, modelVersion, gitSha } = Astro.props;
+
+const generatedFull = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(generatedAt));
+const generatedIsoDate = isoDateOnly(generatedAt);
+const shortSha = gitSha.slice(0, 7);
+---
+
+<footer class="site-footer">
+  <div class="container site-footer-inner">
+    <dl class="footer-meta">
+      <div class="footer-meta-row">
+        <dt class="label">Gerado em</dt>
+        <dd class="data"><time datetime={generatedIsoDate}><Num>{generatedFull}</Num></time></dd>
+      </div>
+      <div class="footer-meta-row">
+        <dt class="label">model_version</dt>
+        <dd class="data"><Num>{modelVersion}</Num></dd>
+      </div>
+      <div class="footer-meta-row">
+        <dt class="label">git_sha</dt>
+        <dd class="data"><Num label={`git sha ${gitSha}`}>{shortSha}</Num></dd>
+      </div>
+    </dl>
+
+    <div class="footer-notes">
+      <p class="body-muted">
+        Dados extraídos do PesqEle/TSE, republicados como fato com o registro à vista. Nenhum
+        texto de terceiros é reproduzido; referências à fonte são sempre link. Código e dado são
+        públicos — quem discordar do modelo pode rodar o próprio sobre o mesmo conjunto.
+      </p>
+      <p class="body-muted footer-fonts">
+        Tipografia: Bricolage Grotesque, Source Serif <Num>4</Num> e IBM Plex Mono, sob a SIL
+        Open Font License.
+      </p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--border);
+    margin-top: calc(var(--rhythm) * 6);
+  }
+  .site-footer-inner {
+    padding-block: calc(var(--rhythm) * 6);
+    display: grid;
+    gap: calc(var(--rhythm) * 4);
+  }
+  .footer-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(var(--rhythm) * 2) calc(var(--rhythm) * 5);
+    margin: 0;
+  }
+  .footer-meta-row {
+    display: grid;
+    gap: calc(var(--rhythm) * 0.5);
+  }
+  .footer-meta-row dd {
+    color: var(--ink-2);
+  }
+  .footer-meta-row dd time {
+    color: var(--ink-2);
+  }
+  .footer-notes {
+    display: grid;
+    gap: calc(var(--rhythm) * 2);
+    max-width: 72ch;
+  }
+</style>

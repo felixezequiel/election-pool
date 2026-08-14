@@ -1,0 +1,43 @@
+{
+  "name": "@election-pool/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "dotenv -e ../../infra/.env -- vitest run",
+    "db:up": "docker compose -f ../../infra/docker-compose.yml up -d --wait",
+    "db:down": "docker compose -f ../../infra/docker-compose.yml down",
+    "db:down:volumes": "docker compose -f ../../infra/docker-compose.yml down -v",
+    "db:migrate": "dotenv -e ../../infra/.env -- node-pg-migrate up -m ../../infra/migrations --tsx",
+    "db:migrate:down": "dotenv -e ../../infra/.env -- node-pg-migrate down -m ../../infra/migrations --tsx",
+    "db:migrate:redo": "dotenv -e ../../infra/.env -- node-pg-migrate redo -m ../../infra/migrations --tsx",
+    "db:seed": "dotenv -e ../../infra/.env -- node --import tsx src/db/seed.ts",
+    "ingest:discover": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/discovery.entry.ts",
+    "ingest:harvest": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/harvest.entry.ts",
+    "ingest:reparse": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/reparse.entry.ts",
+    "ingest:approve": "dotenv -e ../../infra/.env -- node --import tsx src/ingestion/approve.entry.ts",
+    "model:run": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/model.entry.ts",
+    "orchestrate": "dotenv -e ../../infra/.env -- node --import tsx src/main.ts",
+    "render": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/render.entry.ts",
+    "publish:rollback": "node --import tsx src/jobs/publish-rollback.entry.ts"
+  },
+  "dependencies": {
+    "@election-pool/adapters": "workspace:*",
+    "@election-pool/contracts": "workspace:*",
+    "@election-pool/model": "workspace:*",
+    "node-cron": "3.0.3",
+    "pg": "8.13.1",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "@types/node-cron": "3.0.11",
+    "@types/pg": "8.11.10",
+    "dotenv-cli": "8.0.0",
+    "node-pg-migrate": "7.9.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  }
+}

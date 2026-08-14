@@ -1,0 +1,297 @@
+/*
+ * Estilos compartilhados dos componentes de gráfico (docs/05 §5, §6).
+ *
+ * Princípio inegociável (docs/05 §1.1): a BANDA de incerteza é dominante; a
+ * linha central é secundária. Aqui isso vira números concretos:
+ *   - banda:  fill ~22% (mais gradiente/glow no escuro)
+ *   - linha:  1.5px, opacidade 60%
+ *   - pontos: opacidade 40%, r 3px
+ * Não inverter "para melhorar a legibilidade" (armadilha da task).
+ *
+ * Movimento (docs/05 §6): a orquestração de load faz a banda CRESCER a partir da
+ * mediana ANTES das linhas e dos pontos — a incerteza aparece antes da
+ * estimativa (a ordem é o argumento). Tudo respeita prefers-reduced-motion:
+ * estado final imediato, zero transição.
+ */
+
+.chart {
+  position: relative;
+  width: 100%;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* ── Substrato / eixos: substrato instantâneo, nunca animado (docs/05 §6.1) ── */
+.chart .axis-line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart .axis-tick {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.chart .axis-label {
+  fill: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ── Banda de incerteza: DOMINANTE ─────────────────────────────────────── */
+.chart .band {
+  /* 22% de preenchimento é o piso da dominância visual (docs/05 §1.1). */
+  fill-opacity: 0.22;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* Hachura por slot sobreposta à banda: cor nunca é o único diferenciador. */
+.chart .band-hachura {
+  fill-opacity: 0.5;
+  pointer-events: none;
+}
+.chart .hachura-stroke {
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+/* ── Linha central: SECUNDÁRIA ─────────────────────────────────────────── */
+.chart .center-line {
+  fill: none;
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+
+/* ── Pontos das pesquisas: por trás, discretos ─────────────────────────── */
+.chart .poll-point {
+  opacity: 0.4;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.chart .poll-point:hover,
+.chart .poll-point:focus-visible,
+.chart .poll-point.is-active {
+  opacity: 0.95;
+}
+.chart .poll-point:focus-visible {
+  outline: none;
+}
+/* Anel de foco/atividade desenhado em SVG (outline não segue a forma). */
+.chart .poll-focus-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+.chart .poll-point:focus-visible + .poll-focus-ring,
+.chart .poll-point.is-active + .poll-focus-ring {
+  opacity: 1;
+}
+
+/* ── Cursor de scrub (vertical) ────────────────────────────────────────── */
+.chart .scrub-line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.chart.is-scrubbing .scrub-line {
+  opacity: 0.7;
+}
+.chart .scrub-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* ── Legenda: sempre visível (docs/05 §5.1), com amostra de cor + hachura ── */
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--rhythm) * 2);
+  margin-top: calc(var(--rhythm) * 2);
+  padding: 0;
+  list-style: none;
+}
+.chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rhythm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--ink-2);
+}
+.chart-legend .swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────────────────── */
+.chart-tooltip {
+  position: absolute;
+  z-index: 3;
+  min-width: 200px;
+  max-width: 280px;
+  padding: calc(var(--rhythm) * 1.5);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-body-s);
+  color: var(--ink);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.chart-tooltip[data-open='true'] {
+  opacity: 1;
+  transform: translateY(0);
+}
+.chart-tooltip dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+}
+.chart-tooltip dt {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.chart-tooltip dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.chart-tooltip .tt-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ── Equivalente textual: <details> com tabela real (docs/05 §7) ───────── */
+.chart-table {
+  margin-top: calc(var(--rhythm) * 2);
+}
+.chart-table > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-2);
+  padding-block: var(--rhythm);
+}
+.chart-table table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--rhythm);
+  font-size: var(--fs-body-s);
+}
+.chart-table caption {
+  text-align: left;
+  color: var(--ink-2);
+  font-size: var(--fs-body-s);
+  padding-bottom: var(--rhythm);
+}
+.chart-table th,
+.chart-table td {
+  text-align: left;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-table td.num,
+.chart-table th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ── Orquestração de load (docs/05 §6.1) ───────────────────────────────── */
+/* Só anima quando a raiz recebe .chart-animate (adicionada pela hidratação).
+   Sem JS, o gráfico já nasce no estado final — nada some. */
+@media (prefers-reduced-motion: no-preference) {
+  .chart.chart-animate .band {
+    animation: band-grow var(--dur-chart) var(--ease-out) both;
+    animation-delay: var(--band-delay, 0ms);
+  }
+  .chart.chart-animate .center-line {
+    animation: line-fade 300ms var(--ease-out) both;
+    /* linhas só depois das bandas (a incerteza vem primeiro). */
+    animation-delay: calc(var(--dur-chart) + var(--line-delay, 0ms));
+  }
+  .chart.chart-animate .poll-point {
+    animation: point-fade 400ms var(--ease-out) both;
+    animation-delay: calc(var(--dur-chart) + 300ms + var(--point-delay, 0ms));
+  }
+}
+
+@keyframes band-grow {
+  from {
+    transform: scaleY(0.001);
+    fill-opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    fill-opacity: 0.22;
+  }
+}
+@keyframes line-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+@keyframes point-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.4;
+  }
+}
+
+/* Dot plot (HouseEffectPlot) ──────────────────────────────────────────── */
+.chart .zero-line {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+.chart .ci-bar {
+  stroke-width: 2;
+  opacity: 0.55;
+  stroke-linecap: round;
+}
+.chart .effect-dot {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+.chart .effect-row.not-estimable {
+  opacity: 0.4;
+}
+.chart .effect-row.not-estimable .ci-bar,
+.chart .effect-row.not-estimable .effect-dot {
+  display: none;
+}
+.chart .row-label {
+  fill: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body-s);
+}
+.chart .not-estimable-mark {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-data);
+}

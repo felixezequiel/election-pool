@@ -1,0 +1,125 @@
+---
+/**
+ * <UncertaintyRule> — A RÉGUA (docs/05 §1.1, §5, §8).
+ *
+ * Barra horizontal com a banda de credibilidade 90% em escala REAL e uma marca
+ * central. Acompanha TODO número de destaque — inclusive os animados. Animar é
+ * apresentação; a banda continua obrigatória (docs/05 §1.1). Este é o
+ * anti-padrão nº 1 se faltar: "número de destaque sem UncertaintyRule".
+ *
+ * SSR-completo: a barra é um `<svg>` estático desenhado a partir de lo90/hi90 na
+ * mesma escala do domínio informado. A hidratação só é necessária quando o
+ * número ao lado ANIMA em um novo valor (scrub / novo run): então o
+ * LatentBandChart chama `updateUncertaintyRule(el, {mean,lo90,hi90})`, que
+ * reposiciona a marca e a banda por atributos `data-*`. Sem JS, a régua já está
+ * correta para o valor final renderizado.
+ *
+ * Escala: por padrão a régua usa um domínio local [lo90-pad, hi90+pad] para
+ * ocupar a largura, MAS aceita um `domain` explícito para ficar na MESMA escala
+ * de várias réguas lado a lado (docs/06 §4 — "duas leituras, cada uma com sua
+ * régua em escala real, lado a lado"). Passe o mesmo `domain` para comparar.
+ */
+import { formatPct } from './lib/format.js';
+
+interface Props {
+  mean: number;
+  lo90: number;
+  hi90: number;
+  /** Slot de cor da entidade (1..8) para colorir a marca central. */
+  colorSlot?: number;
+  /** Domínio [min,max] em p.p. compartilhado entre réguas comparáveis. */
+  domain?: [number, number] | undefined;
+  /** Rótulo acessível (ex.: nome do candidato). */
+  label?: string | undefined;
+  /** Largura do SVG em px (a altura é fixa e baixa). */
+  width?: number;
+  class?: string | undefined;
+}
+
+const {
+  mean,
+  lo90,
+  hi90,
+  colorSlot,
+  domain,
+  label,
+  width = 220,
+  class: className,
+} = Astro.props;
+
+const H = 22;
+const PAD_X = 2;
+const PAD_PP = 3;
+const dMin = domain ? domain[0] : Math.max(0, lo90 - PAD_PP);
+const dMax = domain ? domain[1] : Math.min(100, hi90 + PAD_PP);
+const span = dMax - dMin || 1;
+
+const scale = (v: number): number => PAD_X + ((v - dMin) / span) * (width - 2 * PAD_X);
+
+const xLo = scale(lo90);
+const xHi = scale(hi90);
+const xMean = scale(mean);
+const midY = H / 2;
+
+const color = colorSlot ? `var(--c${colorSlot})` : 'var(--accent)';
+const desc = `Intervalo de 90% de ${formatPct(lo90)} a ${formatPct(hi90)}, central ${formatPct(mean)}`;
+---
+
+<svg
+  class:list={['uncertainty-rule', className]}
+  viewBox={`0 0 ${width} ${H}`}
+  width={width}
+  height={H}
+  role="img"
+  aria-label={label ? `${label}: ${desc}` : desc}
+  data-uncertainty-rule
+  data-domain-min={dMin}
+  data-domain-max={dMax}
+  data-width={width}
+  style={`--rule-color: ${color}`}
+>
+  <line class="rule-axis" x1={PAD_X} y1={midY} x2={width - PAD_X} y2={midY}></line>
+  <rect
+    class="rule-band"
+    data-rule-band
+    x={xLo}
+    y={midY - 5}
+    width={Math.max(0, xHi - xLo)}
+    height={10}
+    rx={3}></rect>
+  <line class="rule-center" data-rule-center x1={xMean} y1={midY - 8} x2={xMean} y2={midY + 8}
+  ></line>
+</svg>
+
+<style>
+  .uncertainty-rule {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .rule-axis {
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+  .rule-band {
+    fill: var(--rule-color);
+    fill-opacity: 0.22;
+    transition:
+      x var(--dur-base) var(--ease-out),
+      width var(--dur-base) var(--ease-out);
+  }
+  .rule-center {
+    stroke: var(--rule-color);
+    stroke-width: 2;
+    stroke-linecap: round;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rule-band,
+    .rule-center {
+      transition: none;
+    }
+  }
+</style>

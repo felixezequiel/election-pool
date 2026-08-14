@@ -1,0 +1,55 @@
+{
+  "name": "@election-pool/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./poll-source-adapter": "./poll-source-adapter.ts",
+    "./parse-ptbr-number": "./parse-ptbr-number.ts",
+    "./robots": "./robots.ts",
+    "./rate-limiter": "./rate-limiter.ts",
+    "./http-client": "./http-client.ts",
+    "./base/base-adapter": "./base/base-adapter.ts",
+    "./base/registry": "./base/registry.ts",
+    "./base/candidate-resolver": "./base/candidate-resolver.ts",
+    "./base/tse-id": "./base/tse-id.ts",
+    "./base/scenario-lines": "./base/scenario-lines.ts",
+    "./base/raw-storage": "./base/raw-storage.ts",
+    "./validation/validate-parsed-poll": "./validation/validate-parsed-poll.ts",
+    "./validation/validation-error": "./validation/validation-error.ts",
+    "./validation/context": "./validation/context.ts",
+    "./validation/failure-counter": "./validation/failure-counter.ts",
+    "./validation/v1-sum": "./validation/v1-sum.ts",
+    "./validation/v2-max-candidate": "./validation/v2-max-candidate.ts",
+    "./validation/v3-runoff-count": "./validation/v3-runoff-count.ts",
+    "./validation/v4-delta-previous": "./validation/v4-delta-previous.ts",
+    "./validation/v5-delta-latent": "./validation/v5-delta-latent.ts",
+    "./validation/v6-tse-id-match": "./validation/v6-tse-id-match.ts",
+    "./validation/v7-candidate-count": "./validation/v7-candidate-count.ts",
+    "./http/shared-client": "./http/shared-client.ts",
+    "./nexus/nexus-adapter": "./nexus/nexus-adapter.ts",
+    "./nexus/parse": "./nexus/parse.ts",
+    "./cnt-mda/cnt-mda-adapter": "./cnt-mda/cnt-mda-adapter.ts",
+    "./cnt-mda/parse": "./cnt-mda/parse.ts",
+    "./cnt-mda/pdf": "./cnt-mda/pdf.ts",
+    "./pesqele/client": "./pesqele/client.ts",
+    "./pesqele/parse": "./pesqele/parse.ts",
+    "./pesqele/contractor-classifier": "./pesqele/contractor-classifier.ts",
+    "./pesqele/registration": "./pesqele/registration.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint . && prettier --check ."
+  },
+  "dependencies": {
+    "@election-pool/contracts": "workspace:*",
+    "node-html-parser": "6.1.13",
+    "unpdf": "1.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  }
+}

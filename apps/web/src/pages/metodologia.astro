@@ -1,0 +1,127 @@
+---
+/**
+ * Rota `/metodologia` (docs/06 §2). Contém docs/01 §10 NA ÍNTEGRA (de
+ * `data.methodologyNotes`, sem editar/resumir — reusa <ModelLimitsSection>) e
+ * explica a restrição de soma-zero e o que ela NÃO resolve (docs/01 §1.1, §10).
+ * Também é a página que se apresenta ao User-Agent de crawler (docs/08 §3).
+ */
+import Base from '../layouts/Base.astro';
+import SiteHeader from '../components/sections/SiteHeader.astro';
+import ModelLimitsSection from '../components/sections/ModelLimitsSection.astro';
+import SiteFooter from '../components/sections/SiteFooter.astro';
+import Num from '../components/Num.astro';
+import { data } from '../data/load.js';
+---
+
+<Base title="Metodologia — election-pool" description="Como o modelo estima apoio e house effect, e o que ele não resolve.">
+  <SiteHeader
+    generatedAt={data.generatedAt}
+    nextUpdateAt={data.nextUpdateAt}
+    updateIntervalMinutes={data.updateIntervalMinutes}
+    current="/metodologia"
+  />
+
+  <main id="main">
+    <section class="section" aria-labelledby="meth-title">
+      <div class="container">
+        <p class="label">Metodologia</p>
+        <h1 id="meth-title" class="display-xl meth-title">
+          Como lemos as pesquisas, e onde paramos de enxergar.
+        </h1>
+        <p class="body meth-lead">
+          Modelamos cada pesquisa como uma medição do apoio latente mais um viés sistemático do
+          instituto e um erro amostral. O apoio latente segue uma série suave ao longo do tempo,
+          estimada por um filtro de Kalman com suavização. O viés de cada instituto — o house
+          effect — é estimado a partir dos dados, por instituto, sempre. O modelo é cego a quem é
+          quem: não conhece candidato nem espectro, e não corrige direção com base em eleição
+          passada.
+        </p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="sumzero-title">
+      <div class="container">
+        <div class="grid-12">
+          <div class="col-text meth-prose">
+            <h2 id="sumzero-title" class="display-l">A restrição de soma-zero</h2>
+            <p class="body">
+              O sistema tem uma ambiguidade de fundo: somar uma constante a todo o apoio latente
+              e subtraí-la de todos os house effects produz exatamente as mesmas pesquisas. É
+              preciso fixar uma referência, e a escolha dessa referência é uma decisão de método,
+              não um detalhe.
+            </p>
+            <p class="body">
+              Adotamos a soma ponderada dos house effects igual a <Num>0</Num>, com peso igual ao
+              número de pesquisas que cada instituto publicou na janela. Ponderar pelo volume
+              evita que um instituto com uma única rodada ancore o consenso com o mesmo peso de
+              um que publicou doze.
+            </p>
+            <p class="body">
+              O que isso significa: o apoio latente passa a ser o consenso dos institutos, limpo
+              da composição desigual de quem publicou em cada semana. O que isso <strong>não</strong>{' '}
+              significa: que o consenso seja não-enviesado em relação à urna. Se todos os
+              institutos errarem na mesma direção — como ocorreu no primeiro turno de
+              <Num>2022</Num> — o consenso erra junto, e o modelo não tem como saber. Esta
+              limitação não é letra miúda; é o principal ponto cego do método.
+            </p>
+            <p class="body">
+              Por isso não ancoramos os house effects no erro histórico contra as urnas. Medir
+              viés absoluto seria melhor, mas institutos mudaram de metodologia depois de
+              <Num>2022</Num>, o erro daquele ciclo foi assimétrico entre candidatos, e corrigir
+              direcionalmente com
+              base no último ciclo é o modo clássico de falha de um agregador. O erro histórico é
+              calculado e exibido como contexto, mas não entra no modelo na versão atual.
+            </p>
+            <p class="body">
+              A banda de incerteza é a resposta honesta a esse limite: quando o modelo não sabe,
+              a faixa fica larga. Largura honesta é o produto — não um número único fingindo
+              precisão.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <ModelLimitsSection notes={data.methodologyNotes} />
+
+    <section class="section" aria-labelledby="crawler-title">
+      <div class="container">
+        <div class="grid-12">
+          <div class="col-text meth-prose">
+            <h2 id="crawler-title" class="display-l">Quem somos e como parar de ser rastreado</h2>
+            <p class="body">
+              Este projeto extrai números de pesquisas registradas no PesqEle/TSE e os
+              republica como fato, com o registro à vista. Nunca reproduzimos o texto de
+              terceiros; a referência à fonte é sempre um link. Um instituto que peça a remoção
+              de seus dados é atendido, e passamos a exibir aquele instituto como fonte removida
+              a pedido.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <SiteFooter
+    generatedAt={data.generatedAt}
+    modelVersion={data.modelVersion}
+    gitSha={data.gitSha}
+  />
+</Base>
+
+<style>
+  .meth-title {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 20ch;
+  }
+  .meth-lead {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 64ch;
+  }
+  .meth-prose > h2 + * {
+    margin-top: calc(var(--rhythm) * 3);
+  }
+  .meth-prose > * + * {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+</style>

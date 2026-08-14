@@ -1,0 +1,178 @@
+---
+/**
+ * Rota `/dados` (docs/06 §2). Página de transparência: todas as pesquisas com
+ * `tse_id` e link à fonte (R6), o erro histórico descritivo (docs/01 §7) e o
+ * caminho para o dado bruto público. `data.json` é a API pública do projeto —
+ * quem discordar do modelo roda o próprio sobre o mesmo conjunto (docs/08 §4).
+ *
+ * Se `data.json` crescer além do orçamento (docs/06 §7), esta é a rota que
+ * pagina as pesquisas antigas. Na v1 exibimos a lista completa.
+ */
+import Base from '../layouts/Base.astro';
+import SiteHeader from '../components/sections/SiteHeader.astro';
+import SiteFooter from '../components/sections/SiteFooter.astro';
+import PollStrip from '../components/charts/PollStrip.astro';
+import Num from '../components/Num.astro';
+import { data } from '../data/load.js';
+import { buildChartInputs } from '../data/chart-inputs.js';
+import { formatPct } from '../components/charts/lib/format.js';
+
+const charts = buildChartInputs(data);
+
+const instituteName = new Map<string, string>();
+for (const inst of data.institutes) instituteName.set(inst.id, inst.displayName);
+
+const hasPolls = charts.stripRows.length > 0;
+const hasHistorical = data.historicalError.length > 0;
+---
+
+<Base title="Dados — election-pool" description="Todas as pesquisas com registro TSE, o erro histórico e o caminho para o dado bruto.">
+  <SiteHeader
+    generatedAt={data.generatedAt}
+    nextUpdateAt={data.nextUpdateAt}
+    updateIntervalMinutes={data.updateIntervalMinutes}
+    current="/dados"
+  />
+
+  <main id="main">
+    <section class="section" aria-labelledby="dados-title">
+      <div class="container">
+        <p class="label">Dados</p>
+        <h1 id="dados-title" class="display-xl dados-title">O conjunto inteiro, aberto.</h1>
+        <p class="body dados-lead">
+          Toda pesquisa que entra no modelo aparece aqui, com o registro TSE e o link para a
+          fonte. O erro histórico contra as urnas é contexto descritivo — não entra no modelo.
+          Código e dado são públicos: quem discordar do método pode rodar o próprio sobre o mesmo
+          conjunto.
+        </p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="dados-polls-title">
+      <div class="container">
+        <h2 id="dados-polls-title" class="display-l">As pesquisas</h2>
+        {
+          hasPolls ? (
+            <div class="dados-strip">
+              <PollStrip id="dados-strip" title="Todas as pesquisas do conjunto" rows={charts.stripRows} />
+            </div>
+          ) : (
+            <p class="body-muted dados-empty">
+              Nenhuma pesquisa no conjunto ainda. Assim que houver, a lista completa aparece aqui.
+            </p>
+          )
+        }
+      </div>
+    </section>
+
+    {
+      hasHistorical && (
+        <section class="section" aria-labelledby="dados-hist-title">
+          <div class="container">
+            <h2 id="dados-hist-title" class="display-l">Erro histórico</h2>
+            <p class="body dados-hist-lead">
+              Erro assinado da última pesquisa de cada instituto antes de cada eleição, por
+              candidato, contra o resultado oficial. Um valor positivo indica medição acima do
+              resultado; negativo, abaixo. É contexto para o leitor, não um ajuste do modelo.
+            </p>
+            <div class="dados-table-wrap">
+              <table class="dados-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Instituto</th>
+                    <th scope="col">Eleição</th>
+                    <th scope="col">Turno</th>
+                    <th scope="col">Candidato</th>
+                    <th scope="col" class="dados-num-col">Erro (p.p.)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.historicalError.map((e) => (
+                    <tr>
+                      <td>{instituteName.get(e.instituteId) ?? e.instituteId}</td>
+                      <td><Num>{e.election}</Num></td>
+                      <td><Num>{e.round}</Num>º turno</td>
+                      <td>{e.candidateLabel}</td>
+                      <td class="dados-num-col">
+                        <Num>{`${e.signedErrorPp > 0 ? '+' : ''}${formatPct(e.signedErrorPp)}`}</Num>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    <section class="section" aria-labelledby="dados-raw-title">
+      <div class="container">
+        <h2 id="dados-raw-title" class="display-l">O dado bruto</h2>
+        <p class="body dados-raw-lead">
+          O artefato público é um único arquivo, <code>data.json</code>, validado contra um
+          contrato antes de ser publicado. Ele carrega as séries, as pesquisas, os house effects
+          e os diagnósticos — tudo o que a página lê. Nenhum texto de terceiros está nele; só
+          números, metadados e links.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <SiteFooter
+    generatedAt={data.generatedAt}
+    modelVersion={data.modelVersion}
+    gitSha={data.gitSha}
+  />
+</Base>
+
+<style>
+  .dados-title {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .dados-lead {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 64ch;
+  }
+  .dados-strip {
+    margin-top: calc(var(--rhythm) * 3);
+  }
+  .dados-hist-lead,
+  .dados-raw-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 64ch;
+  }
+  .dados-table-wrap {
+    margin-top: calc(var(--rhythm) * 3);
+    overflow-x: auto;
+  }
+  .dados-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+  }
+  .dados-table th,
+  .dados-table td {
+    text-align: left;
+    padding: calc(var(--rhythm) * 1.5) calc(var(--rhythm) * 2);
+    border-bottom: 1px solid var(--border);
+  }
+  .dados-table th {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-2);
+  }
+  .dados-num-col {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    font-family: var(--font-mono);
+    background: var(--surface-2);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+</style>

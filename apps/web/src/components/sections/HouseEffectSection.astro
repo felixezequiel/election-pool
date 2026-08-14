@@ -1,0 +1,86 @@
+---
+/**
+ * Seção 05 — HOUSE EFFECT (docs/06 §2). A seção que justifica o projeto.
+ * HouseEffectPlot + parágrafo explicando o que o número significa E o que NÃO
+ * significa (restrição soma-zero, docs/01 §1.1 — "deve aparecer na UI,
+ * literalmente"). Vocabulário neutro (docs/08 §5): "consistentemente acima/abaixo
+ * do consenso", "não estimável"; nunca "enviesado"/"suspeito".
+ */
+import HouseEffectPlot from '../charts/HouseEffectPlot.astro';
+import Num from '../Num.astro';
+import type { ChartInputs } from '../../data/chart-inputs.js';
+
+interface Props {
+  houseRows: ChartInputs['houseRows'];
+}
+
+const { houseRows } = Astro.props;
+const hasRows = houseRows.length > 0;
+---
+
+<section class="section" aria-labelledby="house-title">
+  <div class="container">
+    <p class="label">House effect por instituto</p>
+    <h2 id="house-title" class="display-l house-heading">
+      O quanto cada instituto se afasta do consenso, de forma sistemática.
+    </h2>
+    <div class="grid-12 house-body">
+      <div class="col-text house-text">
+        <p class="body">
+          O house effect é a distância média entre o que um instituto mede e o consenso dos
+          institutos, depois de descontado o erro amostral. É a parte que quase nenhum agregador
+          publica. Um instituto pode ficar consistentemente acima ou abaixo do consenso sem que
+          isso signifique erro: metodologias diferentes medem coisas ligeiramente diferentes.
+        </p>
+        <p class="body house-restriction">
+          O que este número <strong>não</strong> significa. Ele é medido sob a restrição de
+          soma-zero: a soma ponderada dos house effects é fixada em <Num>0</Num>. Isso define o
+          consenso como o centro de gravidade dos institutos — limpo da composição desigual de
+          quem publicou em cada semana — mas não como a verdade da urna. Se todos os institutos
+          se afastarem da urna na mesma direção, o consenso se afasta junto, e o modelo não tem
+          como saber. O house effect mede divergência entre institutos, nunca acerto contra o
+          resultado.
+        </p>
+        <p class="body-muted house-estimable">
+          Institutos com menos de <Num>3</Num> pesquisas no ciclo aparecem com um travessão: com
+          histórico curto, o efeito não é estimável, e mostramos isso em vez de um zero inventado.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  {
+    hasRows ? (
+      <div class="container house-plot">
+        <HouseEffectPlot id="house" title="House effect estimado por instituto e candidato" rows={houseRows} />
+      </div>
+    ) : (
+      <div class="container">
+        <p class="body-muted house-empty">
+          Ainda não há institutos com histórico suficiente para estimar house effect. Assim que
+          houver, a comparação aparece aqui.
+        </p>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .house-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 28ch;
+  }
+  .house-body {
+    margin-top: calc(var(--rhythm) * 3);
+  }
+  .house-text > * + * {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .house-plot {
+    margin-top: calc(var(--rhythm) * 4);
+  }
+  .house-empty {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 60ch;
+  }
+</style>

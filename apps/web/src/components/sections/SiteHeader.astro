@@ -1,0 +1,134 @@
+---
+/**
+ * Seção 01 — CABEÇALHO (docs/06 §2).
+ *
+ * `election-pool` à esquerda; navegação (metodologia · dados) à direita. Abaixo,
+ * a faixa de staleness: `generatedAt` VISÍVEL no cabeçalho (docs/06 §3 — "staleness
+ * é informação", não só no rodapé) ao lado do <NextUpdateCountdown> e do
+ * <ThemeToggle>.
+ *
+ * Compartilhado por todas as rotas (/, /metodologia, /dados). `current` marca o
+ * link ativo com aria-current.
+ */
+import Num from '../Num.astro';
+import ThemeToggle from '../ThemeToggle.astro';
+import NextUpdateCountdown from '../NextUpdateCountdown.astro';
+import { isoDateOnly } from '../charts/lib/format.js';
+
+interface Props {
+  generatedAt: string;
+  nextUpdateAt: string;
+  updateIntervalMinutes: number;
+  /** Rota atual para aria-current: '/', '/metodologia' ou '/dados'. */
+  current: '/' | '/metodologia' | '/dados';
+}
+
+const { generatedAt, nextUpdateAt, updateIntervalMinutes, current } = Astro.props;
+
+const generatedDayMonth = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(generatedAt));
+const generatedHourMinute = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(generatedAt));
+const generatedIsoDate = isoDateOnly(generatedAt);
+---
+
+<header class="site-header">
+  <div class="container site-header-inner">
+    <div class="site-header-top">
+      <a class="brand" href="/" aria-label="election-pool — início">election-pool</a>
+      <nav class="site-nav" aria-label="Seções do site">
+        <a href="/metodologia" {...current === '/metodologia' ? { 'aria-current': 'page' } : {}}
+          >metodologia</a
+        >
+        <a href="/dados" {...current === '/dados' ? { 'aria-current': 'page' } : {}}>dados</a>
+      </nav>
+    </div>
+    <div class="site-header-meta">
+      <p class="generated-at label">
+        Gerado em <time datetime={generatedIsoDate}>
+          <Num>{generatedDayMonth}</Num> às <Num>{generatedHourMinute}</Num></time>
+      </p>
+      <NextUpdateCountdown
+        nextUpdateAt={nextUpdateAt}
+        updateIntervalMinutes={updateIntervalMinutes}
+      />
+      <ThemeToggle />
+    </div>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .site-header-inner {
+    padding-block: calc(var(--rhythm) * 2);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--rhythm) * 1.5);
+  }
+  .site-header-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .brand {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .site-nav {
+    display: flex;
+    gap: calc(var(--rhythm) * 3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+  .site-nav a {
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .site-nav a:hover,
+  .site-nav a[aria-current='page'] {
+    color: var(--ink);
+  }
+  .site-nav a[aria-current='page'] {
+    text-decoration: underline;
+    text-underline-offset: 0.3em;
+  }
+  .site-header-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--rhythm) * 2) calc(var(--rhythm) * 3);
+  }
+  .generated-at {
+    color: var(--ink-2);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .generated-at time {
+    color: var(--ink);
+  }
+  @media (max-width: 480px) {
+    .site-header {
+      position: static;
+    }
+  }
+</style>

@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: election-pool-postgres
+    environment:
+      POSTGRES_USER: election_pool
+      POSTGRES_PASSWORD: election_pool
+      POSTGRES_DB: election_pool
+    ports:
+      # Host 55432 avoids clashing with a local Postgres already on 5432.
+      - '55432:5432'
+    volumes:
+      - election_pool_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U election_pool -d election_pool']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  election_pool_pgdata:
+    name: election_pool_pgdata

@@ -1,0 +1,27 @@
+{
+  "name": "@election-pool/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./enums": "./src/enums.ts",
+    "./domain": "./src/domain.ts",
+    "./public-data": "./src/public-data.ts",
+    "./model-io": "./src/model-io.ts",
+    "./constants": "./src/constants.ts",
+    "./palette": "./src/palette.ts",
+    "./races": "./src/races.ts",
+    "./branded": "./src/branded.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  }
+}

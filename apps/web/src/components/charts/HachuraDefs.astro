@@ -1,0 +1,48 @@
+---
+/**
+ * <HachuraDefs> — fragmento de `<pattern>` de hachura por `color_slot`, para
+ * colar dentro de `<defs>` de um SVG de gráfico (docs/05 §2.1 regra 3, §8).
+ *
+ * Cor NUNCA é o único diferenciador: cada slot ganha um padrão de linhas em uma
+ * das 4 orientações rotacionadas (0/45/90/135°). Suficiente para daltônicos e
+ * impressão P&B. A hachura é derivada do slot (entidade), não da posição.
+ *
+ * Uso (dentro de um <svg>):
+ *   <defs>
+ *     <HachuraDefs idPrefix="latent" slots={[1,2,3]} />
+ *   </defs>
+ *   <path fill={hachuraFill('latent', slot)} .../>
+ *
+ * `currentColor` na hachura permite herdar a cor da série via `color:` no `<g>`.
+ */
+import { hachuraDefsFor, HACHURA_GEOMETRY } from './lib/hachura.js';
+
+interface Props {
+  idPrefix: string;
+  slots: number[];
+}
+const { idPrefix, slots } = Astro.props;
+const defs = hachuraDefsFor(idPrefix, slots);
+const size = HACHURA_GEOMETRY.spacing;
+---
+
+{
+  defs.map((d) => (
+    <pattern
+      id={d.id}
+      patternUnits="userSpaceOnUse"
+      width={size}
+      height={size}
+      patternTransform={`rotate(${d.angle})`}
+    >
+      <line
+        class="hachura-stroke"
+        x1={0}
+        y1={0}
+        x2={0}
+        y2={size}
+        stroke-width={HACHURA_GEOMETRY.stroke}
+      />
+    </pattern>
+  ))
+}

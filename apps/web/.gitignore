@@ -1,0 +1,5 @@
+# Astro
+dist/
+.astro/
+# Build local do RenderJob (astro build → cópia p/ dist-staging; ver astro-build.ts)
+.dist-build/

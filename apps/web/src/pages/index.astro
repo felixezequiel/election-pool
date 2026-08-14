@@ -1,0 +1,104 @@
+---
+/**
+ * Rota `/` — página única (docs/06 §2). Monta as seções 01–10 na ordem. Todo
+ * dado vem da costura `src/data/load.ts` (validado por `publicDataSchema`), sem
+ * fetch em runtime (docs/06 §1). Nenhuma seção lê o JSON direto — recebem props.
+ */
+import Base from '../layouts/Base.astro';
+import SiteHeader from '../components/sections/SiteHeader.astro';
+import HeroThesis, { type HeroReading } from '../components/sections/HeroThesis.astro';
+import LatentSeriesSection from '../components/sections/LatentSeriesSection.astro';
+import RunoffSection from '../components/sections/RunoffSection.astro';
+import HouseEffectSection from '../components/sections/HouseEffectSection.astro';
+import DiagnosticsSection from '../components/sections/DiagnosticsSection.astro';
+import PollsSection from '../components/sections/PollsSection.astro';
+import ModelLimitsSection from '../components/sections/ModelLimitsSection.astro';
+import OtherRacesCta from '../components/sections/OtherRacesCta.astro';
+import SiteFooter from '../components/sections/SiteFooter.astro';
+
+import { data } from '../data/load.js';
+import { buildChartInputs } from '../data/chart-inputs.js';
+
+const charts = buildChartInputs(data);
+
+// ── Eyebrow (docs/06 §4): "PRESIDÊNCIA · 2026 · ATUALIZADO EM DD/MM ÀS HHh" ──
+const eyebrowDate = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(data.generatedAt));
+const eyebrowHour = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(data.generatedAt));
+const eyebrow = `${data.race.displayName.toUpperCase()} · ATUALIZADO EM ${eyebrowDate} ÀS ${eyebrowHour}H`;
+
+// ── Leituras do hero: as duas séries de 1º turno com maior média ATUAL,
+// excluindo o resíduo "Demais" (colorSlot 8). Ordena por posição de dado, não
+// por afinidade política. Régua na MESMA escala (docs/06 §4).
+type SeriesLatest = HeroReading & { latestT: number };
+const heroCandidates: SeriesLatest[] = charts.firstRound.series
+  .filter((s) => s.colorSlot !== 8)
+  .map((s) => {
+    const last = s.samples[s.samples.length - 1];
+    return last
+      ? {
+          candidateId: s.candidateId,
+          displayName: s.displayName,
+          colorSlot: s.colorSlot,
+          mean: last.mean,
+          lo90: last.lo90,
+          hi90: last.hi90,
+          latestT: last.t,
+        }
+      : null;
+  })
+  .filter((r): r is SeriesLatest => r !== null)
+  .sort((a, b) => b.mean - a.mean)
+  .slice(0, 2);
+
+const heroReadings: HeroReading[] = heroCandidates.map(({ latestT: _latestT, ...r }) => r);
+
+// Domínio comum das réguas: 0 até um teto folgado acima do maior hi90 (docs/06 §4).
+const HERO_DOMAIN_FLOOR = 0;
+const HERO_DOMAIN_PAD = 8;
+const heroMaxHi = heroReadings.reduce((m, r) => Math.max(m, r.hi90), 0);
+const heroDomain: [number, number] = [HERO_DOMAIN_FLOOR, Math.ceil(heroMaxHi + HERO_DOMAIN_PAD)];
+
+// ── Rótulos de sujeito para diagnósticos (institutos por id). ──
+const subjectNames = new Map<string, string>();
+for (const inst of data.institutes) subjectNames.set(inst.id, inst.displayName);
+
+// ── Estado vazio das pesquisas: última data de campo encerrado conhecida. ──
+const lastPollFieldEnd =
+  data.polls.length > 0
+    ? data.polls.reduce((latest, p) => (p.fieldEnd > latest ? p.fieldEnd : latest), data.polls[0]!.fieldEnd)
+    : null;
+---
+
+<Base title="election-pool — o que as pesquisas medem, e o quanto elas discordam">
+  <SiteHeader
+    generatedAt={data.generatedAt}
+    nextUpdateAt={data.nextUpdateAt}
+    updateIntervalMinutes={data.updateIntervalMinutes}
+    current="/"
+  />
+
+  <main id="main">
+    <HeroThesis eyebrow={eyebrow} readings={heroReadings} domain={heroDomain} />
+    <LatentSeriesSection firstRound={charts.firstRound} />
+    <RunoffSection runoffs={charts.runoffs} />
+    <HouseEffectSection houseRows={charts.houseRows} />
+    <DiagnosticsSection diagnostics={data.diagnostics} subjectNames={subjectNames} />
+    <PollsSection stripRows={charts.stripRows} lastPollFieldEnd={lastPollFieldEnd} />
+    <ModelLimitsSection notes={data.methodologyNotes} />
+    <OtherRacesCta otherRaces={data.otherRaces} />
+  </main>
+
+  <SiteFooter
+    generatedAt={data.generatedAt}
+    modelVersion={data.modelVersion}
+    gitSha={data.gitSha}
+  />
+</Base>

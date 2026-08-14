@@ -1,0 +1,138 @@
+---
+/**
+ * Seção 09 — OUTRAS DISPUTAS / CTA (docs/06 §2, §6).
+ *
+ * Renderizado a partir de `data.otherRaces`, NUNCA hardcoded (task): adicionar
+ * uma corrida `planejado` em `races.ts` faz o item aparecer sem tocar aqui.
+ *
+ * Regras (docs/06 §6):
+ *  - Item `planejado`: rótulo em `label` mono, cor `--ink-3`, SEM link, aria-disabled.
+ *  - SEM campo de e-mail, SEM "avise-me", SEM botão. Não coletamos dado de ninguém,
+ *    e dizer isso é mais forte que um formulário.
+ *  - Bloco em `--surface`, régua superior de 1px, ocupando 8 colunas; menos denso
+ *    que as seções de dado — é uma PAUSA.
+ */
+import type { PublicData } from '@election-pool/contracts/public-data';
+
+interface Props {
+  otherRaces: PublicData['otherRaces'];
+}
+const { otherRaces } = Astro.props;
+
+const statusLabel = { ativo: 'em análise', planejado: 'planejado' } as const;
+---
+
+<section class="section" aria-labelledby="cta-title">
+  <div class="container">
+    <div class="cta-block">
+      <p class="label">Próximas análises</p>
+      <h2 id="cta-title" class="display-l cta-title">
+        A mesma metodologia, em breve, para outras disputas.
+      </h2>
+      <p class="body cta-body">
+        O modelo não sabe que corrida está medindo. Ele só precisa de vários institutos medindo
+        a mesma coisa ao longo do tempo. Isso vale para governo estadual, Senado e aprovação
+        presidencial — e é o que vem a seguir.
+      </p>
+
+      <ul class="cta-list">
+        {
+          otherRaces.map((race) =>
+            race.status === 'ativo' ? (
+              <li class="cta-item">
+                <a class="cta-race" href="/">
+                  <span class="cta-race-name">{race.displayName}</span>
+                  <span class="label cta-race-status cta-race-status-active">
+                    {statusLabel[race.status]}
+                  </span>
+                </a>
+              </li>
+            ) : (
+              <li class="cta-item">
+                <span class="cta-race cta-race-disabled" aria-disabled="true">
+                  <span class="cta-race-name">{race.displayName}</span>
+                  <span class="label cta-race-status">{statusLabel[race.status]}</span>
+                </span>
+              </li>
+            ),
+          )
+        }
+      </ul>
+
+      <p class="body-muted cta-nocollect">
+        Não há campo de e-mail nem cadastro. Não coletamos dado de ninguém — e preferimos dizer
+        isso a pedir o seu.
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Bloco de pausa: --surface, régua superior de 1px, 8 colunas, menos denso. */
+  .cta-block {
+    max-width: 66.666%;
+    background: var(--surface);
+    border-top: 1px solid var(--border-strong);
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: calc(var(--rhythm) * 5) calc(var(--rhythm) * 4);
+  }
+  .cta-title {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 22ch;
+  }
+  .cta-body {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 58ch;
+  }
+  .cta-list {
+    margin-top: calc(var(--rhythm) * 4);
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0;
+  }
+  .cta-item + .cta-item .cta-race,
+  .cta-item:first-child .cta-race {
+    border-top: 1px solid var(--border);
+  }
+  .cta-race {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--gutter);
+    padding-block: calc(var(--rhythm) * 2);
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .cta-race-disabled {
+    color: var(--ink-3);
+    cursor: default;
+  }
+  .cta-race-name {
+    font-family: var(--font-display);
+    font-weight: 550;
+    font-size: var(--fs-display-m);
+  }
+  .cta-race-disabled .cta-race-name {
+    color: var(--ink-3);
+  }
+  .cta-race-status {
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .cta-race-status-active {
+    color: var(--accent);
+  }
+  a.cta-race:hover .cta-race-name {
+    color: var(--accent);
+  }
+  .cta-nocollect {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 56ch;
+  }
+  @media (max-width: 1024px) {
+    .cta-block {
+      max-width: 100%;
+    }
+  }
+</style>

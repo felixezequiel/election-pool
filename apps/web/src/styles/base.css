@@ -1,0 +1,135 @@
+/*
+ * Reset enxuto + base do documento. Tema escuro é o padrão (via tokens.css).
+ * Foco de teclado sempre visível (docs/05 §7); movimento respeita
+ * prefers-reduced-motion (docs/05 §6).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Transição de tema suave (docs/05 §6.6). Zerada sob reduced-motion (abaixo). */
+  transition:
+    background-color var(--dur-base) var(--ease-inout),
+    color var(--dur-base) var(--ease-inout);
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background-color var(--dur-base) var(--ease-inout),
+    color var(--dur-base) var(--ease-inout);
+}
+
+img,
+picture,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: 1px;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+a:hover {
+  color: var(--accent-2);
+}
+
+/*
+ * Foco de teclado (docs/05 §7): contorno de 2px em --accent, offset 2px.
+ * NUNCA outline: none. :focus-visible mostra o anel só para teclado; o glow
+ * reforça sem substituir o contorno.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 4px var(--glow);
+}
+
+/* Remove o anel só para ponteiro/mouse — jamais some para teclado. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--glow);
+  color: var(--ink);
+}
+
+/* Acessível: pular para o conteúdo. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: calc(var(--rhythm) * 1.5) calc(var(--rhythm) * 2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+}
+.skip-link:focus {
+  left: var(--gutter);
+  top: var(--gutter);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * prefers-reduced-motion (docs/05 §6): estado final imediato, zero transição.
+ * Contadores e números animados mostram valor estático — tratado também no JS
+ * de AnimatedNum, mas aqui garantimos que NENHUMA transição CSS anime.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

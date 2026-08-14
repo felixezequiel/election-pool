@@ -1,0 +1,71 @@
+# Compose de PRODUÇÃO (docs/02 §7): dois serviços, `postgres` + `api`. O nginx roda
+# no HOST (não neste compose), servindo `${PUBLISH_BASE_DIR}/dist` — a config está em
+# infra/nginx/. O `api` publica o site nesse mesmo diretório (bind mount), no MESMO
+# filesystem que apps/web (dentro do container), respeitando o EXDEV do swap (T-13).
+#
+# Migrations rodam no BOOT do `api`, antes dos jobs; falha de migration impede o boot
+# (main.ts migra e só então agenda — sai != 0 se a migration falhar). O `depends_on`
+# com healthcheck garante que o Postgres está pronto antes de o `api` tentar migrar.
+#
+# Deploy (docs/02 §7): `docker compose -f infra/docker-compose.prod.yml pull && up -d`.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: election-pool-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-election_pool}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-election_pool}
+      POSTGRES_DB: ${POSTGRES_DB:-election_pool}
+    volumes:
+      - election_pool_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-election_pool} -d ${POSTGRES_DB:-election_pool}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # Sem `ports:` em produção — o Postgres não é exposto ao host/rede; só o `api`
+    # o alcança pela rede interna do compose.
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: election-pool-api:latest
+    container_name: election-pool-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Rede interna do compose: o host do Postgres é o nome do serviço.
+      DATABASE_URL: postgres://${POSTGRES_USER:-election_pool}:${POSTGRES_PASSWORD:-election_pool}@postgres:5432/${POSTGRES_DB:-election_pool}
+      # Diretório-base de publicação DENTRO do container. O bind mount abaixo o
+      # aponta para o mesmo caminho do host que o nginx serve. dist/, dist-staging/
+      # e os snapshots ficam todos aqui (mesmo filesystem ⇒ rename atômico, T-13).
+      PUBLISH_BASE_DIR: /var/lib/election-pool
+      # /health interno (docs/02 §5). Bind 0.0.0.0 DENTRO do container para o
+      # mapeamento de porta alcançá-lo; o mapeamento (ports) o prende a 127.0.0.1 no
+      # HOST — segue interno, não exposto ao público.
+      HEALTH_PORT: '8081'
+      HEALTH_HOST: '0.0.0.0'
+      # git sha injetado pelo CI no deploy (proveniência do data.json).
+      GIT_SHA: ${GIT_SHA:-unknown}
+      # Destino de alerta (docs/02 §5). Vazio ⇒ alerta vira log de erro (journald).
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    volumes:
+      # O nginx do host serve ${PUBLISH_BASE_DIR}/dist deste mesmo diretório.
+      - ${PUBLISH_BASE_DIR:-/var/lib/election-pool}:/var/lib/election-pool
+    ports:
+      # /health interno: liga SÓ a 127.0.0.1 do host (não exposto ao público).
+      - '127.0.0.1:8081:8081'
+
+volumes:
+  election_pool_pgdata:
+    name: election_pool_pgdata

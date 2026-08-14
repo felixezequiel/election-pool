@@ -1,0 +1,11 @@
+/*
+ * Ponto de entrada de estilo global. Importe UMA vez no layout raiz
+ * (import '../styles/global.css'). A ordem importa: tokens antes de tudo,
+ * depois fontes, base/reset, tipografia, layout e substrato.
+ */
+@import './tokens.css';
+@import './fonts.css';
+@import './base.css';
+@import './typography.css';
+@import './layout.css';
+@import './substrate.css';

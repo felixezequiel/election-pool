@@ -1,0 +1,270 @@
+---
+/**
+ * <PollStrip> — uma linha por pesquisa (docs/05 §5; docs/06 §2 seção 07).
+ *
+ * Cada pesquisa: instituto, datas de campo, `tse_id` SEMPRE visível em mono (R6,
+ * exigência legal), amostra, e uma mini-faixa SVG com os valores por candidato
+ * alinhada a uma grade comum (mesma escala 0–100 para todas as linhas). Link
+ * para a fonte — nunca o texto de terceiros (R3).
+ *
+ * SSR-completo e estático: sem interação necessária. Cor segue a entidade
+ * (colorSlot), com hachura por slot para não depender só da cor.
+ */
+import Num from '../Num.astro';
+import HachuraDefs from './HachuraDefs.astro';
+import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
+import { hachuraFill } from './lib/hachura.js';
+
+export interface PollStripValue {
+  candidateId: string;
+  candidateName: string;
+  colorSlot: number;
+  value: number;
+}
+
+export interface PollStripRow {
+  tseId: string;
+  instituteName: string;
+  contractorName: string;
+  sampleSize: number;
+  fieldStart: string;
+  fieldEnd: string;
+  sourceUrl: string;
+  /** Valores do cenário exibido (ex.: 1º turno), por candidato. */
+  values: PollStripValue[];
+}
+
+interface Props {
+  rows: PollStripRow[];
+  title: string;
+  id: string;
+  /** Escala máxima do mini-eixo (padrão 60 p.p.: cobre líderes sem achatar). */
+  scaleMax?: number;
+  class?: string | undefined;
+}
+
+const { rows, title, id, scaleMax = 60, class: className } = Astro.props;
+
+const BAR_W = 240;
+const BAR_H = 40;
+const allSlots = [...new Set(rows.flatMap((r) => r.values.map((v) => v.colorSlot)))];
+
+function barX(value: number): number {
+  return Math.max(0, Math.min(1, value / scaleMax)) * BAR_W;
+}
+
+const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, período de campo, amostra e valores por candidato.`;
+---
+
+<section class:list={['chart poll-strip', className]} aria-label={title}>
+  <p class="label">{title}</p>
+
+  {/* defs de hachura compartilhados por todas as barras. */}
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <HachuraDefs idPrefix={id} slots={allSlots} />
+    </defs>
+  </svg>
+
+  <ul class="strip-list" role="list">
+    {
+      rows.map((row) => (
+        <li class="strip-row">
+          <div class="strip-head">
+            <span class="strip-institute">{row.instituteName}</span>
+            <a class="strip-tse" href={row.sourceUrl} rel="nofollow noopener" target="_blank">
+              <Num label={`registro TSE ${row.tseId}`}>{row.tseId}</Num>
+            </a>
+          </div>
+          <div class="strip-meta body-muted">
+            <time datetime={isoDateOnly(row.fieldStart)}>
+              <Num>{formatDayMonth(row.fieldStart)}</Num>
+            </time>
+            {' – '}
+            <time datetime={isoDateOnly(row.fieldEnd)}>
+              <Num>{formatDayMonth(row.fieldEnd)}</Num>
+            </time>
+            {' · '}
+            <span>
+              n = <Num>{String(row.sampleSize)}</Num>
+            </span>
+            {' · '}
+            <span>{row.contractorName}</span>
+          </div>
+          <svg
+            class="strip-bar"
+            viewBox={`0 0 ${BAR_W} ${BAR_H}`}
+            width={BAR_W}
+            height={BAR_H}
+            role="img"
+            aria-label={row.values
+              .map((v) => `${v.candidateName} ${formatPct(v.value)} por cento`)
+              .join(', ')}
+          >
+            <line class="strip-axis" x1={0} y1={BAR_H - 1} x2={BAR_W} y2={BAR_H - 1} />
+            {row.values.map((v, i) => {
+              const w = barX(v.value);
+              const y = i * (BAR_H / Math.max(1, row.values.length));
+              const h = Math.max(4, BAR_H / Math.max(1, row.values.length) - 3);
+              return (
+                <g style={`color: var(--c${v.colorSlot})`}>
+                  <rect x={0} y={y} width={w} height={h} rx={2} fill="currentColor" fill-opacity="0.5" />
+                  <rect x={0} y={y} width={w} height={h} rx={2} fill={hachuraFill(id, v.colorSlot)} fill-opacity="0.6" />
+                </g>
+              );
+            })}
+          </svg>
+          <ul class="strip-values" role="list">
+            {row.values.map((v) => (
+              <li style={`--dot: var(--c${v.colorSlot})`}>
+                <span class="strip-dot" aria-hidden="true" />
+                {v.candidateName} <Num>{formatPct(v.value)}</Num>%
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))
+    }
+  </ul>
+
+  {/* Equivalente textual (docs/05 §7). */}
+  <details class="chart-table">
+    <summary>Ver pesquisas em tabela</summary>
+    <table>
+      <caption>{desc}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Registro TSE</th>
+          <th scope="col">Instituto</th>
+          <th scope="col">Campo</th>
+          <th class="num" scope="col">n</th>
+          <th scope="col">Valores</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row) => (
+            <tr>
+              <td>
+                <Num>{row.tseId}</Num>
+              </td>
+              <td>{row.instituteName}</td>
+              <td>
+                <Num>{formatDayMonth(row.fieldStart)}</Num>–<Num>{formatDayMonth(row.fieldEnd)}</Num>
+              </td>
+              <td class="num">
+                <Num>{String(row.sampleSize)}</Num>
+              </td>
+              <td>
+                {row.values.map((v, i) => (
+                  <>
+                    {i > 0 ? ', ' : ''}
+                    {v.candidateName} <Num>{formatPct(v.value)}</Num>%
+                  </>
+                ))}
+              </td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </details>
+</section>
+
+<style>
+  .poll-strip {
+    display: block;
+  }
+  .strip-list {
+    list-style: none;
+    margin: calc(var(--rhythm) * 2) 0 0;
+    padding: 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .strip-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'head bar'
+      'meta bar'
+      'values bar';
+    gap: 4px calc(var(--rhythm) * 3);
+    align-items: center;
+    padding: calc(var(--rhythm) * 1.5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+  }
+  .strip-head {
+    grid-area: head;
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--rhythm) * 2);
+    justify-content: space-between;
+  }
+  .strip-institute {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    color: var(--ink);
+  }
+  .strip-tse {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .strip-tse:hover,
+  .strip-tse:focus-visible {
+    text-decoration: underline;
+  }
+  .strip-meta {
+    grid-area: meta;
+  }
+  .strip-values {
+    grid-area: values;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(var(--rhythm) * 2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-2);
+  }
+  .strip-values li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .strip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dot);
+  }
+  .strip-bar {
+    grid-area: bar;
+    height: auto;
+    max-width: 240px;
+  }
+  .strip-axis {
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+  @media (max-width: 640px) {
+    .strip-row {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'head'
+        'meta'
+        'bar'
+        'values';
+    }
+    .strip-bar {
+      max-width: 100%;
+      width: 100%;
+    }
+  }
+</style>

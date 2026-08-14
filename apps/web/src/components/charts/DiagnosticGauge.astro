@@ -1,0 +1,142 @@
+---
+/**
+ * <DiagnosticGauge> — indicador de diagnóstico (docs/05 §5; docs/06 §5).
+ *
+ * Regra especial da seção de diagnósticos (docs/06 §5): o valor SEMPRE aparece
+ * junto do seu `n` / denominador, no MESMO tamanho de tipo — não em tooltip, não
+ * em nota de rodapé. Uma taxa de 100% sobre 1 registro não pode parecer igual a
+ * 60% sobre 20. Por isso o denominador é um `<Num>` do mesmo peso, ao lado.
+ *
+ * Este componente é o recipiente neutro: quem o usa (a seção da página, T-12)
+ * fornta o rótulo, o valor, o denominador legível ("X de Y registradas") e a
+ * explicação inocente que deve acompanhar o número. O vocabulário proibido/
+ * aprovado (docs/06 §5) é responsabilidade do texto passado, não deste SVG.
+ *
+ * SSR-completo e estático. A barra é uma leitura visual redundante do valor
+ * (0..max), nunca o único sinal — o número textual manda.
+ */
+import Num from '../Num.astro';
+import { formatNumber } from './lib/format.js';
+
+interface Props {
+  /** Rótulo curto (ex.: "Taxa de gaveta — Instituto X"). */
+  label: string;
+  /** Valor principal já na escala de exibição (ex.: 60 para 60%). */
+  value: number;
+  /** Casas decimais do valor. Padrão 1. */
+  decimals?: number;
+  /** Sufixo do valor (ex.: '%'). Fica fora do numeral. */
+  suffix?: string;
+  /**
+   * Denominador legível OBRIGATÓRIO (docs/06 §5): "X de Y registradas",
+   * "n = 12", etc. Renderizado no mesmo tamanho de tipo do valor.
+   */
+  denominator: string;
+  /** Máximo da escala da barra (padrão 100 p/ taxas percentuais). */
+  scaleMax?: number;
+  /** Sinaliza atenção (ex.: herding flagged) — muda a cor da barra p/ acento. */
+  flagged?: boolean;
+  id: string;
+  class?: string | undefined;
+}
+
+const {
+  label,
+  value,
+  decimals = 1,
+  suffix = '%',
+  denominator,
+  scaleMax = 100,
+  flagged = false,
+  id,
+  class: className,
+} = Astro.props;
+
+const W = 220;
+const H = 8;
+const frac = Math.max(0, Math.min(1, value / scaleMax));
+const fillW = frac * W;
+
+const valueText = formatNumber(value, decimals);
+---
+
+<div id={id} class:list={['chart diagnostic-gauge', className]} data-diagnostic-gauge>
+  <p class="label">{label}</p>
+
+  <p class="gauge-line">
+    <span class="gauge-value data">
+      <Num label={`${label}: ${valueText}${suffix}`}>{valueText}</Num>{suffix}
+    </span>
+    {/* Denominador no MESMO tamanho de tipo — nunca menor (docs/06 §5). */}
+    <span class="gauge-denominator data">{denominator}</span>
+  </p>
+
+  <svg
+    class="gauge-bar"
+    viewBox={`0 0 ${W} ${H}`}
+    width={W}
+    height={H}
+    role="img"
+    aria-label={`${valueText}${suffix} de ${scaleMax}${suffix}`}
+  >
+    <rect class="gauge-track" x={0} y={0} width={W} height={H} rx={4}></rect>
+    <rect
+      class:list={['gauge-fill', { flagged }]}
+      x={0}
+      y={0}
+      width={fillW}
+      height={H}
+      rx={4}
+      data-gauge-fill
+      data-target={fillW}></rect>
+  </svg>
+
+  <slot />
+</div>
+
+<style>
+  .diagnostic-gauge {
+    display: grid;
+    gap: 6px;
+    padding: calc(var(--rhythm) * 2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+  }
+  .gauge-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: calc(var(--rhythm) * 1.5);
+    margin: 0;
+  }
+  /* Valor e denominador NO MESMO tamanho (docs/06 §5). */
+  .gauge-value,
+  .gauge-denominator {
+    font-size: var(--fs-data);
+    color: var(--ink);
+  }
+  .gauge-denominator {
+    color: var(--ink-2);
+  }
+  .gauge-bar {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+  }
+  .gauge-track {
+    fill: var(--surface-2);
+  }
+  .gauge-fill {
+    fill: var(--accent);
+    transition: width var(--dur-base) var(--ease-out);
+  }
+  .gauge-fill.flagged {
+    fill: var(--accent-2);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gauge-fill {
+      transition: none;
+    }
+  }
+</style>

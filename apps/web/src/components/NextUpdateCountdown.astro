@@ -1,0 +1,143 @@
+---
+/**
+ * <NextUpdateCountdown> — contagem regressiva para a próxima recheca (docs/06 §9).
+ *
+ * Honestidade (docs/06 §9): isto é quando o sistema RECHECA as fontes — não uma
+ * promessa de número novo. O pipeline roda a cada `updateIntervalMinutes`
+ * (docs/02 §3), mas só publica quando passa nos gates E há pesquisa nova
+ * (docs/07 §6). A copy jamais promete "número novo às HH:MM".
+ *
+ * Progressive enhancement (docs/06 §1, §9):
+ *  - SSR / sem-JS / prefers-reduced-motion: mostra o horário-alvo ESTÁTICO
+ *    ("prevista para DD/MM às HH:MM"), sem tiquetaque — já legível e correto.
+ *  - Com JS e sem reduced-motion: o script troca para "em HH:MM:SS" ao vivo,
+ *    tiquetaqueando a cada segundo, em <Num> mono (tabular-nums, sem reflow).
+ *  - Rollover: se zera sem recarregar (build novo pode demorar, ou um run pode
+ *    não publicar), soma `updateIntervalMinutes` ao alvo e mostra "verificando…"
+ *    até o próximo horário.
+ *
+ * O `<time datetime>` carrega o ISO completo; o corpo mostra DD/MM e HH:MM.
+ */
+import Num from './Num.astro';
+import { isoDateOnly } from '../components/charts/lib/format.js';
+
+interface Props {
+  /** ISO-8601 com offset -03:00 do próximo slot de recheca. */
+  nextUpdateAt: string;
+  /** Cadência do pipeline em minutos (rollover). */
+  updateIntervalMinutes: number;
+  class?: string | undefined;
+}
+
+const { nextUpdateAt, updateIntervalMinutes, class: className } = Astro.props;
+
+/** DD/MM e HH:MM (America/Sao_Paulo) a partir do ISO com offset. Sem `Date` nu
+ * na lógica de negócio: formatamos com timeZone fixo (CLAUDE.md). */
+const dt = new Date(nextUpdateAt);
+const dayMonth = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'America/Sao_Paulo',
+}).format(dt);
+const hourMinute = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(dt);
+const isoDate = isoDateOnly(nextUpdateAt);
+---
+
+<p
+  class:list={['next-update label', className]}
+  data-next-update
+  data-target={nextUpdateAt}
+  data-interval-min={updateIntervalMinutes}
+>
+  <span class="next-update-lead">Próxima recheca das fontes</span>
+  {/* Estado estático (SSR / sem-JS / reduced-motion). O script troca por live. */}
+  <span data-static-view>
+    prevista para <time datetime={isoDate}>
+      <Num>{dayMonth}</Num> às <Num>{hourMinute}</Num></time>
+  </span>
+  {/* Estado ao vivo, preenchido pelo script; oculto até hidratar. */}
+  <span data-live-view hidden>
+    em <Num data-countdown aria-live="off">--:--:--</Num>
+  </span>
+</p>
+
+<style>
+  .next-update {
+    color: var(--ink-2);
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.4ch;
+    align-items: baseline;
+    text-transform: none; /* frase de apoio, não eyebrow em caixa alta */
+    letter-spacing: 0;
+  }
+  .next-update-lead {
+    color: var(--ink-3);
+  }
+  .next-update time {
+    color: var(--ink-2);
+  }
+  [data-live-view][hidden] {
+    display: none;
+  }
+</style>
+
+<script>
+  /**
+   * Upgrade para contagem ao vivo. Só roda com JS e sem reduced-motion; caso
+   * contrário mantém o horário-alvo estático já no DOM (docs/06 §9).
+   */
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function pad2(n: number): string {
+    return n < 10 ? `0${n}` : String(n);
+  }
+
+  function hydrate(root: HTMLElement) {
+    const targetIso = root.dataset.target;
+    const intervalMin = Number(root.dataset.interval ?? '0');
+    if (!targetIso || !Number.isFinite(intervalMin) || intervalMin <= 0) return;
+    if (REDUCED.matches) return; // mantém o estático (docs/06 §9)
+
+    const staticView = root.querySelector<HTMLElement>('[data-static-view]');
+    const liveView = root.querySelector<HTMLElement>('[data-live-view]');
+    const out = root.querySelector<HTMLElement>('[data-countdown]');
+    if (!staticView || !liveView || !out) return;
+
+    staticView.hidden = true;
+    liveView.hidden = false;
+    out.setAttribute('aria-live', 'off'); // tiquetaque não é anunciado a cada segundo
+
+    let targetMs = new Date(targetIso).getTime();
+    const intervalMs = intervalMin * 60_000;
+
+    function tick() {
+      const now = Date.now();
+      let remaining = targetMs - now;
+      // Rollover: passou do alvo sem recarregar. Avança para o próximo slot e
+      // sinaliza que o sistema está rechecando (docs/06 §9).
+      if (remaining <= 0) {
+        out!.textContent = 'verificando…';
+        while (targetMs <= now) targetMs += intervalMs;
+        return; // no próximo tick já mostra o novo HH:MM:SS
+      }
+      const totalSec = Math.floor(remaining / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      out!.textContent = `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+    }
+
+    tick();
+    window.setInterval(tick, 1000);
+  }
+
+  document
+    .querySelectorAll<HTMLElement>('[data-next-update]')
+    .forEach(hydrate);
+</script>

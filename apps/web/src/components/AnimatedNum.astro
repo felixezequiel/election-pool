@@ -1,0 +1,182 @@
+---
+/**
+ * <AnimatedNum> — variante de <Num> que interpola o valor ao ENTRAR e ao
+ * ATUALIZAR, sem reflow (docs/05 §3.1, §6.2; docs/06 §1).
+ *
+ * Contrato (docs/06 §1 — progressive enhancement):
+ *  - O SSR / sem-JS já contém o valor FINAL formatado no DOM. A animação é
+ *    enriquecimento, nunca pré-requisito para ler o dado.
+ *  - Ilha `client:visible`: ao entrar na viewport, o script hidrata e anima de
+ *    um valor inicial (0 por padrão, ou `from`) até o alvo.
+ *  - Ao atualizar (novo run publicado muda `data-target`), transiciona suave do
+ *    valor exibido para o novo — sem "pulo".
+ *  - `tabular-nums` garante largura constante por dígito ⇒ CLS ~ 0 (docs/06 §7).
+ *  - `prefers-reduced-motion: reduce` ⇒ mostra o valor final direto, sem animar.
+ *  - a11y: `aria-live="polite"` + `aria-label` com o valor-alvo (docs/05 §7).
+ *
+ * IMPORTANTE (docs/05 §1.1): animar é apresentação. Um número animado NUNCA
+ * dispensa a UncertaintyRule ao lado — isso é responsabilidade de quem compõe a
+ * seção (as views de gráfico/página), não deste componente.
+ *
+ * Uso (o valor já formatado é o filho; os metadados guiam a animação):
+ *   <AnimatedNum value={40.8} decimals={1} suffix="%" />
+ *   <AnimatedNum value={1234} decimals={0} />  → "1234"
+ * `value` é numérico (o alvo da interpolação). O texto renderizado usa
+ * `format(value)`; o mesmo formatador roda no cliente durante a animação.
+ */
+interface Props {
+  /** Valor-alvo numérico (escala já pronta para exibição, ex.: 40.8). */
+  value: number;
+  /** Casas decimais na exibição. Padrão: 0. */
+  decimals?: number;
+  /** Valor inicial da animação de entrada. Padrão: 0. */
+  from?: number;
+  /** Sufixo colado ao número (ex.: '%'). Não é numeral — fica fora da interpolação. */
+  suffix?: string;
+  /** Prefixo colado ao número (ex.: 'R$ '). */
+  prefix?: string;
+  /** Duração da animação. Padrão: var(--dur-slow). Só afeta o cliente. */
+  durationMs?: number;
+  /** Descrição acessível opcional; se ausente, usa o valor formatado. */
+  label?: string | undefined;
+  /** Classe(s) extra(s). */
+  class?: string | undefined;
+}
+
+const {
+  value,
+  decimals = 0,
+  from = 0,
+  suffix = '',
+  prefix = '',
+  durationMs,
+  label,
+  class: className,
+} = Astro.props;
+
+/** Formatação pt-BR: separador decimal vírgula (docs/06 §3). Determinística e
+ * espelhada no cliente por `formatBR` no <script>. */
+const nf = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: decimals,
+  maximumFractionDigits: decimals,
+  useGrouping: false,
+});
+const finalText = `${prefix}${nf.format(value)}${suffix}`;
+const ariaLabel = label ?? finalText;
+---
+
+<span
+  class:list={['num animated-num', className]}
+  data-animated-num
+  data-target={value}
+  data-from={from}
+  data-decimals={decimals}
+  data-prefix={prefix}
+  data-suffix={suffix}
+  {...durationMs ? { 'data-duration': durationMs } : {}}
+  aria-live="polite"
+  aria-label={ariaLabel}
+  role="status"
+>
+  <!-- SSR / no-JS: valor final já presente. -->
+  {finalText}
+</span>
+
+<style>
+  .animated-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings:
+      'tnum' 1,
+      'lnum' 1;
+    letter-spacing: 0;
+    /* Sem largura fixa: tabular-nums já mantém a largura por dígito estável. */
+  }
+</style>
+
+<script>
+  /**
+   * Anima cada [data-animated-num] uma vez ao entrar (client:visible garante que
+   * o elemento está próximo/na viewport) e re-anima quando data-target muda.
+   * Respeita prefers-reduced-motion: nesse caso apenas fixa o valor final.
+   */
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function formatBR(n: number, decimals: number, prefix: string, suffix: string): string {
+    const nf = new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping: false,
+    });
+    return `${prefix}${nf.format(n)}${suffix}`;
+  }
+
+  function readCfg(el: HTMLElement) {
+    return {
+      target: Number(el.dataset.target ?? '0'),
+      decimals: Number(el.dataset.decimals ?? '0'),
+      prefix: el.dataset.prefix ?? '',
+      suffix: el.dataset.suffix ?? '',
+      duration: Number(el.dataset.duration ?? '560'),
+    };
+  }
+
+  // easeOutCubic — casa com --ease-out (aceleração inicial, desaceleração no fim).
+  function easeOut(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function setText(el: HTMLElement, n: number, c: ReturnType<typeof readCfg>) {
+    el.textContent = formatBR(n, c.decimals, c.prefix, c.suffix);
+  }
+
+  function animateTo(el: HTMLElement, fromValue: number) {
+    const c = readCfg(el);
+    if (REDUCED.matches || c.duration <= 0) {
+      setText(el, c.target, c);
+      return;
+    }
+    const start = performance.now();
+    const delta = c.target - fromValue;
+    function frame(now: number) {
+      const p = Math.min(1, (now - start) / c.duration);
+      setText(el, fromValue + delta * easeOut(p), c);
+      if (p < 1) requestAnimationFrame(frame);
+      else setText(el, c.target, c); // garante o valor exato no fim
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function currentDisplayedValue(el: HTMLElement, c: ReturnType<typeof readCfg>): number {
+    // Reconstrói o número exibido removendo prefixo/sufixo e revertendo pt-BR.
+    let txt = el.textContent ?? '';
+    if (c.prefix && txt.startsWith(c.prefix)) txt = txt.slice(c.prefix.length);
+    if (c.suffix && txt.endsWith(c.suffix)) txt = txt.slice(0, -c.suffix.length);
+    const n = Number(txt.trim().replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : c.target;
+  }
+
+  function syncLabel(el: HTMLElement) {
+    if (el.dataset.label) return; // label explícito não é sobrescrito
+    const c = readCfg(el);
+    el.setAttribute('aria-label', formatBR(c.target, c.decimals, c.prefix, c.suffix));
+  }
+
+  function hydrate(el: HTMLElement) {
+    if (el.dataset.animatedNumReady === '1') return;
+    el.dataset.animatedNumReady = '1';
+
+    // Entrada: anima de `from` até o alvo.
+    animateTo(el, Number(el.dataset.from ?? '0'));
+    syncLabel(el);
+
+    // Atualização (novo run muda data-target): re-anima do valor exibido para o
+    // novo e ressincroniza o aria-label. Um único observer cobre ambos.
+    new MutationObserver(() => {
+      animateTo(el, currentDisplayedValue(el, readCfg(el)));
+      syncLabel(el);
+    }).observe(el, { attributes: true, attributeFilter: ['data-target'] });
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-animated-num]').forEach(hydrate);
+</script>

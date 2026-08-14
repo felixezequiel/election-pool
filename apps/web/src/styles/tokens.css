@@ -1,0 +1,136 @@
+/*
+ * Design tokens — election-pool (docs/05 §2, §3.2, §6).
+ * Dark-first: :root É o tema escuro (padrão). O tema claro é a alternativa,
+ * aplicada por [data-theme="light"] (toggle explícito) OU por
+ * prefers-color-scheme: light quando o usuário não escolheu nada
+ * (:root:not([data-theme]) protege contra o "flash" ao alternar).
+ */
+
+/* ── Escuro — padrão (docs/05 §2) ─────────────────────────────────────── */
+:root {
+  --bg: #0b0d11;
+  --bg-elevated: #14181f;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --grid: rgba(255, 255, 255, 0.035); /* grade sutil, substitui o milimetrado */
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --ink: #f3f5f8;
+  --ink-2: #a6adba;
+  --ink-3: #656c79;
+  --accent: #6e9bff; /* único acento de interface */
+  --accent-2: #9b7bff;
+  --glow: rgba(110, 155, 255, 0.3); /* brilho de foco/hover */
+
+  /* Espectro de candidatos — variante dark (docs/05 §2.1).
+     Fonte canônica: @election-pool/contracts/palette (CANDIDATE_PALETTE.dark). */
+  --c1: #4f93d9; /* azul    */
+  --c2: #e8703f; /* laranja */
+  --c3: #3f9e6e; /* verde   */
+  --c4: #9b7bee; /* violeta */
+  --c5: #d0a93b; /* ocre    */
+  --c6: #e15c82; /* carmim  */
+  --c7: #3fb6c9; /* ciano   */
+  --c8: #8791a0; /* grafite — reservado para "Demais" */
+
+  /* ── Tipografia (docs/05 §3) ─────────────────────────────────────────── */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body: 'Source Serif 4', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
+
+  /* Escala tipográfica (docs/05 §3.2) — cada tamanho como token reutilizável. */
+  --fs-display-xl: clamp(2.75rem, 6.5vw, 5rem);
+  --fs-display-l: clamp(1.9rem, 3.6vw, 2.8rem);
+  --fs-display-m: 1.4rem;
+  --fs-body: 1.0625rem;
+  --fs-body-s: 0.9375rem;
+  --fs-label: 0.75rem;
+  --fs-data-xl: clamp(2.5rem, 6vw, 4rem);
+  --fs-data: 1rem;
+
+  /* ── Movimento (docs/05 §6) ──────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 140ms;
+  --dur-base: 260ms;
+  --dur-slow: 560ms;
+  --dur-chart: 700ms;
+
+  /* ── Layout / ritmo (docs/05 §4) ─────────────────────────────────────── */
+  --content-max: 1200px;
+  --grid-cols: 12;
+  --gutter: 24px;
+  --rhythm: 8px; /* espaçamento vertical em múltiplos de 8px */
+  --grid-cell: 32px; /* célula da grade de substrato = 4 × ritmo (alinha a 8px) */
+  --radius: 12px;
+  --radius-s: 8px;
+
+  /* Elevação — sombra suave permitida no escuro (docs/05 §2, §4). */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Claro — alternativa (docs/05 §2) ─────────────────────────────────── */
+
+/* 1) Escolha explícita do usuário via ThemeToggle. */
+[data-theme='light'] {
+  --bg: #fbfbfd;
+  --bg-elevated: #ffffff;
+  --surface: rgba(12, 14, 20, 0.028);
+  --surface-2: rgba(12, 14, 20, 0.05);
+  --grid: rgba(12, 14, 20, 0.04);
+  --border: rgba(12, 14, 20, 0.1);
+  --border-strong: rgba(12, 14, 20, 0.2);
+  --ink: #12141a;
+  --ink-2: #565c67;
+  --ink-3: #8a909b;
+  --accent: #2f5bd8;
+  --accent-2: #6b45c4;
+  --glow: rgba(47, 91, 216, 0.18);
+
+  /* Espectro — variante light (~-12% luminância; CANDIDATE_PALETTE.light). */
+  --c1: #3281d3;
+  --c2: #e4581f;
+  --c3: #378b61;
+  --c4: #7e55e9;
+  --c5: #be982d;
+  --c6: #db3c69;
+  --c7: #33a3b5;
+  --c8: #737f90;
+
+  --shadow-1: 0 1px 2px rgba(12, 14, 20, 0.08), 0 8px 24px rgba(12, 14, 20, 0.06);
+  --shadow-2: 0 2px 4px rgba(12, 14, 20, 0.1), 0 16px 48px rgba(12, 14, 20, 0.09);
+}
+
+/* 2) Sem escolha explícita + SO em modo claro: segue o sistema.
+   :root:not([data-theme]) evita que a preferência do SO derrote a escolha
+   manual (data-theme sempre vence). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #fbfbfd;
+    --bg-elevated: #ffffff;
+    --surface: rgba(12, 14, 20, 0.028);
+    --surface-2: rgba(12, 14, 20, 0.05);
+    --grid: rgba(12, 14, 20, 0.04);
+    --border: rgba(12, 14, 20, 0.1);
+    --border-strong: rgba(12, 14, 20, 0.2);
+    --ink: #12141a;
+    --ink-2: #565c67;
+    --ink-3: #8a909b;
+    --accent: #2f5bd8;
+    --accent-2: #6b45c4;
+    --glow: rgba(47, 91, 216, 0.18);
+
+    --c1: #3281d3;
+    --c2: #e4581f;
+    --c3: #378b61;
+    --c4: #7e55e9;
+    --c5: #be982d;
+    --c6: #db3c69;
+    --c7: #33a3b5;
+    --c8: #737f90;
+
+    --shadow-1: 0 1px 2px rgba(12, 14, 20, 0.08), 0 8px 24px rgba(12, 14, 20, 0.06);
+    --shadow-2: 0 2px 4px rgba(12, 14, 20, 0.1), 0 16px 48px rgba(12, 14, 20, 0.09);
+  }
+}

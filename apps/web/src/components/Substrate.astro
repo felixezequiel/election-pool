@@ -1,0 +1,26 @@
+---
+/**
+ * <Substrate> — a grade sutil moderna de página inteira (docs/05 §1.2, §4).
+ *
+ * NÃO é papel milimetrado. É referência espacial finíssima e de baixíssima
+ * opacidade (--grid), fixa à viewport (contínua e alinhada ao rolar), atrás de
+ * todo o conteúdo (z-index: -1, pointer-events: none). Alinhada ao ritmo de 8px
+ * via --grid-cell. Abaixo de 480px a densidade fina some (não vira ruído).
+ *
+ * É substrato, nunca acento (armadilha da task): não recebe cor de acento, não
+ * captura eventos, não compete com nenhum elemento.
+ *
+ * Uso: colocar UMA vez, logo após <body>, no layout raiz.
+ *   <Substrate />
+ *
+ * Para reforçar a grade sob um gráfico (área de plotagem, docs/05 §1.2), use a
+ * classe utilitária .substrate-plot no contêiner do gráfico (não este componente).
+ */
+interface Props {
+  /** Descrição para leitores de tela; a grade é decorativa por padrão. */
+  class?: string | undefined;
+}
+const { class: className } = Astro.props;
+---
+
+<div class:list={['substrate', className]} aria-hidden="true"></div>

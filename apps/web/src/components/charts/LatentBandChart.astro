@@ -1,0 +1,693 @@
+---
+/**
+ * <LatentBandChart> — herói (docs/05 §5, §6; docs/06 §1).
+ *
+ * Série `μ_t` com banda 90%. A BANDA é o dado dominante; a linha central é
+ * secundária; os pontos das pesquisas ficam por trás (opacidade baixa, r3px).
+ * NÃO inverter essa hierarquia (armadilha da task).
+ *
+ * SSR-completo (docs/06 §1): o SVG do build já é o estado final e correto — sem
+ * JS o gráfico aparece inteiro. A hidratação só adiciona:
+ *   - orquestração de load: bandas crescem ANTES das linhas e dos pontos;
+ *   - scrub: cursor vertical; os valores da data animam em <AnimatedNum>, cada
+ *     um com sua UncertaintyRule ao lado (nº de destaque nunca sem régua);
+ *   - tooltip por hover/foco de ponto, navegável por teclado (setas), Escape
+ *     fecha;
+ *   - transição de atualização: expõe `window.__latentUpdate(id, series)` para
+ *     T-12 republicar sem "pulo".
+ *
+ * Cor segue a entidade (colorSlot), nunca a posição (docs/05 §2.1 regra 2).
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from './UncertaintyRule.astro';
+import HachuraDefs from './HachuraDefs.astro';
+import { buildLatentGeometry, type LatentSeries, type PollPoint } from './lib/latent-geometry.js';
+import { hachuraFill } from './lib/hachura.js';
+import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
+import './lib/charts.css';
+
+export interface PollTooltipMeta {
+  tseId: string;
+  instituteName: string;
+  contractorName: string;
+  contractorType: string;
+  sampleSize: number;
+  fieldStart: string;
+  fieldEnd: string;
+  /** Valores por candidato (id → pct) desta pesquisa neste cenário. */
+  values: Record<string, number>;
+}
+
+interface Props {
+  /** Séries por candidato (banda + média). Ordem = ordem de plotagem/legenda. */
+  series: LatentSeries[];
+  /** Pontos de pesquisa individuais já mapeados (sem x/y — calculados aqui). */
+  points: Omit<PollPoint, 'x' | 'y'>[];
+  /** Metadados de tooltip por tseId (instituto, contratante, n, datas, valores). */
+  pollMeta: Record<string, PollTooltipMeta>;
+  /** Título curto do gráfico (ex.: "1º turno — últimos 90 dias"). */
+  title: string;
+  /** id único do gráfico (namespace de padrões e do script). */
+  id: string;
+  width?: number;
+  height?: number;
+  class?: string | undefined;
+}
+
+const {
+  series,
+  points,
+  pollMeta,
+  title,
+  id,
+  width = 960,
+  height = 420,
+  class: className,
+} = Astro.props;
+
+const margins = { top: 16, right: 20, bottom: 32, left: 40 };
+const geo = buildLatentGeometry(series, points, width, height, margins);
+
+const slots = [...new Set(series.map((s) => s.colorSlot))];
+
+// Último ponto de cada série: valor "de agora" para o readout de scrub e a régua.
+function latestOf(s: LatentSeries): { date: number; mean: number; lo90: number; hi90: number } {
+  const last = s.samples[s.samples.length - 1];
+  if (!last) return { date: geo.xDomain[1], mean: 0, lo90: 0, hi90: 0 };
+  return { date: last.t, mean: last.mean, lo90: last.lo90, hi90: last.hi90 };
+}
+const latest = new Map(series.map((s) => [s.candidateId, latestOf(s)]));
+
+// Domínio de valor compartilhado entre as réguas do readout (comparáveis lado a lado).
+const ruleDomain: [number, number] = [geo.yDomain[0], geo.yDomain[1]];
+
+// Prosa do <desc> (docs/05 §7) — leitura em voz alta que faz sentido.
+const descParts = series.map((s) => {
+  const l = latest.get(s.candidateId);
+  return `${s.displayName}: central ${formatPct(l?.mean ?? 0)}%, faixa de 90% de ${formatPct(
+    l?.lo90 ?? 0,
+  )} a ${formatPct(l?.hi90 ?? 0)}`;
+});
+const desc = `Série de apoio estimado ao longo do tempo com faixa de incerteza de 90% dominante. ${descParts.join(
+  '; ',
+)}. A faixa é o elemento principal; a linha central é secundária.`;
+
+// Datas ordenadas para o equivalente textual (tabela).
+const tableDates = series[0]?.samples.map((p) => p.t) ?? [];
+
+// Serialização do estado para o script (datas em ms; nada de aleatório).
+const clientSeries = series.map((s) => ({
+  candidateId: s.candidateId,
+  displayName: s.displayName,
+  colorSlot: s.colorSlot,
+  samples: s.samples,
+}));
+---
+
+<figure class:list={['chart latent-chart', className]} data-latent-chart data-chart-id={id}>
+  <figcaption class="label">{title}</figcaption>
+
+  <div class="chart-plot substrate-plot">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-labelledby={`${id}-title ${id}-desc`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <title id={`${id}-title`}>{title}</title>
+      <desc id={`${id}-desc`}>{desc}</desc>
+
+      <defs>
+        <HachuraDefs idPrefix={id} slots={slots} />
+        {
+          series.map((s) => (
+            <linearGradient id={`${id}-band-grad-${s.colorSlot}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color={`var(--c${s.colorSlot})`} stop-opacity="0.9" />
+              <stop offset="100%" stop-color={`var(--c${s.colorSlot})`} stop-opacity="0.35" />
+            </linearGradient>
+          ))
+        }
+      </defs>
+
+      {/* Substrato: eixos e ticks — instantâneos, nunca animados. */}
+      <g class="axes" aria-hidden="true">
+        {
+          geo.yTicks.map((t) => (
+            <g>
+              <line class="axis-tick" x1={margins.left} y1={t.pos} x2={width - margins.right} y2={t.pos} />
+              <text class="axis-label" x={margins.left - 6} y={t.pos + 3} text-anchor="end">
+                {t.label}
+              </text>
+            </g>
+          ))
+        }
+        {
+          geo.xTicks.map((t) => (
+            <text
+              class="axis-label"
+              x={t.pos}
+              y={height - margins.bottom + 18}
+              text-anchor="middle"
+            >
+              {t.label}
+            </text>
+          ))
+        }
+        <line
+          class="axis-line"
+          x1={margins.left}
+          y1={height - margins.bottom}
+          x2={width - margins.right}
+          y2={height - margins.bottom}></line>
+      </g>
+
+      {/* Pontos das pesquisas: por trás das bandas (docs/06 §2 "por trás"). */}
+      <g class="poll-points">
+        {
+          geo.points.map((p) => (
+            <g class="poll-point-g" style={`color: var(--c${p.colorSlot})`}>
+              <circle
+                class="poll-point"
+                data-poll-point
+                data-tse-id={p.tseId}
+                data-candidate={p.candidateId}
+                cx={p.x}
+                cy={p.y}
+                r={3}
+                fill="currentColor"
+                tabindex="0"
+                role="button"
+                aria-label={`Pesquisa ${p.tseId}, ${formatPct(p.value)} por cento`}
+              />
+              <circle class="poll-focus-ring" cx={p.x} cy={p.y} r={6} />
+            </g>
+          ))
+        }
+      </g>
+
+      {/* Bandas: DOMINANTES. Cor por slot + hachura sobreposta. */}
+      <g class="bands">
+        {
+          geo.bands.map((b) => (
+            <g style={`color: var(--c${b.colorSlot}); --band-delay: ${slots.indexOf(b.colorSlot) * 80}ms`}>
+              <path
+                class="band"
+                d={b.path}
+                fill={`url(#${id}-band-grad-${b.colorSlot})`}
+                data-band
+                data-candidate={b.candidateId}
+              />
+              <path class="band-hachura" d={b.path} fill={hachuraFill(id, b.colorSlot)} />
+            </g>
+          ))
+        }
+      </g>
+
+      {/* Linhas centrais: SECUNDÁRIAS (1.5px, 60% opacidade). */}
+      <g class="center-lines">
+        {
+          geo.centers.map((c) => (
+            <path
+              class="center-line"
+              d={c.path}
+              stroke={`var(--c${c.colorSlot})`}
+              data-center
+              data-candidate={c.candidateId}
+            />
+          ))
+        }
+      </g>
+
+      {/* Cursor de scrub + área de captura (mouse e teclado). */}
+      <line
+        class="scrub-line"
+        data-scrub-line
+        x1={margins.left}
+        y1={margins.top}
+        x2={margins.left}
+        y2={height - margins.bottom}></line>
+      <rect
+        class="scrub-hit"
+        data-scrub-hit
+        x={margins.left}
+        y={margins.top}
+        width={geo.innerWidth}
+        height={geo.innerHeight}
+        tabindex="0"
+        role="slider"
+        aria-label="Deslize para ler os valores estimados por data"
+        aria-valuemin={geo.xDomain[0]}
+        aria-valuemax={geo.xDomain[1]}
+        aria-valuenow={geo.xDomain[1]}></rect>
+    </svg>
+
+    {/* Tooltip (preenchido pela hidratação; vazio e oculto no SSR). */}
+    <div class="chart-tooltip" data-tooltip role="tooltip" aria-hidden="true"></div>
+  </div>
+
+  {/* Readout de scrub: valor "de agora" por candidato, que ANIMA, sempre com a
+      régua ao lado. Sem JS mostra o valor da última data (correto). */}
+  <div class="scrub-readout" data-scrub-readout>
+    <p class="label">
+      Valores em <time datetime={isoDateOnly(new Date(geo.xDomain[1]).toISOString())}
+        >{formatDayMonth(new Date(geo.xDomain[1]).toISOString())}</time
+      >
+    </p>
+    <ul class="readout-list">
+      {
+        series.map((s) => {
+          const l = latest.get(s.candidateId);
+          return (
+            <li class="readout-item" style={`--dot: var(--c${s.colorSlot})`}>
+              <span class="readout-name">
+                <span class="readout-dot" aria-hidden="true" />
+                {s.displayName}
+              </span>
+              <span class="readout-value">
+                <AnimatedNum
+                  value={l?.mean ?? 0}
+                  decimals={1}
+                  suffix="%"
+                  class={`readout-num readout-num-${id}`}
+                  label={`${s.displayName}: ${formatPct(l?.mean ?? 0)} por cento`}
+                />
+                <span class="readout-num-tag" data-readout-num data-candidate={s.candidateId} />
+              </span>
+              <span class="readout-rule" data-rule-for={s.candidateId}>
+                <UncertaintyRule
+                  mean={l?.mean ?? 0}
+                  lo90={l?.lo90 ?? 0}
+                  hi90={l?.hi90 ?? 0}
+                  colorSlot={s.colorSlot}
+                  domain={ruleDomain}
+                  label={s.displayName}
+                  width={200}
+                />
+              </span>
+            </li>
+          );
+        })
+      }
+    </ul>
+  </div>
+
+  {/* Legenda: sempre visível, com cor + hachura (cor nunca sozinha). */}
+  <ul class="chart-legend">
+    {
+      series.map((s) => (
+        <li>
+          <svg class="swatch" viewBox="0 0 18 12" width="18" height="12" aria-hidden="true" style={`color: var(--c${s.colorSlot})`}>
+            <defs>
+              <HachuraDefs idPrefix={`${id}-lg-${s.colorSlot}`} slots={[s.colorSlot]} />
+            </defs>
+            <rect x="0" y="0" width="18" height="12" rx="2" fill="currentColor" fill-opacity="0.22" />
+            <rect x="0" y="0" width="18" height="12" rx="2" fill={hachuraFill(`${id}-lg-${s.colorSlot}`, s.colorSlot)} fill-opacity="0.5" />
+          </svg>
+          <span>{s.displayName}</span>
+        </li>
+      ))
+    }
+  </ul>
+
+  {/* Equivalente textual: tabela HTML real, fechada por padrão (docs/05 §7). */}
+  <details class="chart-table">
+    <summary>Ver dados da série em tabela</summary>
+    <table>
+      <caption>
+        Apoio estimado (central) e faixa de <Num>90</Num>% por data, em pontos percentuais.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Data</th>
+          {
+            series.map((s) => (
+              <th class="num" scope="col">
+                {s.displayName}
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          tableDates.map((t, i) => (
+            <tr>
+              <td>
+                <time datetime={isoDateOnly(new Date(t).toISOString())}>
+                  <Num>{formatDayMonth(new Date(t).toISOString())}</Num>
+                </time>
+              </td>
+              {series.map((s) => {
+                const p = s.samples[i];
+                return (
+                  <td class="num">
+                    {p ? (
+                      <>
+                        <Num>{formatPct(p.mean)}</Num> (<Num>{formatPct(p.lo90)}</Num>–
+                        <Num>{formatPct(p.hi90)}</Num>)
+                      </>
+                    ) : (
+                      <Num>—</Num>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </details>
+
+  <script
+    is:inline
+    type="application/json"
+    data-latent-state
+    set:html={JSON.stringify({ series: clientSeries, pollMeta, margins, width, height, ruleDomain })}
+  />
+</figure>
+
+<style>
+  .latent-chart {
+    margin-block: calc(var(--rhythm) * 2);
+  }
+  .chart-plot {
+    position: relative;
+  }
+  .scrub-readout {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .readout-list {
+    list-style: none;
+    margin: var(--rhythm) 0 0;
+    padding: 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 1.5);
+  }
+  .readout-item {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) auto minmax(160px, 220px);
+    align-items: center;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .readout-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+  }
+  .readout-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--dot);
+    flex: 0 0 auto;
+  }
+  .readout-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+    color: var(--ink);
+  }
+  .readout-num-tag {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .readout-item {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'name value'
+        'rule rule';
+    }
+    .readout-name {
+      grid-area: name;
+    }
+    .readout-value {
+      grid-area: value;
+    }
+    .readout-rule {
+      grid-area: rule;
+    }
+  }
+</style>
+
+<script>
+  import { updateUncertaintyRule } from './lib/rule-client.js';
+
+  interface Sample {
+    t: number;
+    mean: number;
+    lo90: number;
+    hi90: number;
+  }
+  interface ClientSeries {
+    candidateId: string;
+    displayName: string;
+    colorSlot: number;
+    samples: Sample[];
+  }
+  interface PollMeta {
+    tseId: string;
+    instituteName: string;
+    contractorName: string;
+    contractorType: string;
+    sampleSize: number;
+    fieldStart: string;
+    fieldEnd: string;
+    values: Record<string, number>;
+  }
+  interface State {
+    series: ClientSeries[];
+    pollMeta: Record<string, PollMeta>;
+    margins: { top: number; right: number; bottom: number; left: number };
+    width: number;
+    height: number;
+    ruleDomain: [number, number];
+  }
+
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const nf1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const dm = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  });
+
+  function nearestSample(samples: Sample[], t: number): Sample | null {
+    if (samples.length === 0) return null;
+    let best = samples[0]!;
+    let bestD = Math.abs(best.t - t);
+    for (const s of samples) {
+      const d = Math.abs(s.t - t);
+      if (d < bestD) {
+        best = s;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function initChart(root: HTMLElement): void {
+    const stateEl = root.querySelector<HTMLScriptElement>('[data-latent-state]');
+    if (!stateEl?.textContent) return;
+    const state = JSON.parse(stateEl.textContent) as State;
+    const svg = root.querySelector('svg');
+    if (!svg) return;
+
+    const chartId = root.dataset.chartId ?? '';
+    const { margins, width } = state;
+    const innerLeft = margins.left;
+    const innerRight = width - margins.right;
+    const tMin = Math.min(...state.series.flatMap((s) => s.samples.map((p) => p.t)));
+    const tMax = Math.max(...state.series.flatMap((s) => s.samples.map((p) => p.t)));
+    const tSpan = tMax - tMin || 1;
+
+    const xToT = (px: number): number =>
+      tMin + ((px - innerLeft) / (innerRight - innerLeft)) * tSpan;
+    const tToX = (t: number): number =>
+      innerLeft + ((t - tMin) / tSpan) * (innerRight - innerLeft);
+
+    const scrubLine = root.querySelector<SVGLineElement>('[data-scrub-line]');
+    const readoutTitle = root.querySelector<HTMLElement>('.scrub-readout .label time');
+
+    // Orquestração de load: adiciona a classe que dispara as animações CSS
+    // (bandas → linhas → pontos). Sob reduced-motion o CSS já ignora.
+    requestAnimationFrame(() => root.classList.add('chart-animate'));
+
+    function setReadoutForT(t: number): void {
+      if (readoutTitle) {
+        readoutTitle.textContent = dm.format(new Date(t));
+      }
+      for (const s of state.series) {
+        const sample = nearestSample(s.samples, t);
+        if (!sample) continue;
+        const numEl = root.querySelector<HTMLElement>(
+          `[data-readout-num][data-candidate="${CSS.escape(s.candidateId)}"]`,
+        );
+        // O <AnimatedNum> é o irmão anterior do tag; movemos o data-target dele.
+        const animated = numEl?.previousElementSibling as HTMLElement | null;
+        if (animated?.hasAttribute('data-animated-num')) {
+          animated.setAttribute('data-target', String(sample.mean));
+        }
+        const ruleWrap = root.querySelector(
+          `[data-rule-for="${CSS.escape(s.candidateId)}"] [data-uncertainty-rule]`,
+        );
+        if (ruleWrap) {
+          updateUncertaintyRule(ruleWrap as SVGElement, {
+            mean: sample.mean,
+            lo90: sample.lo90,
+            hi90: sample.hi90,
+          });
+        }
+      }
+    }
+
+    function moveScrubTo(px: number): void {
+      const clamped = Math.max(innerLeft, Math.min(innerRight, px));
+      if (scrubLine) {
+        scrubLine.setAttribute('x1', String(clamped));
+        scrubLine.setAttribute('x2', String(clamped));
+      }
+      root.classList.add('is-scrubbing');
+      setReadoutForT(xToT(clamped));
+    }
+
+    const hit = root.querySelector<SVGRectElement>('[data-scrub-hit]');
+    const rectPx = (evt: MouseEvent): number => {
+      const box = svg!.getBoundingClientRect();
+      const scale = width / box.width;
+      return (evt.clientX - box.left) * scale;
+    };
+    hit?.addEventListener('mousemove', (e) => moveScrubTo(rectPx(e as MouseEvent)));
+    hit?.addEventListener('mouseleave', () => {
+      root.classList.remove('is-scrubbing');
+      // Restaura o valor "de agora" (última data).
+      setReadoutForT(tMax);
+    });
+
+    // Teclado no scrub: setas movem por amostra.
+    let scrubIndex = (state.series[0]?.samples.length ?? 1) - 1;
+    const baseSamples = state.series[0]?.samples ?? [];
+    hit?.addEventListener('keydown', (e) => {
+      const ev = e as KeyboardEvent;
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') {
+        scrubIndex = Math.min(baseSamples.length - 1, scrubIndex + 1);
+      } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') {
+        scrubIndex = Math.max(0, scrubIndex - 1);
+      } else if (ev.key === 'Home') {
+        scrubIndex = 0;
+      } else if (ev.key === 'End') {
+        scrubIndex = baseSamples.length - 1;
+      } else {
+        return;
+      }
+      ev.preventDefault();
+      const t = baseSamples[scrubIndex]?.t ?? tMax;
+      moveScrubTo(tToX(t));
+      hit?.setAttribute('aria-valuenow', String(t));
+    });
+
+    // ── Tooltip por hover/foco de ponto, navegável por teclado ──
+    const tooltip = root.querySelector<HTMLElement>('[data-tooltip]');
+    const pointEls = Array.from(root.querySelectorAll<SVGCircleElement>('[data-poll-point]'));
+
+    function tooltipHtml(tseId: string): string {
+      const meta = state.pollMeta[tseId];
+      if (!meta) return `<strong class="tt-mono">${tseId}</strong>`;
+      const rows = Object.entries(meta.values)
+        .map(([cid, v]) => {
+          const name = state.series.find((s) => s.candidateId === cid)?.displayName ?? cid;
+          return `<dt>${name}</dt><dd>${nf1.format(v)}%</dd>`;
+        })
+        .join('');
+      const field = `${dm.format(fieldMs(meta.fieldStart))}–${dm.format(fieldMs(meta.fieldEnd))}`;
+      return `
+        <dl>
+          <dt>Instituto</dt><dd>${meta.instituteName}</dd>
+          <dt>Contratante</dt><dd>${meta.contractorName} (${meta.contractorType})</dd>
+          <dt>Registro TSE</dt><dd class="tt-mono">${meta.tseId}</dd>
+          <dt>Amostra</dt><dd class="tt-mono">n = ${meta.sampleSize}</dd>
+          <dt>Campo</dt><dd class="tt-mono">${field}</dd>
+          ${rows}
+        </dl>`;
+    }
+
+    function fieldMs(iso: string): Date {
+      return new Date(`${iso.slice(0, 10)}T00:00:00-03:00`);
+    }
+
+    function showTooltip(el: SVGCircleElement): void {
+      if (!tooltip) return;
+      const tseId = el.dataset.tseId ?? '';
+      tooltip.innerHTML = tooltipHtml(tseId);
+      tooltip.setAttribute('data-open', 'true');
+      tooltip.setAttribute('aria-hidden', 'false');
+      const cx = Number(el.getAttribute('cx'));
+      const cy = Number(el.getAttribute('cy'));
+      const box = svg!.getBoundingClientRect();
+      const scaleX = box.width / width;
+      const scaleY = box.height / state.height;
+      tooltip.style.left = `${cx * scaleX + 12}px`;
+      tooltip.style.top = `${cy * scaleY - 8}px`;
+      pointEls.forEach((p) => p.classList.remove('is-active'));
+      el.classList.add('is-active');
+    }
+
+    function hideTooltip(): void {
+      if (!tooltip) return;
+      tooltip.setAttribute('data-open', 'false');
+      tooltip.setAttribute('aria-hidden', 'true');
+      pointEls.forEach((p) => p.classList.remove('is-active'));
+    }
+
+    pointEls.forEach((el, i) => {
+      el.addEventListener('mouseenter', () => showTooltip(el));
+      el.addEventListener('mouseleave', hideTooltip);
+      el.addEventListener('focus', () => showTooltip(el));
+      el.addEventListener('blur', hideTooltip);
+      el.addEventListener('keydown', (e) => {
+        const ev = e as KeyboardEvent;
+        if (ev.key === 'Escape') {
+          hideTooltip();
+          el.blur();
+        } else if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          pointEls[Math.min(pointEls.length - 1, i + 1)]?.focus();
+        } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          pointEls[Math.max(0, i - 1)]?.focus();
+        }
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideTooltip();
+    });
+
+    // ── Transição de atualização (novo run): banda + números interpolam ──
+    // Exposta para T-12 chamar ao republicar. Reusa o mesmo caminho de scrub.
+    interface UpdatePayload {
+      series: ClientSeries[];
+    }
+    const globalKey = '__latentUpdate';
+    const w = window as unknown as Record<string, unknown>;
+    const prev = (w[globalKey] as ((id: string, p: UpdatePayload) => void) | undefined) ?? null;
+    w[globalKey] = (id: string, payload: UpdatePayload): void => {
+      if (prev) prev(id, payload);
+      if (id !== chartId) return;
+      state.series = payload.series;
+      // Anima readouts + réguas ao novo "agora" (última data).
+      setReadoutForT(Math.max(...payload.series.flatMap((s) => s.samples.map((p) => p.t))));
+    };
+
+    void REDUCED; // reduced-motion é tratado pelo CSS (animações e transições).
+  }
+
+  document
+    .querySelectorAll<HTMLElement>('[data-latent-chart]')
+    .forEach((el) => initChart(el));
+</script>

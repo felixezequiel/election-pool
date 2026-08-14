@@ -1,0 +1,12 @@
+**/dist/**
+**/dist-*/**
+**/node_modules/**
+**/coverage/**
+pnpm-lock.yaml
+
+# Artefatos GERADOS pelo Astro (não são fonte nossa; o astro os reescreve).
+**/.astro/**
+
+# Markdown is owned by the docs/tasks authors; contracts must conform to the
+# docs, not reformat them. LOG.md/tasks are prose, not code style.
+**/*.md

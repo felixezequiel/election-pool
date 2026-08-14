@@ -1,0 +1,62 @@
+/*
+ * Substrato: grade sutil moderna de página inteira (docs/05 §1.2, §4).
+ * NÃO é papel milimetrado — são linhas finíssimas de baixíssima opacidade
+ * (--grid), fixas em relação à viewport para permanecerem contínuas e alinhadas
+ * ao rolar (não "saltam" entre seções). É substrato, nunca acento (§ armadilha).
+ *
+ * A célula é --grid-cell (32px = 4 × ritmo de 8px), então a grade fica alinhada
+ * ao ritmo vertical do conteúdo.
+ */
+
+.substrate {
+  position: fixed;
+  inset: 0;
+  z-index: -1; /* sempre atrás do conteúdo; nunca captura eventos */
+  pointer-events: none;
+  /* Duas linhas de 1px por eixo — o resto da célula é transparente. */
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: var(--grid-cell) var(--grid-cell);
+  /* Ancorar no canto para alinhamento estável e contínuo ao rolar. */
+  background-position: 0 0;
+}
+
+/*
+ * Área de plotagem: sob os gráficos a grade aparece um pouco mais forte
+ * (docs/05 §1.2), reforçando que ali é onde o dado é medido. Aplicar
+ * .substrate-plot ao contêiner de um gráfico.
+ */
+.substrate-plot {
+  position: relative;
+}
+.substrate-plot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: var(--grid-cell) var(--grid-cell);
+  /* Reforço: uma segunda camada de opacidade some sobre a base. */
+  opacity: 1.6;
+}
+.substrate-plot > * {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * Abaixo de 480px a densidade fina viraria ruído (docs/05 aceite §4 / task):
+ * dobramos a célula (grade mais esparsa) e aliviamos a opacidade. Continua sendo
+ * referência espacial sutil, não textura.
+ */
+@media (max-width: 480px) {
+  .substrate {
+    background-size: calc(var(--grid-cell) * 2) calc(var(--grid-cell) * 2);
+    opacity: 0.6;
+  }
+  .substrate-plot::before {
+    background-size: calc(var(--grid-cell) * 2) calc(var(--grid-cell) * 2);
+  }
+}

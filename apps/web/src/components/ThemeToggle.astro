@@ -1,0 +1,94 @@
+---
+/**
+ * <ThemeToggle> — alterna claro↔escuro (docs/05 §1.2, §6.6; docs/06 §1).
+ *
+ * O tema ESCURO é o padrão (SSR fixa `<html data-theme="dark">`; o no-flash
+ * script do Base aplica a escolha salva antes do primeiro paint). Este botão só:
+ *   - lê o tema efetivo do `<html>`;
+ *   - inverte, seta `data-theme` e grava `localStorage['theme']` — o ÚNICO uso
+ *     de localStorage permitido (CLAUDE.md);
+ *   - mantém `aria-pressed` coerente para leitores de tela.
+ *
+ * Sem JS o botão simplesmente não faz nada (o tema padrão escuro continua
+ * legível). O script é hoisted (padrão de T-10/T-11), equivalente a client:idle:
+ * o Astro o carrega como módulo com `defer`, sem competir com o conteúdo.
+ */
+---
+
+<button
+  type="button"
+  id="theme-toggle"
+  class="theme-toggle label"
+  aria-pressed="false"
+  aria-label="Alternar tema claro ou escuro"
+  title="Alternar tema"
+>
+  <span class="theme-toggle-dot" aria-hidden="true"></span>
+  <span class="theme-toggle-text" data-theme-label>Tema</span>
+</button>
+
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--rhythm) * 1);
+    padding: calc(var(--rhythm) * 0.75) calc(var(--rhythm) * 1.5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    color: var(--ink-2);
+    cursor: pointer;
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+  }
+  .theme-toggle:hover {
+    color: var(--ink);
+    border-color: var(--border-strong);
+  }
+  .theme-toggle-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow);
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+</style>
+
+<script>
+  // Alterna o tema e persiste a escolha. Fonte da verdade visual: data-theme no
+  // <html>. localStorage só guarda a preferência (CLAUDE.md).
+  const btn = document.getElementById('theme-toggle');
+  const root = document.documentElement;
+
+  function effectiveTheme(): 'light' | 'dark' {
+    const attr = root.getAttribute('data-theme');
+    if (attr === 'light' || attr === 'dark') return attr;
+    // Sem data-theme explícito: o SSR fixa dark, então o efetivo é dark.
+    return 'dark';
+  }
+
+  function syncButton(theme: 'light' | 'dark') {
+    if (!btn) return;
+    // aria-pressed = "está em claro?" — descreve o estado alternado de forma estável.
+    btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+    const label = btn.querySelector('[data-theme-label]');
+    if (label) label.textContent = theme === 'light' ? 'Claro' : 'Escuro';
+  }
+
+  if (btn) {
+    syncButton(effectiveTheme());
+    btn.addEventListener('click', () => {
+      const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try {
+        localStorage.setItem('theme', next);
+      } catch {
+        /* localStorage indisponível: o tema alterna só nesta sessão. */
+      }
+      syncButton(next);
+    });
+  }
+</script>

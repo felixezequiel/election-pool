@@ -1,0 +1,45 @@
+---
+/**
+ * <Num> — envolve TODO numeral do site (docs/05 §3.1).
+ *
+ * IBM Plex Mono com `font-variant-numeric: tabular-nums lining-nums`. Largura
+ * constante por dígito: resolve alinhamento de colunas e permite animar valor
+ * sem reflow. Um lint (scripts/lint-num.mjs) proíbe dígito solto fora de <Num>
+ * / <AnimatedNum>.
+ *
+ * Uso:
+ *   <Num>40,8</Num>
+ *   <Num>{formatPct(v)}</Num>
+ *   <Num label="registro TSE">BR-06591/2026</Num>
+ *
+ * `as` permite trocar o elemento (padrão <span>). Herda o tamanho do contexto;
+ * para números de destaque combine com a classe .data-xl / .data no pai.
+ */
+interface Props {
+  /** Elemento a renderizar. Padrão: 'span'. */
+  as?: keyof HTMLElementTagNameMap;
+  /** Descrição acessível opcional (vira aria-label). */
+  label?: string | undefined;
+  /** Classe(s) extra(s). */
+  class?: string | undefined;
+}
+
+const { as = 'span', label, class: className } = Astro.props;
+const Tag = as;
+---
+
+<Tag class:list={['num', className]} {...label ? { 'aria-label': label } : {}}>
+  <slot />
+</Tag>
+
+<style>
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings:
+      'tnum' 1,
+      'lnum' 1;
+    /* Assinatura tipográfica: o número é sempre mono, mesmo no meio da prosa. */
+    letter-spacing: 0;
+  }
+</style>

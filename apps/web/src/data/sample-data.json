@@ -1,0 +1,971 @@
+{
+  "schemaVersion": "1",
+  "generatedAt": "2026-08-14T15:00:00-03:00",
+  "nextUpdateAt": "2026-08-14T17:00:00-03:00",
+  "updateIntervalMinutes": 120,
+  "modelVersion": "1.0.0",
+  "gitSha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+  "race": {
+    "id": "presidencia-2026",
+    "displayName": "Presidência da República 2026"
+  },
+  "candidates": [
+    {
+      "id": "cand-a",
+      "displayName": "Andrade",
+      "party": "PXA",
+      "colorSlot": 1
+    },
+    {
+      "id": "cand-b",
+      "displayName": "Barros",
+      "party": "PXB",
+      "colorSlot": 2
+    },
+    {
+      "id": "cand-c",
+      "displayName": "Cardoso",
+      "party": "PXC",
+      "colorSlot": 3
+    },
+    {
+      "id": "demais",
+      "displayName": "Demais",
+      "party": null,
+      "colorSlot": 8
+    }
+  ],
+  "institutes": [
+    {
+      "id": "inst-1",
+      "displayName": "Instituto Alfa",
+      "method": "telefone"
+    },
+    {
+      "id": "inst-2",
+      "displayName": "Instituto Beta",
+      "method": "presencial"
+    },
+    {
+      "id": "inst-3",
+      "displayName": "Instituto Gama",
+      "method": "painel_online"
+    }
+  ],
+  "latent": {
+    "firstRound": [
+      {
+        "date": "2026-05-16",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 38,
+            "lo90": 34.8,
+            "hi90": 41.2
+          },
+          "cand-b": {
+            "mean": 31,
+            "lo90": 28,
+            "hi90": 34
+          },
+          "cand-c": {
+            "mean": 14,
+            "lo90": 11.6,
+            "hi90": 16.4
+          },
+          "demais": {
+            "mean": 11,
+            "lo90": 9,
+            "hi90": 13
+          }
+        }
+      },
+      {
+        "date": "2026-05-23",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 38.3,
+            "lo90": 35.1,
+            "hi90": 41.4
+          },
+          "cand-b": {
+            "mean": 30.9,
+            "lo90": 27.9,
+            "hi90": 33.8
+          },
+          "cand-c": {
+            "mean": 14.1,
+            "lo90": 11.7,
+            "hi90": 16.5
+          },
+          "demais": {
+            "mean": 11,
+            "lo90": 9,
+            "hi90": 13
+          }
+        }
+      },
+      {
+        "date": "2026-05-30",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 38.5,
+            "lo90": 35.4,
+            "hi90": 41.6
+          },
+          "cand-b": {
+            "mean": 30.8,
+            "lo90": 27.8,
+            "hi90": 33.7
+          },
+          "cand-c": {
+            "mean": 14.2,
+            "lo90": 11.8,
+            "hi90": 16.5
+          },
+          "demais": {
+            "mean": 10.9,
+            "lo90": 8.9,
+            "hi90": 12.9
+          }
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 38.8,
+            "lo90": 35.7,
+            "hi90": 41.8
+          },
+          "cand-b": {
+            "mean": 30.6,
+            "lo90": 27.8,
+            "hi90": 33.5
+          },
+          "cand-c": {
+            "mean": 14.2,
+            "lo90": 11.9,
+            "hi90": 16.6
+          },
+          "demais": {
+            "mean": 10.9,
+            "lo90": 8.9,
+            "hi90": 12.9
+          }
+        }
+      },
+      {
+        "date": "2026-06-13",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 39,
+            "lo90": 36,
+            "hi90": 42
+          },
+          "cand-b": {
+            "mean": 30.5,
+            "lo90": 27.7,
+            "hi90": 33.4
+          },
+          "cand-c": {
+            "mean": 14.3,
+            "lo90": 12,
+            "hi90": 16.6
+          },
+          "demais": {
+            "mean": 10.8,
+            "lo90": 8.8,
+            "hi90": 12.8
+          }
+        }
+      },
+      {
+        "date": "2026-06-20",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 39.3,
+            "lo90": 36.3,
+            "hi90": 42.2
+          },
+          "cand-b": {
+            "mean": 30.4,
+            "lo90": 27.6,
+            "hi90": 33.2
+          },
+          "cand-c": {
+            "mean": 14.4,
+            "lo90": 12.2,
+            "hi90": 16.7
+          },
+          "demais": {
+            "mean": 10.8,
+            "lo90": 8.8,
+            "hi90": 12.8
+          }
+        }
+      },
+      {
+        "date": "2026-06-27",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 39.5,
+            "lo90": 36.6,
+            "hi90": 42.4
+          },
+          "cand-b": {
+            "mean": 30.3,
+            "lo90": 27.5,
+            "hi90": 33
+          },
+          "cand-c": {
+            "mean": 14.5,
+            "lo90": 12.3,
+            "hi90": 16.7
+          },
+          "demais": {
+            "mean": 10.7,
+            "lo90": 8.7,
+            "hi90": 12.7
+          }
+        }
+      },
+      {
+        "date": "2026-07-04",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 39.8,
+            "lo90": 36.9,
+            "hi90": 42.6
+          },
+          "cand-b": {
+            "mean": 30.2,
+            "lo90": 27.4,
+            "hi90": 32.9
+          },
+          "cand-c": {
+            "mean": 14.6,
+            "lo90": 12.4,
+            "hi90": 16.8
+          },
+          "demais": {
+            "mean": 10.7,
+            "lo90": 8.7,
+            "hi90": 12.7
+          }
+        }
+      },
+      {
+        "date": "2026-07-11",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 40,
+            "lo90": 37.2,
+            "hi90": 42.8
+          },
+          "cand-b": {
+            "mean": 30,
+            "lo90": 27.4,
+            "hi90": 32.7
+          },
+          "cand-c": {
+            "mean": 14.6,
+            "lo90": 12.5,
+            "hi90": 16.8
+          },
+          "demais": {
+            "mean": 10.6,
+            "lo90": 8.6,
+            "hi90": 12.6
+          }
+        }
+      },
+      {
+        "date": "2026-07-18",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 40.3,
+            "lo90": 37.5,
+            "hi90": 43
+          },
+          "cand-b": {
+            "mean": 29.9,
+            "lo90": 27.3,
+            "hi90": 32.6
+          },
+          "cand-c": {
+            "mean": 14.7,
+            "lo90": 12.6,
+            "hi90": 16.9
+          },
+          "demais": {
+            "mean": 10.6,
+            "lo90": 8.6,
+            "hi90": 12.6
+          }
+        }
+      },
+      {
+        "date": "2026-07-25",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 40.5,
+            "lo90": 37.8,
+            "hi90": 43.2
+          },
+          "cand-b": {
+            "mean": 29.8,
+            "lo90": 27.2,
+            "hi90": 32.4
+          },
+          "cand-c": {
+            "mean": 14.8,
+            "lo90": 12.7,
+            "hi90": 16.9
+          },
+          "demais": {
+            "mean": 10.5,
+            "lo90": 8.5,
+            "hi90": 12.5
+          }
+        }
+      },
+      {
+        "date": "2026-08-01",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 40.8,
+            "lo90": 38.1,
+            "hi90": 43.4
+          },
+          "cand-b": {
+            "mean": 29.7,
+            "lo90": 27.1,
+            "hi90": 32.2
+          },
+          "cand-c": {
+            "mean": 14.9,
+            "lo90": 12.8,
+            "hi90": 17
+          },
+          "demais": {
+            "mean": 10.5,
+            "lo90": 8.5,
+            "hi90": 12.5
+          }
+        }
+      },
+      {
+        "date": "2026-08-08",
+        "byCandidate": {
+          "cand-a": {
+            "mean": 41,
+            "lo90": 38.4,
+            "hi90": 43.6
+          },
+          "cand-b": {
+            "mean": 29.6,
+            "lo90": 27,
+            "hi90": 32.1
+          },
+          "cand-c": {
+            "mean": 15,
+            "lo90": 12.9,
+            "hi90": 17
+          },
+          "demais": {
+            "mean": 10.4,
+            "lo90": 8.4,
+            "hi90": 12.4
+          }
+        }
+      }
+    ],
+    "runoffs": [
+      {
+        "pair": ["cand-a", "cand-b"],
+        "series": [
+          {
+            "date": "2026-05-16",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51,
+                "lo90": 47.6,
+                "hi90": 54.4
+              },
+              "cand-b": {
+                "mean": 49,
+                "lo90": 45.6,
+                "hi90": 52.4
+              }
+            }
+          },
+          {
+            "date": "2026-05-23",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.2,
+                "lo90": 47.8,
+                "hi90": 54.5
+              },
+              "cand-b": {
+                "mean": 48.9,
+                "lo90": 45.5,
+                "hi90": 52.2
+              }
+            }
+          },
+          {
+            "date": "2026-05-30",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.3,
+                "lo90": 48,
+                "hi90": 54.6
+              },
+              "cand-b": {
+                "mean": 48.7,
+                "lo90": 45.4,
+                "hi90": 52
+              }
+            }
+          },
+          {
+            "date": "2026-06-06",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.5,
+                "lo90": 48.2,
+                "hi90": 54.7
+              },
+              "cand-b": {
+                "mean": 48.6,
+                "lo90": 45.3,
+                "hi90": 51.8
+              }
+            }
+          },
+          {
+            "date": "2026-06-13",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.6,
+                "lo90": 48.4,
+                "hi90": 54.8
+              },
+              "cand-b": {
+                "mean": 48.4,
+                "lo90": 45.2,
+                "hi90": 51.6
+              }
+            }
+          },
+          {
+            "date": "2026-06-20",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.8,
+                "lo90": 48.6,
+                "hi90": 54.9
+              },
+              "cand-b": {
+                "mean": 48.3,
+                "lo90": 45.1,
+                "hi90": 51.4
+              }
+            }
+          },
+          {
+            "date": "2026-06-27",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 51.9,
+                "lo90": 48.8,
+                "hi90": 55
+              },
+              "cand-b": {
+                "mean": 48.1,
+                "lo90": 45,
+                "hi90": 51.2
+              }
+            }
+          },
+          {
+            "date": "2026-07-04",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.1,
+                "lo90": 49,
+                "hi90": 55.1
+              },
+              "cand-b": {
+                "mean": 48,
+                "lo90": 44.9,
+                "hi90": 51
+              }
+            }
+          },
+          {
+            "date": "2026-07-11",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.2,
+                "lo90": 49.2,
+                "hi90": 55.2
+              },
+              "cand-b": {
+                "mean": 47.8,
+                "lo90": 44.8,
+                "hi90": 50.8
+              }
+            }
+          },
+          {
+            "date": "2026-07-18",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.4,
+                "lo90": 49.4,
+                "hi90": 55.3
+              },
+              "cand-b": {
+                "mean": 47.7,
+                "lo90": 44.7,
+                "hi90": 50.6
+              }
+            }
+          },
+          {
+            "date": "2026-07-25",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.5,
+                "lo90": 49.6,
+                "hi90": 55.4
+              },
+              "cand-b": {
+                "mean": 47.5,
+                "lo90": 44.6,
+                "hi90": 50.4
+              }
+            }
+          },
+          {
+            "date": "2026-08-01",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.7,
+                "lo90": 49.8,
+                "hi90": 55.5
+              },
+              "cand-b": {
+                "mean": 47.4,
+                "lo90": 44.5,
+                "hi90": 50.2
+              }
+            }
+          },
+          {
+            "date": "2026-08-08",
+            "byCandidate": {
+              "cand-a": {
+                "mean": 52.8,
+                "lo90": 50,
+                "hi90": 55.6
+              },
+              "cand-b": {
+                "mean": 47.2,
+                "lo90": 44.4,
+                "hi90": 50
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "polls": [
+    {
+      "tseId": "BR-06591/2026",
+      "instituteId": "inst-1",
+      "contractorName": "Veículo Aurora",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-05-20",
+      "fieldEnd": "2026-05-22",
+      "sampleSize": 1500,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 37.1,
+        "cand-b": 30.4,
+        "cand-c": 14,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 50,
+            "cand-b": 50
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06592/2026",
+      "instituteId": "inst-2",
+      "contractorName": "Veículo Boreal",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-05-30",
+      "fieldEnd": "2026-06-01",
+      "sampleSize": 1800,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 38.4,
+        "cand-b": 30.7,
+        "cand-c": 14.1,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 51,
+            "cand-b": 49
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06593/2026",
+      "instituteId": "inst-3",
+      "contractorName": "Veículo Aurora",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-06-09",
+      "fieldEnd": "2026-06-11",
+      "sampleSize": 2100,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 39.7,
+        "cand-b": 31,
+        "cand-c": 14.2,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 52,
+            "cand-b": 48
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06594/2026",
+      "instituteId": "inst-1",
+      "contractorName": "Veículo Boreal",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-06-19",
+      "fieldEnd": "2026-06-21",
+      "sampleSize": 2400,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 38,
+        "cand-b": 29.8,
+        "cand-c": 14.3,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 50,
+            "cand-b": 50
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06595/2026",
+      "instituteId": "inst-2",
+      "contractorName": "Veículo Aurora",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-06-29",
+      "fieldEnd": "2026-07-01",
+      "sampleSize": 1500,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 39.3,
+        "cand-b": 30.1,
+        "cand-c": 14.4,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 51,
+            "cand-b": 49
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06596/2026",
+      "instituteId": "inst-3",
+      "contractorName": "Veículo Boreal",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-07-09",
+      "fieldEnd": "2026-07-11",
+      "sampleSize": 1800,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 40.6,
+        "cand-b": 30.4,
+        "cand-c": 14.5,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 52,
+            "cand-b": 48
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06597/2026",
+      "instituteId": "inst-1",
+      "contractorName": "Veículo Aurora",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-07-19",
+      "fieldEnd": "2026-07-21",
+      "sampleSize": 2100,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 38.9,
+        "cand-b": 29.2,
+        "cand-c": 14.6,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 50,
+            "cand-b": 50
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06598/2026",
+      "instituteId": "inst-2",
+      "contractorName": "Veículo Boreal",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-07-29",
+      "fieldEnd": "2026-07-31",
+      "sampleSize": 2400,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 40.2,
+        "cand-b": 29.5,
+        "cand-c": 14.7,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 51,
+            "cand-b": 49
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    },
+    {
+      "tseId": "BR-06599/2026",
+      "instituteId": "inst-3",
+      "contractorName": "Veículo Aurora",
+      "contractorType": "veiculo",
+      "fieldStart": "2026-08-08",
+      "fieldEnd": "2026-08-10",
+      "sampleSize": 1500,
+      "marginOfError": 2,
+      "firstRound": {
+        "cand-a": 41.5,
+        "cand-b": 29.8,
+        "cand-c": 14.8,
+        "demais": 11
+      },
+      "runoffs": [
+        {
+          "pair": ["cand-a", "cand-b"],
+          "values": {
+            "cand-a": 52,
+            "cand-b": 48
+          }
+        }
+      ],
+      "sourceUrl": "https://www.tse.jus.br/"
+    }
+  ],
+  "houseEffects": [
+    {
+      "instituteId": "inst-1",
+      "candidateId": "cand-a",
+      "effect": 1.4,
+      "lo90": 0.2,
+      "hi90": 2.6,
+      "nPolls": 6,
+      "estimable": true
+    },
+    {
+      "instituteId": "inst-1",
+      "candidateId": "cand-b",
+      "effect": -0.9,
+      "lo90": -2.1,
+      "hi90": 0.3,
+      "nPolls": 6,
+      "estimable": true
+    },
+    {
+      "instituteId": "inst-2",
+      "candidateId": "cand-a",
+      "effect": -1.8,
+      "lo90": -3.4,
+      "hi90": -0.2,
+      "nPolls": 5,
+      "estimable": true
+    },
+    {
+      "instituteId": "inst-2",
+      "candidateId": "cand-b",
+      "effect": 0.6,
+      "lo90": -0.8,
+      "hi90": 2,
+      "nPolls": 5,
+      "estimable": true
+    },
+    {
+      "instituteId": "inst-3",
+      "candidateId": "cand-a",
+      "effect": 0,
+      "lo90": 0,
+      "hi90": 0,
+      "nPolls": 1,
+      "estimable": false
+    },
+    {
+      "instituteId": "inst-3",
+      "candidateId": "cand-c",
+      "effect": 0.3,
+      "lo90": -1.9,
+      "hi90": 2.5,
+      "nPolls": 4,
+      "estimable": true
+    }
+  ],
+  "diagnostics": {
+    "gaveta": [
+      {
+        "subjectId": "inst-1",
+        "subjectKind": "institute",
+        "rate": 20,
+        "registered": 10,
+        "disclosed": 8
+      },
+      {
+        "subjectId": "inst-2",
+        "subjectKind": "institute",
+        "rate": 60,
+        "registered": 5,
+        "disclosed": 2
+      },
+      {
+        "subjectId": "campanha-a",
+        "subjectKind": "contractor",
+        "rate": 100,
+        "registered": 1,
+        "disclosed": 0
+      }
+    ],
+    "herding": [
+      {
+        "windowEnd": "2026-08-08",
+        "ratio": 0.42,
+        "nPolls": 5,
+        "flagged": true
+      }
+    ]
+  },
+  "historicalError": [
+    {
+      "instituteId": "inst-1",
+      "election": "2022",
+      "round": 1,
+      "candidateLabel": "Candidato de esquerda",
+      "signedErrorPp": -1.8
+    },
+    {
+      "instituteId": "inst-1",
+      "election": "2022",
+      "round": 2,
+      "candidateLabel": "Candidato de esquerda",
+      "signedErrorPp": -0.9
+    },
+    {
+      "instituteId": "inst-2",
+      "election": "2022",
+      "round": 1,
+      "candidateLabel": "Candidato de direita",
+      "signedErrorPp": 2.1
+    },
+    {
+      "instituteId": "inst-3",
+      "election": "2018",
+      "round": 1,
+      "candidateLabel": "Candidato de direita",
+      "signedErrorPp": 3.4
+    }
+  ],
+  "otherRaces": [
+    {
+      "id": "presidencia-2026",
+      "displayName": "Presidência da República 2026",
+      "status": "ativo"
+    },
+    {
+      "id": "governos-estaduais-2026",
+      "displayName": "Governos estaduais",
+      "status": "planejado"
+    },
+    {
+      "id": "senado-2026",
+      "displayName": "Senado",
+      "status": "planejado"
+    },
+    {
+      "id": "aprovacao-presidencial",
+      "displayName": "Aprovação presidencial",
+      "status": "planejado"
+    }
+  ],
+  "methodologyNotes": [
+    "Não corrige viés que seja comum a todos os institutos",
+    "Não prevê resultado eleitoral nem probabilidade de vitória",
+    "Não modela correlação entre candidatos além da restrição de soma",
+    "Não distingue mudança real de opinião de mudança de metodologia do instituto",
+    "Não detecta fraude; os indicadores da §6 têm explicações inocentes e são publicados como diagnóstico, não acusação",
+    "Não pondera institutos por acurácia histórica na v1"
+  ]
+}

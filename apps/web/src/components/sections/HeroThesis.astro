@@ -1,0 +1,118 @@
+---
+/**
+ * Seção 02 — TESE (hero) (docs/06 §2, §4).
+ *
+ * O herói NÃO é "Fulano 40,8%". Um número grande sozinho é o gênero que este
+ * projeto critica (docs/06 §4, armadilha da task). O herói é a TESE, em display;
+ * abaixo, as duas leituras principais, cada uma com sua <UncertaintyRule> na
+ * MESMA escala (mesmo `domain`) — o número anima, a régua permanece (docs/05 §1.1).
+ *
+ * Vocabulário (docs/06 §4, docs/08 §5): voz ativa, sem "revela/crava/dispara".
+ * A nota deixa claro que isto é leitura de agora com o erro que carrega — não
+ * previsão.
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from '../charts/UncertaintyRule.astro';
+import { formatPct } from '../charts/lib/format.js';
+
+export interface HeroReading {
+  candidateId: string;
+  displayName: string;
+  colorSlot: number;
+  mean: number;
+  lo90: number;
+  hi90: number;
+}
+
+interface Props {
+  /** Eyebrow já formatado (ex.: "PRESIDÊNCIA · 2026 · ATUALIZADO EM 14/08 ÀS 15H"). */
+  eyebrow: string;
+  /** As duas leituras principais (líder e vice), na ordem de exibição. */
+  readings: HeroReading[];
+  /** Domínio [min,max] compartilhado pelas réguas lado a lado (docs/06 §4). */
+  domain: [number, number];
+}
+
+const { eyebrow, readings, domain } = Astro.props;
+---
+
+<section class="section hero" aria-labelledby="hero-title">
+  <div class="container">
+    <p class="label hero-eyebrow">{eyebrow}</p>
+    <h1 id="hero-title" class="display-xl hero-title">
+      O que as pesquisas medem, e o quanto elas discordam.
+    </h1>
+    <p class="body hero-body">
+      Reunimos todas as pesquisas nacionais registradas no TSE, estimamos uma série de apoio
+      ao longo do tempo e — a parte que ninguém publica — o quanto cada instituto se afasta do
+      consenso, de forma sistemática. Nenhum número aqui aparece sem a faixa de incerteza que o
+      acompanha.
+    </p>
+
+    <div class="hero-readings">
+      {
+        readings.map((r) => (
+          <article class="hero-reading card" style={`--reading-color: var(--c${r.colorSlot})`}>
+            <p class="label hero-reading-name">{r.displayName} — apoio estimado</p>
+            <p class="data-xl hero-reading-value">
+              <AnimatedNum value={r.mean} decimals={1} suffix="%" label={`${r.displayName}, apoio estimado`} />
+            </p>
+            <UncertaintyRule
+              mean={r.mean}
+              lo90={r.lo90}
+              hi90={r.hi90}
+              colorSlot={r.colorSlot}
+              domain={domain}
+              label={r.displayName}
+            />
+            <p class="body-muted hero-reading-range">
+              Intervalo de <Num>90</Num>% entre <Num>{formatPct(r.lo90)}</Num>% e <Num>{formatPct(r.hi90)}</Num>%.
+            </p>
+          </article>
+        ))
+      }
+    </div>
+
+    <p class="body-muted hero-note">
+      Isto não é uma previsão de resultado. É uma leitura de agora, com o erro que ela carrega.
+    </p>
+  </div>
+</section>
+
+<style>
+  .hero-title {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 20ch;
+  }
+  .hero-body {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 62ch;
+  }
+  .hero-readings {
+    margin-top: calc(var(--rhythm) * 5);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gutter);
+    max-width: 720px;
+  }
+  .hero-reading {
+    border-top: 2px solid var(--reading-color);
+  }
+  .hero-reading-value {
+    margin-top: calc(var(--rhythm) * 1);
+    margin-bottom: calc(var(--rhythm) * 1.5);
+  }
+  .hero-reading-range {
+    margin-top: calc(var(--rhythm) * 1);
+  }
+  .hero-note {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 60ch;
+  }
+  @media (max-width: 640px) {
+    .hero-readings {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

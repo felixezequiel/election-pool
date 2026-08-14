@@ -1,0 +1,38 @@
+---
+/**
+ * <BaseHead> — <head> compartilhado. Preload das DUAS primeiras famílias
+ * (display e corpo — docs/05 §3), meta essencial. A escolha de tema (dark
+ * padrão, sem flash) é aplicada no <html> pelo layout, não aqui.
+ *
+ * Preload apenas os subsets latin (o texto do site é majoritariamente latin);
+ * latin-ext carrega sob demanda por unicode-range. IBM Plex Mono NÃO é
+ * pré-carregada (é a terceira família; entra com swap).
+ */
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description = 'Agregador de pesquisas eleitorais com honestidade sobre incerteza.' } =
+  Astro.props;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
+<title>{title}</title>
+<meta name="description" content={description} />
+
+<link
+  rel="preload"
+  href="/fonts/bricolage-grotesque-latin-standard-normal.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+<link
+  rel="preload"
+  href="/fonts/source-serif-4-latin-wght-normal.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
