@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "dotenv -e ../../infra/.env -- vitest run",
+    "test": "pnpm test:unit && pnpm test:integration",
     "db:up": "docker compose -f ../../infra/docker-compose.yml up -d --wait",
     "db:down": "docker compose -f ../../infra/docker-compose.yml down",
     "db:down:volumes": "docker compose -f ../../infra/docker-compose.yml down -v",
@@ -21,7 +21,9 @@
     "model:run": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/model.entry.ts",
     "orchestrate": "dotenv -e ../../infra/.env -- node --import tsx src/main.ts",
     "render": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/render.entry.ts",
-    "publish:rollback": "node --import tsx src/jobs/publish-rollback.entry.ts"
+    "publish:rollback": "node --import tsx src/jobs/publish-rollback.entry.ts",
+    "test:unit": "vitest run",
+    "test:integration": "dotenv -e ../../infra/.env -- vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@election-pool/adapters": "workspace:*",

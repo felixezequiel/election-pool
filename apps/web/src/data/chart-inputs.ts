@@ -12,7 +12,10 @@ import type { PollTooltipMeta } from '../components/charts/LatentBandChart.astro
 import type { HouseEffectRow } from '../components/charts/HouseEffectPlot.astro';
 import type { PollStripRow, PollStripValue } from '../components/charts/PollStrip.astro';
 import type { LatentSeries, PollPoint } from '../components/charts/lib/latent-geometry.js';
-import type { ElectorateSeriesInput } from '../components/charts/lib/electorate-geometry.js';
+import type {
+  ElectorateBand,
+  ElectorateSeriesInput,
+} from '../components/charts/lib/electorate-geometry.js';
 import type {
   TransitionFlowInput,
   TransitionStateMeta,
@@ -56,6 +59,55 @@ export interface TransitionChart {
   prior: NonNullable<PublicData['transitions']>['prior'];
 }
 
+/** Banda 90% de uma grandeza, escala 0–100 (CLAUDE.md). */
+type Band = ElectorateBand;
+
+/**
+ * Fotografia de UMA data: as grandezas do eleitorado que aquele cenário mediu
+ * naquele dia. A data é sempre a do último dia em que a grandeza ÂNCORA foi
+ * medida — as pontas de um mesmo retrato têm de vir do mesmo dia, senão a soma
+ * não descreve eleitorado nenhum.
+ */
+export interface SpontaneousSnapshot {
+  /** Data ISO (AAAA-MM-DD) do retrato. */
+  date: string;
+  /** Não citou nome nenhum — a grandeza âncora da espontânea. */
+  noCandidate: Band;
+  /** Citou branco, nulo ou "nenhum". `null` = não perguntado/publicado. */
+  blankNull: Band | null;
+  /**
+   * Citou ALGUÉM. Vem pronto do contrato e é ARITMÉTICA (complemento para 100,
+   * banda somada de forma conservadora) — nunca medida independente. Atravessa
+   * marcado como derivado até o desenho, que o exibe com menos autoridade.
+   */
+  named: Band | null;
+}
+
+/** O mesmo retrato, do lado ESTIMULADO — o outro lado do contraste (Q-14). */
+export interface ElectorateSnapshot {
+  date: string;
+  /** Não-sabe da estimulada: a lista de nomes já ancorou a resposta. */
+  undecided: Band;
+  blankNull: Band | null;
+}
+
+/**
+ * Pergunta ESPONTÂNEA (docs/OPEN-QUESTIONS Q-14). Série descritiva: NÃO entra em
+ * `μ_t` — espontâneo e estimulado são medidas incomparáveis e agrupá-las quebra a
+ * restrição de soma (docs/01 §3). Aqui ela existe para ser exibida como o que é:
+ * quanto do eleitorado não tem candidato próprio quando ninguém lhe mostra uma
+ * lista de nomes.
+ */
+export interface SpontaneousChart {
+  /** Grandezas MEDIDAS para o gráfico de série (`null` = sem medida, R4). */
+  series: ElectorateSeriesInput[];
+  /** Retrato mais recente com a âncora medida; `null` se nunca mediram. */
+  latest: SpontaneousSnapshot | null;
+  /** Proveniência da afirmação (R6): sobre quantas pesquisas ela se sustenta. */
+  pollCount: number;
+  instituteCount: number;
+}
+
 export interface ChartInputs {
   candidates: Map<string, CandidateMeta>;
   institutes: InstituteIndex;
@@ -68,6 +120,10 @@ export interface ChartInputs {
   };
   /** Branco/nulo e não-sabe (MODEL_VERSION 2.0.0). Ponto sem medida vira `null`. */
   electorate: ElectorateSeriesInput[];
+  /** Último retrato medido da estimulada — o outro lado do contraste (Q-14). */
+  electorateLatest: ElectorateSnapshot | null;
+  /** Pergunta espontânea (Q-14); `null` = nenhum instituto publicou o cenário. */
+  spontaneous: SpontaneousChart | null;
   runoffs: RunoffChart[];
   houseRows: HouseEffectRow[];
   stripRows: PollStripRow[];
@@ -151,6 +207,67 @@ export function buildChartInputs(data: PublicData): ChartInputs {
       points: data.latent.electorate.map((d) => ({ t: isoDayMs(d.date), band: d.undecided })),
     },
   ];
+
+  /**
+   * Último retrato MEDIDO da estimulada. A data é a do último dia com `undecided`
+   * medido — é essa a grandeza que entra no contraste com a espontânea. Branco/
+   * nulo vem do MESMO dia (pode ser `null`); não vale ir buscar num dia vizinho
+   * para "completar" o retrato.
+   */
+  const electorateMeasured = data.latent.electorate.filter((d) => d.undecided !== null);
+  const lastElectorate = electorateMeasured[electorateMeasured.length - 1];
+  const electorateLatest: ElectorateSnapshot | null =
+    lastElectorate && lastElectorate.undecided
+      ? {
+          date: lastElectorate.date,
+          undecided: lastElectorate.undecided,
+          blankNull: lastElectorate.blankNull,
+        }
+      : null;
+
+  /**
+   * Pergunta espontânea (Q-14). `null` no contrato = nenhum instituto publicou
+   * cenário espontâneo; a UI diz isso em vez de desenhar eixo vazio. Como em
+   * todo o resto desta costura, o `null` de um ponto ATRAVESSA intacto: nenhum
+   * `?? 0`, nenhuma interpolação aqui (R4).
+   */
+  const spontaneousMeasured = (data.spontaneous?.series ?? []).filter(
+    (d) => d.noCandidate !== null,
+  );
+  const lastSpontaneous = spontaneousMeasured[spontaneousMeasured.length - 1];
+  const spontaneous: SpontaneousChart | null = data.spontaneous
+    ? {
+        series: [
+          {
+            key: 'noCandidate',
+            displayName: 'Não citaram nenhum nome',
+            points: data.spontaneous.series.map((d) => ({
+              t: isoDayMs(d.date),
+              band: d.noCandidate,
+            })),
+          },
+          {
+            key: 'blankNull',
+            displayName: 'Branco, nulo ou nenhum',
+            points: data.spontaneous.series.map((d) => ({
+              t: isoDayMs(d.date),
+              band: d.blankNull,
+            })),
+          },
+        ],
+        latest:
+          lastSpontaneous && lastSpontaneous.noCandidate
+            ? {
+                date: lastSpontaneous.date,
+                noCandidate: lastSpontaneous.noCandidate,
+                blankNull: lastSpontaneous.blankNull,
+                named: lastSpontaneous.named,
+              }
+            : null,
+        pollCount: data.spontaneous.pollCount,
+        instituteCount: data.spontaneous.instituteCount,
+      }
+    : null;
 
   const runoffs: RunoffChart[] = data.latent.runoffs.map((r) => {
     const pair: [string, string] = [r.pair[0], r.pair[1]];
@@ -253,6 +370,8 @@ export function buildChartInputs(data: PublicData): ChartInputs {
     institutes,
     firstRound,
     electorate,
+    electorateLatest,
+    spontaneous,
     runoffs,
     houseRows,
     stripRows,

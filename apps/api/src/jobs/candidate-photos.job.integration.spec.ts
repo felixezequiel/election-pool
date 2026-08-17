@@ -32,6 +32,15 @@ const FIXTURES = fileURLToPath(
 );
 const fixtureText = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
 
+/**
+ * Quantas candidaturas têm BYTES de imagem nesta fixture. É o teto de fotos que
+ * qualquer execução pode gravar, e é DIFERENTE de `casados`: casar candidatura não
+ * garante que a foto exista (as demais respondem 404, que é o caso real de
+ * candidatura sem foto publicável). Asserir contra `casados` amarraria o teste ao
+ * tamanho do cadastro, que cresce a cada candidatura nova.
+ */
+const FOTOS_NA_FIXTURE = 3;
+
 /** Candidaturas reais que casam com o nosso seed. */
 const ID_LULA = '280002542548';
 const ID_FLAVIO = '280002551544';
@@ -212,13 +221,36 @@ describe('CandidatePhotosJob — primeira execução', () => {
     const state = makeState();
     const result = await makeJob(state, photosDir).run();
 
+    // A lista de candidaturas vem da fixture do TSE: número estável.
     expect(result.candidaturasTse).toBe(13);
-    expect(result.casados).toBe(3);
-    expect(result.novas).toBe(3);
-    expect(result.downloads).toBe(3);
 
-    const arquivos = (await readdir(photosDir)).sort();
-    expect(arquivos).toEqual(['flavio-bolsonaro.jpg', 'lula.jpg', 'zema.jpg']);
+    /**
+     * As contagens GLOBAIS deixaram de ser asseridas contra número fixo, de
+     * propósito. O job varre TODOS os candidatos da tabela de referência, e o
+     * cadastro real cresceu de 7 para 22 quando as candidaturas oficiais de 2026
+     * entraram — então `toBe(3)` era uma afirmação sobre o TAMANHO DO MUNDO, não
+     * sobre o comportamento do job, e quebrava a cada cadastro novo.
+     *
+     * A invariante que este teste protege não depende do tamanho do cadastro: quem
+     * casa com candidatura oficial recebe foto, quem não casa fica com `null`
+     * (nunca chute). É isso que se afirma agora.
+     */
+    // Toda foto nova exigiu exatamente um download — nada gravado sem buscar.
+    // (`casados` é MAIOR: casar candidatura não garante que a foto exista; a
+    // fixture só tem bytes para três, e o resto responde 404, que é o caso real de
+    // candidatura sem foto publicável.)
+    expect(result.novas).toBe(result.downloads);
+    expect(result.casados).toBeGreaterThanOrEqual(result.novas);
+
+    // Os três de quem a fixture tem bytes de imagem precisam ter arquivo no disco…
+    const arquivos = new Set(await readdir(photosDir));
+    for (const esperado of ['lula.jpg', 'flavio-bolsonaro.jpg', 'zema.jpg']) {
+      expect(arquivos.has(esperado)).toBe(true);
+    }
+    // …e nenhum arquivo de candidato que NÃO casou com candidatura.
+    for (const naoEsperado of ['tarcisio.jpg', 'ciro-gomes.jpg', 'simone-tebet.jpg']) {
+      expect(arquivos.has(naoEsperado)).toBe(false);
+    }
   });
 
   it('grava caminho servido, proveniência e auditoria completos', async () => {
@@ -249,7 +281,16 @@ describe('CandidatePhotosJob — primeira execução', () => {
       .filter((a) => a.kind === 'sem_candidatura')
       .map((a) => a.candidateId)
       .sort();
-    expect(semCandidatura).toEqual(['ciro-gomes', 'ratinho-junior', 'simone-tebet', 'tarcisio']);
+    /**
+     * SUPERCONJUNTO, não igualdade: a lista completa depende de quantos candidatos
+     * o cadastro tem, e ele cresce a cada candidatura oficial nova. O que este
+     * teste afirma é que os quatro pré-candidatos que NÃO registraram candidatura
+     * em 2026 estão entre os alertados — igualdade exata voltaria a quebrar no
+     * próximo cadastro, sem nada de errado ter acontecido.
+     */
+    for (const id of ['ciro-gomes', 'ratinho-junior', 'simone-tebet', 'tarcisio']) {
+      expect(semCandidatura).toContain(id);
+    }
     // Alerta de cadastro não é falha operacional.
     expect(semCandidatura.length).toBeGreaterThan(0);
     expect(result.alerts.filter((a) => a.isError)).toHaveLength(0);
@@ -271,18 +312,57 @@ describe('CandidatePhotosJob — idempotência', () => {
     const mtimeAntes = (await stat(join(photosDir, 'lula.jpg'))).mtimeMs;
     const requestsAntes = state.requests.length;
 
+    /** Candidaturas que ficaram COM foto no banco depois da primeira execução. */
+    const fotografadas = new Set(
+      (await repo.listCandidatesWithPhotos())
+        .map((c) => c.photo?.tseCandidaturaId)
+        .filter((id): id is string => id !== undefined),
+    );
+
     const segunda = await makeJob(state, photosDir).run();
 
     expect(segunda.downloads).toBe(0);
     expect(segunda.novas).toBe(0);
     expect(segunda.atualizadas).toBe(0);
-    expect(segunda.inalteradas).toBe(3);
-    // Dentro da janela de recheck nem o detalhe da candidatura é pedido: só
-    // eleição + listagem (o robots.txt não conta — é etiqueta, não ingestão).
+    expect(segunda.inalteradas).toBe(FOTOS_NA_FIXTURE);
     const novas = state.requests.slice(requestsAntes).filter((url) => !url.endsWith('/robots.txt'));
-    expect(novas).toHaveLength(2);
-    expect(novas.some((url) => url.includes('/candidatura/buscar/'))).toBe(false);
+
+    /**
+     * A invariante é sobre QUEM é reconsultado, não sobre o TOTAL de requisições.
+     *
+     * Dentro da janela de recheck, candidatura que JÁ rendeu foto não é tocada de
+     * novo — nem o detalhe, nem a imagem. Candidatura que ainda NÃO tem foto
+     * continua sendo consultada a cada ciclo, e isso é correto: não ter foto hoje
+     * não significa não ter amanhã, e é justamente o detalhe que informa
+     * `fotoUrlPublicavel`.
+     *
+     * A asserção anterior era "nenhuma requisição `/candidatura/buscar/`". Ela
+     * valia por acidente, quando os únicos candidatos que casavam eram os três de
+     * quem a fixture tem bytes: aí "nenhum detalhe" e "nenhum recheck" davam no
+     * mesmo. Com o cadastro de 2026 casando 13 candidaturas e só 3 tendo imagem,
+     * as duas coisas se separaram — e a asserção passou a proibir tráfego legítimo
+     * em vez de proteger a idempotência.
+     *
+     * O conjunto `fotografadas` vem do BANCO, não de constante: o teste continua
+     * valendo quando a fixture ou o cadastro mudarem de tamanho.
+     */
+    const detalhesPedidos = novas.filter((url) => url.includes('/candidatura/buscar/'));
+    // Guarda contra invariante VAZIA: sem isto, um dia em que nada fosse
+    // fotografado faria os laços abaixo passarem sem verificar coisa alguma.
+    expect(fotografadas.size).toBe(FOTOS_NA_FIXTURE);
+    for (const idCandidatura of fotografadas) {
+      expect(novas.some((url) => url.includes(idCandidatura))).toBe(false);
+    }
+    // Zero imagem baixada: é o que `downloads=0` significa em termos de tráfego.
     expect(novas.some((url) => url.includes('/arquivo/img/'))).toBe(false);
+    // Todo detalhe pedido é de candidatura AINDA SEM foto — nenhum é recheck.
+    expect(detalhesPedidos.length).toBeGreaterThan(0);
+    for (const url of detalhesPedidos) {
+      expect([...fotografadas].some((id) => url.includes(id))).toBe(false);
+    }
+    // Amarra tráfego a estado sem depender do tamanho do cadastro: reconsultamos
+    // exatamente os casados que não têm foto (`casados - inalteradas`).
+    expect(detalhesPedidos).toHaveLength(segunda.casados - segunda.inalteradas);
 
     const depois = await repo.findByCandidateId('lula');
     expect(depois).toEqual(antes);
@@ -297,8 +377,8 @@ describe('CandidatePhotosJob — idempotência', () => {
 
     const segunda = await makeJob(state, photosDir, { force: true }).run();
 
-    expect(segunda.downloads).toBe(3);
-    expect(segunda.inalteradas).toBe(3);
+    expect(segunda.downloads).toBe(FOTOS_NA_FIXTURE);
+    expect(segunda.inalteradas).toBe(FOTOS_NA_FIXTURE);
     expect(segunda.atualizadas).toBe(0);
     expect(await repo.findByCandidateId('lula')).toEqual(antes);
     expect((await stat(join(photosDir, 'lula.jpg'))).mtimeMs).toBe(mtimeAntes);
@@ -332,7 +412,7 @@ describe('CandidatePhotosJob — idempotência', () => {
 
     const segunda = await makeJob(state, photosDir).run();
 
-    expect(segunda.inalteradas).toBe(3);
+    expect(segunda.inalteradas).toBe(FOTOS_NA_FIXTURE);
     expect(segunda.atualizadas).toBe(0);
     expect(await repo.findByCandidateId('lula')).toEqual(antes);
     expect(await readFile(join(photosDir, 'lula.jpg'))).toBeDefined();

@@ -1,4 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { canCreateSymlink, SYMLINK_SKIP_REASON } from '../publish/can-symlink.js';
+
+if (!canCreateSymlink()) {
+  console.warn(`[skip] ${SYMLINK_SKIP_REASON}`);
+}
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { readlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -166,7 +171,7 @@ const distTarget = async (): Promise<string | null> => {
   return (await readlink(paths.dist)).replace(/^\.\//, '');
 };
 
-describe('RenderJob (integration)', () => {
+describe.skipIf(!canCreateSymlink())('RenderJob (integration)', () => {
   beforeAll(async () => {
     await seed(db);
   });

@@ -130,10 +130,32 @@ export const latentElectoratePointSchema = z.object({
 });
 export type LatentElectoratePoint = z.infer<typeof latentElectoratePointSchema>;
 
+/**
+ * Ponto da série de DESENGAJAMENTO, medida na pergunta ESPONTÂNEA (Q-14).
+ *
+ * Separada de `latentElectoratePointSchema` porque mede outra coisa: lá é o
+ * branco/nulo e o não-sabe da pergunta ESTIMULADA, onde a lista de nomes ancora a
+ * resposta; aqui é a pergunta aberta, onde quem não tem candidato não cita nome.
+ * A diferença entre as duas é grande e informativa (37 vs. 3 p.p. na mesma rodada),
+ * então juntá-las num campo só apagaria justamente o que interessa.
+ */
+export const latentSpontaneousPointSchema = z.object({
+  date: isoDateSchema,
+  /** Não citou nenhum nome. */
+  noCandidate: latentPointSchema.nullable(),
+  /** Citou branco, nulo ou "nenhum" explicitamente. */
+  blankNull: latentPointSchema.nullable(),
+  /** Soma dos que citaram algum nome. */
+  named: latentPointSchema.nullable(),
+});
+export type LatentSpontaneousPoint = z.infer<typeof latentSpontaneousPointSchema>;
+
 export const latentSeriesSchema = z.object({
   firstRound: z.array(latentDatedPointSchema),
   runoffs: z.array(latentRunoffSeriesSchema),
   electorate: z.array(latentElectoratePointSchema),
+  /** Desengajamento medido na espontânea. Vazio quando ninguém publicou espontânea. */
+  spontaneous: z.array(latentSpontaneousPointSchema),
 });
 export type LatentSeries = z.infer<typeof latentSeriesSchema>;
 

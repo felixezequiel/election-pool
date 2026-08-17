@@ -1,0 +1,6 @@
+# robots.txt for http://media.folha.com.br/
+# Contact webmaster@folha.com.br if you have questions regarding this file
+
+# deny access for all robots
+User-agent: *
+Disallow: /

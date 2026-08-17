@@ -90,6 +90,46 @@ export const publicDataSchema = z.object({
     ),
   }),
 
+  /**
+   * QUANTO DO ELEITORADO AINDA NÃO TEM CANDIDATO — medido na pergunta ESPONTÂNEA.
+   *
+   * Isto é uma grandeza diferente do `latent.electorate`, e a diferença é o ponto
+   * inteiro. Na pergunta estimulada o instituto mostra uma lista de nomes, e a
+   * lista ANCORA a resposta: o "não sabe" cai para poucos pontos porque a pessoa
+   * reconhece um nome e escolhe. Na espontânea a pergunta é aberta — "em quem você
+   * votaria?", sem lista — e quem não tem candidato simplesmente não cita ninguém.
+   *
+   * Na mesma rodada, medida pelo mesmo instituto no mesmo campo (BR-06833/2026):
+   * espontânea 37 p.p. não citam nome contra 3 p.p. de não-sabe na estimulada. Não
+   * é ruído de método: é a informação de que mais de um terço do eleitorado ainda
+   * não tem escolha própria, que a estimulada esconde por construção.
+   *
+   * NÃO entra no modelo de `μ_t` (docs/01 §3 e Q-14: espontâneo e estimulado são
+   * medidas incomparáveis e agrupá-las quebra a restrição de soma). É série
+   * descritiva, publicada como tal.
+   *
+   * `null` numa ponta = o instituto não publicou aquela grandeza na espontânea —
+   * ausência, nunca zero (R4).
+   */
+  spontaneous: z
+    .object({
+      series: z.array(
+        z.object({
+          date: z.string(),
+          /** Não citou nenhum nome (o "não sabe/não respondeu" da espontânea). */
+          noCandidate: meanLoHiSchema.nullable(),
+          /** Citou explicitamente branco, nulo ou "nenhum". */
+          blankNull: meanLoHiSchema.nullable(),
+          /** Soma dos que citaram ALGUM nome — o complemento do desengajamento. */
+          named: meanLoHiSchema.nullable(),
+        }),
+      ),
+      /** Pesquisas espontâneas que sustentam a série (R6: auditabilidade). */
+      pollCount: z.number(),
+      instituteCount: z.number(),
+    })
+    .nullable(),
+
   // Pesquisas individuais — sempre com tse_id (R6).
   polls: z.array(
     z.object({

@@ -31,3 +31,31 @@ describe('confirmação de tse_id (V6)', () => {
     );
   });
 });
+
+describe('V6 não confirma por protocolo de OUTRA unidade federativa', () => {
+  /**
+   * Achado do adapter do Datafolha: aquele instituto publica o protocolo nacional
+   * e o do TRE na MESMA frase. Antes do conserto, o prefixo era opcional e a
+   * sequência nua casava — então uma pesquisa estadual confirmava o V6 de um
+   * registro nacional de sequência coincidente. É o pior bug do sistema entrando
+   * pela porta da defesa contra ele.
+   */
+  it('PE-04519/2026 no documento NÃO confirma o registro BR-04519/2026', () => {
+    const doc = 'A pesquisa está registrada sob o protocolo PE-04519/2026 no TRE-PE.';
+    expect(documentContainsTseId(doc, 'BR-04519/2026')).toBe(false);
+  });
+
+  it('a frase do Datafolha com os DOIS protocolos confirma só o nacional', () => {
+    const doc = 'Registrada no TSE sob BR-07601/2026 e no TRE-PE sob PE-04519/2026.';
+    expect(documentContainsTseId(doc, 'BR-07601/2026')).toBe(true);
+    expect(documentContainsTseId(doc, 'BR-04519/2026')).toBe(false);
+  });
+
+  it('sequência nua (grafia do TSE) continua confirmando', () => {
+    expect(documentContainsTseId('Registro nº 06591/2026 no TSE.', 'BR-06591/2026')).toBe(true);
+  });
+
+  it('duas letras seguidas de ESPAÇO não bloqueiam a sequência nua', () => {
+    expect(documentContainsTseId('Protocolo TSE 06591/2026.', 'BR-06591/2026')).toBe(true);
+  });
+});

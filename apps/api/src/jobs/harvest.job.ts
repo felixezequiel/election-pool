@@ -166,21 +166,53 @@ export class HarvestJob {
     const adapterExercised = new Set<string>();
     const adapterHadValidationFailure = new Set<string>();
 
+    /**
+     * Colheita PARALELA ENTRE INSTITUTOS, serial DENTRO de cada um.
+     *
+     * O motivo é tempo de parede. O rate limit de docs/04 §6 (1 req/10s) é POR
+     * HOST, mas o laço era global e sequencial: buscar o instituto A e depois o B
+     * esperava 10s entre requisições de servidores que nada têm a ver um com o
+     * outro. Com N institutos, o ciclo custava a SOMA de todos em vez do mais
+     * lento — e com um ciclo de 2h isso é a diferença entre colher a rodada do dia
+     * e perdê-la.
+     *
+     * O que NÃO muda: a etiqueta. O `PerHostRateLimiter` continua garantindo 1
+     * req/10s por host, e cada grupo aqui é um instituto (um host), processado em
+     * série. Ninguém recebe duas requisições nossas em menos de 10s.
+     *
+     * Registro sem instituto resolvido fica num grupo à parte: ele não vai gerar
+     * requisição nenhuma (não há adapter), só alerta `no_adapter`.
+     *
+     * `result` é mutado por vários grupos, o que é seguro: JS é single-threaded e
+     * cada `await` cede o turno inteiro; não há escrita parcial de contador.
+     */
+    const byInstitute = new Map<string, typeof registrations>();
     for (const reg of registrations) {
-      result.considered++;
-      const hasResult = await this.hasCanonicalResult(reg.tseId);
-      const lastAttemptIso = await this.lastAttemptAt(reg.tseId);
-      const decision = decideHarvest({
-        fieldEndIso: reg.fieldEnd,
-        hasResult,
-        lastAttemptIso,
-        nowIso,
-      });
-      await this.applyDecision(reg, decision, resolveCandidate, nowIso, result, {
-        exercised: adapterExercised,
-        failed: adapterHadValidationFailure,
-      });
+      const key = reg.instituteId ?? '(sem instituto)';
+      const group = byInstitute.get(key) ?? [];
+      group.push(reg);
+      byInstitute.set(key, group);
     }
+
+    const harvestGroup = async (group: typeof registrations): Promise<void> => {
+      for (const reg of group) {
+        result.considered++;
+        const hasResult = await this.hasCanonicalResult(reg.tseId);
+        const lastAttemptIso = await this.lastAttemptAt(reg.tseId);
+        const decision = decideHarvest({
+          fieldEndIso: reg.fieldEnd,
+          hasResult,
+          lastAttemptIso,
+          nowIso,
+        });
+        await this.applyDecision(reg, decision, resolveCandidate, nowIso, result, {
+          exercised: adapterExercised,
+          failed: adapterHadValidationFailure,
+        });
+      }
+    };
+
+    await Promise.all([...byInstitute.values()].map(harvestGroup));
 
     this.rollFailureCounters(adapterExercised, adapterHadValidationFailure, result);
     return result;
@@ -257,7 +289,28 @@ export class HarvestJob {
     result: HarvestResult,
     cycle: CycleTracking,
   ): Promise<void> {
-    const candidates = await adapter.discover(reg);
+    /**
+     * `discover` PODE fazer rede. A maioria dos adapters só devolve URLs
+     * derivadas, mas há fonte cujo slug é um título editorial e não dá para
+     * derivar — nesse caso o adapter consulta a API da fonte aqui dentro. Sem este
+     * try/catch, uma falha de transporte de UM instituto lançaria para fora do
+     * loop de registros e abortaria o ciclo de TODOS: um site fora do ar levaria a
+     * colheita inteira embora. O contêiner é aqui, no job, e não em relaxar o R4
+     * dentro do adapter — que faz o certo ao lançar quando não sabe as candidatas
+     * (devolver lista vazia ali seria afirmar "nada publicado", o zero silencioso).
+     */
+    let candidates;
+    try {
+      candidates = await adapter.discover(reg);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      result.alerts.push({
+        kind: 'robots_or_http_error',
+        tseId: reg.tseId,
+        detail: `discover de ${adapter.id} falhou: ${detail}`,
+      });
+      return;
+    }
     for (const candidate of candidates) {
       const prior = await this.conditionalStateFor(candidate.url);
       let res;
@@ -283,7 +336,11 @@ export class HarvestJob {
         continue;
       }
 
-      const raw = await this.persistRaw(res.url, res.status, res.body, res.headers, nowIso);
+      // BYTES, não `res.body`: passar o texto decodificado aqui destruía todo PDF
+      // (o RawStorage refazia Buffer.from(..., 'utf8') e as sequências inválidas
+      // viravam U+FFFD). O sintoma era "PDF sem texto extraível" — arquivo
+      // corrompido na entrada, não fonte rasterizada. Ver `FetchResponse.bytes`.
+      const raw = await this.persistRaw(res.url, res.status, res.bytes, res.headers, nowIso);
 
       let parsed: ParsedPoll;
       try {
@@ -446,7 +503,8 @@ export class HarvestJob {
   private async persistRaw(
     url: string,
     status: number,
-    body: string,
+    /** BYTES do corpo. `Uint8Array` de propósito: texto aqui corrompe binário. */
+    body: Uint8Array,
     headers: Headers,
     nowIso: string,
   ): Promise<RawDocument> {

@@ -8,6 +8,7 @@ import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/sections/SiteHeader.astro';
 import HeroThesis, { type HeroReading } from '../components/sections/HeroThesis.astro';
 import LatentSeriesSection from '../components/sections/LatentSeriesSection.astro';
+import SpontaneousSection from '../components/sections/SpontaneousSection.astro';
 import RunoffSection from '../components/sections/RunoffSection.astro';
 import HouseEffectSection from '../components/sections/HouseEffectSection.astro';
 import DiagnosticsSection from '../components/sections/DiagnosticsSection.astro';
@@ -114,6 +115,17 @@ const lastPollFieldEnd =
         <>
           <HeroThesis eyebrow={eyebrow} readings={heroReadings} domain={heroDomain} />
           <LatentSeriesSection firstRound={charts.firstRound} electorate={charts.electorate} />
+          {/* Pergunta espontânea (Q-14) vem IMEDIATAMENTE depois da série
+              latente: é ali que o leitor acabou de ver o não-sabe da pergunta
+              estimulada, em poucos pontos. O contraste — mais de um terço não
+              cita nome quando não há lista — só se explica ao lado daquele
+              número, enquanto ele ainda está fresco. Mais adiante na página,
+              viraria uma curiosidade solta. */}
+          <SpontaneousSection
+            spontaneous={charts.spontaneous}
+            electorateLatest={charts.electorateLatest}
+            nextUpdateAt={data.nextUpdateAt}
+          />
           <RunoffSection runoffs={charts.runoffs} />
           {/* Transferência vem DEPOIS da série latente e ANTES dos house effects:
               é leitura derivada da série, e a Q-10 (condição 7) exige que ela

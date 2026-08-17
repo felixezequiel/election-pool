@@ -17,5 +17,4 @@ pnpm-lock.yaml
 # faz a fixture deixar de representar o que o parser vai encontrar em produção —
 # ou seja, recria em outra forma exatamente o problema da Q-09 (fixture que não
 # corresponde ao site real).
-packages/adapters/pesqele/__fixtures__/**
-packages/adapters/tse-candidatos/__fixtures__/**
+packages/adapters/*/__fixtures__/**

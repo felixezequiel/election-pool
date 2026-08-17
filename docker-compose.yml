@@ -112,6 +112,18 @@ services:
       PUBLISH_PLACEHOLDER_WHEN_EMPTY: ${PUBLISH_PLACEHOLDER_WHEN_EMPTY:-false}
     volumes:
       - publish_data:/var/lib/election-pool
+      # Fotos oficiais dos candidatos, em VOLUME — não no filesystem do container.
+      #
+      # Sem isto o CandidatePhotosJob baixava para um diretório local ao container
+      # e o banco passava a afirmar que a foto existe. Qualquer OUTRO container (um
+      # `compose run` de render, um rebuild, uma recriação) via o banco dizendo
+      # `/candidatos/x.jpg` e não tinha o arquivo — o site publicava 13 fotos e
+      # servia 404 em 10 delas. Banco e disco discordando é exatamente o que o R4
+      # existe para impedir.
+      #
+      # Na primeira montagem o Docker copia o que já está na imagem para o volume
+      # vazio, então os SVG de amostra versionados sobrevivem.
+      - candidate_photos:/app/apps/web/public/candidatos
     ports:
       # /health interno — preso ao loopback do host, nunca exposto publicamente.
       - '127.0.0.1:${HEALTH_PORT:-8081}:8081'
@@ -140,6 +152,11 @@ volumes:
   # symlink `dist` do swap atômico funcionar (bind mount do Windows não serve).
   publish_data:
     name: election_pool_publish
+  # Fotos de candidatura. Volume próprio (e não dentro de publish_data) porque a
+  # árvore de publicação é trocada por symlink a cada render; as fotos são INSUMO
+  # do build, não saída dele.
+  candidate_photos:
+    name: election_pool_candidate_photos
 
 networks:
   # Rede compartilhada entre projetos da máquina. Nome fixo para outro compose

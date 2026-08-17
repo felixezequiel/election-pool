@@ -296,6 +296,42 @@ export class ModelJob {
    * apagaria a diferença entre "não medimos" e "nunca existiu esse instante".
    */
   private async persistElectorateEstimates(runId: string, output: ModelOutput): Promise<void> {
+    /**
+     * A série da ESPONTÂNEA (Q-14) vai para a mesma tabela, distinguida pela coluna
+     * `scenario_kind` — que já existe na chave primária. Não precisou de migration:
+     * "não citou nenhum nome na pergunta aberta" é gravado como `undecided` do
+     * cenário `t1_espontaneo`, e "citou branco/nulo" como `blank_null` dele.
+     *
+     * `named` NÃO é persistido de propósito: é aritmética sobre as duas pontas
+     * (complemento para 100), logo regenerável — e a camada computed não guarda
+     * derivada de derivada (R5).
+     */
+    for (const point of output.latent.spontaneous) {
+      const byKind: ReadonlyArray<
+        [string, { meanPct: number; lo90Pct: number; hi90Pct: number } | null]
+      > = [
+        [TRANSITION_STATE_KIND.blankNull, point.blankNull],
+        [TRANSITION_STATE_KIND.undecided, point.noCandidate],
+      ];
+      for (const [kind, band] of byKind) {
+        await this.db.query(
+          `INSERT INTO model_electorate_estimates
+             (run_id, scenario_kind, kind, date, mean_pct, lo90_pct, hi90_pct)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (run_id, scenario_kind, kind, date) DO NOTHING`,
+          [
+            runId,
+            SCENARIO_KIND.t1Espontaneo,
+            kind,
+            point.date,
+            band?.meanPct ?? null,
+            band?.lo90Pct ?? null,
+            band?.hi90Pct ?? null,
+          ],
+        );
+      }
+    }
+
     for (const point of output.latent.electorate) {
       const byKind: ReadonlyArray<
         [string, { meanPct: number; lo90Pct: number; hi90Pct: number } | null]

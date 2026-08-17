@@ -26,7 +26,10 @@
     "model:run": "pnpm --filter @election-pool/api model:run",
     "orchestrate": "pnpm --filter @election-pool/api orchestrate",
     "render": "pnpm --filter @election-pool/api render",
-    "publish:rollback": "pnpm --filter @election-pool/api publish:rollback"
+    "publish:rollback": "pnpm --filter @election-pool/api publish:rollback",
+    "test:unit": "pnpm --filter @election-pool/contracts test && pnpm --filter @election-pool/model test && pnpm --filter @election-pool/adapters test && pnpm --filter @election-pool/api test:unit",
+    "test:integration": "pnpm --filter @election-pool/api test:integration",
+    "verify:fast": "pnpm lint && pnpm typecheck && pnpm test:unit"
   },
   "devDependencies": {
     "@eslint/js": "9.17.0",

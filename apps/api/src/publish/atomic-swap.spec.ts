@@ -1,4 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { canCreateSymlink, SYMLINK_SKIP_REASON } from './can-symlink.js';
+
+if (!canCreateSymlink()) {
+  console.warn(`[skip] ${SYMLINK_SKIP_REASON}`);
+}
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -40,7 +45,7 @@ afterEach(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-describe('atomicSwap', () => {
+describe.skipIf(!canCreateSymlink())('atomicSwap', () => {
   it('publishes staging as a versioned dir and points dist at it (first publish)', async () => {
     makeStaging('v1');
     await atomicSwap(paths, 'dist-2026-01-01', { keep: 5 });
@@ -147,7 +152,7 @@ describe('atomicSwap', () => {
   });
 });
 
-describe('rollback', () => {
+describe.skipIf(!canCreateSymlink())('rollback', () => {
   it('restores the previous build (repoints dist at the prior snapshot)', async () => {
     makeStaging('v1');
     await atomicSwap(paths, 'dist-2026-03-01', { keep: 5 });

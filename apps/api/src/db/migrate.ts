@@ -27,7 +27,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // apps/api/src/db → apps/api ; e → infra/migrations
 const API_DIR = join(__dirname, '..', '..');
 const MIGRATIONS_DIR = join(API_DIR, '..', '..', 'infra', 'migrations');
-const MIGRATE_BIN = join(API_DIR, 'node_modules', '.bin', 'node-pg-migrate');
+/**
+ * Binário do runner. No Windows o `node_modules/.bin` contém um shim `.CMD` (e um
+ * `.ps1`), não um executável sem extensão — `spawn` do nome puro falha com
+ * `ENOENT`, e o sintoma é "migration não roda" numa máquina e roda na outra. O
+ * separador do NODE_PATH também é específico da plataforma (`;` no Windows).
+ */
+const IS_WINDOWS = process.platform === 'win32';
+const MIGRATE_BIN = join(
+  API_DIR,
+  'node_modules',
+  '.bin',
+  IS_WINDOWS ? 'node-pg-migrate.CMD' : 'node-pg-migrate',
+);
+const PATH_SEP = IS_WINDOWS ? ';' : ':';
 // Onde o pnpm linka `@election-pool/*` (subpaths que as migrations importam). Entra
 // no NODE_PATH para o resolver do node-pg-migrate encontrá-los a partir de infra/.
 const API_NODE_MODULES = join(API_DIR, 'node_modules');
@@ -54,10 +67,12 @@ export const runMigrations = (databaseUrl: string): Promise<MigrateResult> =>
           ...process.env,
           DATABASE_URL: databaseUrl,
           NODE_PATH: process.env['NODE_PATH']
-            ? `${API_NODE_MODULES}:${process.env['NODE_PATH']}`
+            ? `${API_NODE_MODULES}${PATH_SEP}${process.env['NODE_PATH']}`
             : API_NODE_MODULES,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
+        // O shim .CMD precisa do interpretador de comandos do Windows.
+        shell: IS_WINDOWS,
       },
     );
     let output = '';

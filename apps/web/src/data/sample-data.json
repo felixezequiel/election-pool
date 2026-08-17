@@ -746,6 +746,202 @@
       }
     ]
   },
+  "spontaneous": {
+    "series": [
+      {
+        "date": "2026-05-16",
+        "noCandidate": {
+          "mean": 39,
+          "lo90": 36.4,
+          "hi90": 41.6
+        },
+        "blankNull": {
+          "mean": 11,
+          "lo90": 9.5,
+          "hi90": 12.5
+        },
+        "named": {
+          "mean": 50,
+          "lo90": 45.9,
+          "hi90": 54.1
+        }
+      },
+      {
+        "date": "2026-05-23",
+        "noCandidate": null,
+        "blankNull": null,
+        "named": null
+      },
+      {
+        "date": "2026-05-30",
+        "noCandidate": {
+          "mean": 38.7,
+          "lo90": 36.1,
+          "hi90": 41.3
+        },
+        "blankNull": {
+          "mean": 11.1,
+          "lo90": 9.6,
+          "hi90": 12.6
+        },
+        "named": {
+          "mean": 50.2,
+          "lo90": 46.1,
+          "hi90": 54.3
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "noCandidate": {
+          "mean": 38.6,
+          "lo90": 35.9,
+          "hi90": 41.2
+        },
+        "blankNull": {
+          "mean": 11.2,
+          "lo90": 9.7,
+          "hi90": 12.7
+        },
+        "named": {
+          "mean": 50.2,
+          "lo90": 46.1,
+          "hi90": 54.4
+        }
+      },
+      {
+        "date": "2026-06-13",
+        "noCandidate": {
+          "mean": 38.4,
+          "lo90": 35.8,
+          "hi90": 41
+        },
+        "blankNull": {
+          "mean": 11.2,
+          "lo90": 9.7,
+          "hi90": 12.7
+        },
+        "named": {
+          "mean": 50.4,
+          "lo90": 46.3,
+          "hi90": 54.5
+        }
+      },
+      {
+        "date": "2026-06-20",
+        "noCandidate": null,
+        "blankNull": null,
+        "named": null
+      },
+      {
+        "date": "2026-06-27",
+        "noCandidate": {
+          "mean": 38.1,
+          "lo90": 35.5,
+          "hi90": 40.7
+        },
+        "blankNull": null,
+        "named": null
+      },
+      {
+        "date": "2026-07-04",
+        "noCandidate": {
+          "mean": 38,
+          "lo90": 35.4,
+          "hi90": 40.6
+        },
+        "blankNull": {
+          "mean": 11.4,
+          "lo90": 9.9,
+          "hi90": 12.9
+        },
+        "named": {
+          "mean": 50.6,
+          "lo90": 46.5,
+          "hi90": 54.7
+        }
+      },
+      {
+        "date": "2026-07-11",
+        "noCandidate": {
+          "mean": 37.8,
+          "lo90": 35.2,
+          "hi90": 40.4
+        },
+        "blankNull": {
+          "mean": 11.4,
+          "lo90": 9.9,
+          "hi90": 12.9
+        },
+        "named": {
+          "mean": 50.8,
+          "lo90": 46.7,
+          "hi90": 54.9
+        }
+      },
+      {
+        "date": "2026-07-18",
+        "noCandidate": {
+          "mean": 37.7,
+          "lo90": 35.1,
+          "hi90": 40.3
+        },
+        "blankNull": {
+          "mean": 11.5,
+          "lo90": 10,
+          "hi90": 13
+        },
+        "named": {
+          "mean": 50.8,
+          "lo90": 46.7,
+          "hi90": 54.9
+        }
+      },
+      {
+        "date": "2026-07-25",
+        "noCandidate": {
+          "mean": 37.5,
+          "lo90": 34.9,
+          "hi90": 40.1
+        },
+        "blankNull": {
+          "mean": 11.5,
+          "lo90": 10,
+          "hi90": 13
+        },
+        "named": {
+          "mean": 51,
+          "lo90": 46.9,
+          "hi90": 55.1
+        }
+      },
+      {
+        "date": "2026-08-01",
+        "noCandidate": null,
+        "blankNull": null,
+        "named": null
+      },
+      {
+        "date": "2026-08-08",
+        "noCandidate": {
+          "mean": 37.2,
+          "lo90": 34.6,
+          "hi90": 39.8
+        },
+        "blankNull": {
+          "mean": 11.6,
+          "lo90": 10.1,
+          "hi90": 13.1
+        },
+        "named": {
+          "mean": 51.2,
+          "lo90": 47.1,
+          "hi90": 55.3
+        }
+      }
+    ],
+    "pollCount": 6,
+    "instituteCount": 2
+  },
   "polls": [
     {
       "tseId": "BR-06591/2026",

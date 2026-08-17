@@ -1,0 +1,502 @@
+---
+/**
+ * <SpontaneousSeriesChart> — a série da pergunta ESPONTÂNEA ao longo do tempo
+ * (docs/OPEN-QUESTIONS Q-14). Mostra se o desengajamento cresce ou encolhe.
+ *
+ * Reusa `buildElectorateGeometry` — a mesma geometria de "grandeza do eleitorado
+ * com buracos" — porque a regra que dita o desenho é idêntica e é a parte
+ * load-bearing: ponto `null` é SEM MEDIDA, a série quebra em segmentos contíguos,
+ * o vão fica marcado e um ponto medido isolado ainda aparece. Zero aqui seria a
+ * pior das mentiras possíveis: afirmaria que todo mundo tem candidato.
+ *
+ * Por que um componente próprio em vez de reaproveitar <ElectorateSeriesChart>:
+ * as duas séries falam de coisas diferentes e precisam ser DISTINGUÍVEIS à
+ * primeira vista. O gráfico do eleitorado é o branco/nulo e o não-sabe da
+ * pergunta ESTIMULADA; este é a pergunta ABERTA. Se tivessem a mesma identidade
+ * visual, o leitor concluiria que o site publica dois valores contraditórios para
+ * a mesma grandeza — exatamente o mal-entendido que esta seção existe para
+ * desfazer. Daí o acento de interface na grandeza principal e a prosa própria.
+ *
+ * SSR-completo: sem JS o gráfico já está inteiro e correto.
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from './UncertaintyRule.astro';
+import {
+  buildElectorateGeometry,
+  type ElectorateBand,
+  type ElectorateSeriesInput,
+} from './lib/electorate-geometry.js';
+import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
+import './lib/charts.css';
+
+interface Props {
+  /** Grandezas medidas na espontânea, em ordem de plotagem/legenda. */
+  series: ElectorateSeriesInput[];
+  title: string;
+  /** id único (namespace de padrões SVG). */
+  id: string;
+  width?: number;
+  height?: number;
+  class?: string | undefined;
+}
+
+const { series, title, id, width = 960, height = 300, class: className } = Astro.props;
+
+/**
+ * Margens iguais às do <ElectorateSeriesChart>: os dois gráficos aparecem na
+ * mesma página, um por forma de pergunta, e margens diferentes fariam o leitor
+ * comparar alturas que não estão no mesmo registro. A margem superior maior é
+ * onde mora a linha de cobertura.
+ */
+const margins = { top: 72, right: 20, bottom: 32, left: 40 };
+const geo = buildElectorateGeometry(series, width, height, margins);
+
+// Pista de cobertura por série, empilhada no topo (mesma gramática do eleitorado).
+const RAIL_TOP = 30;
+const RAIL_GAP = 26;
+const MARK_R = 3.5;
+
+const isoOf = (t: number): string => new Date(t).toISOString();
+
+// Prosa do <desc> (docs/05 §7): diz o valor E diz o buraco.
+const descParts = geo.series.map((s) => {
+  const l = s.latest;
+  const value = l
+    ? `central ${formatPct(l.band.mean)}%, faixa de 90% de ${formatPct(l.band.lo90)} a ${formatPct(
+        l.band.hi90,
+      )}`
+    : 'sem nenhuma medida na janela';
+  const gaps =
+    s.missingCount > 0
+      ? `; ${String(s.missingCount)} ${
+          s.missingCount === 1 ? 'data sem medida' : 'datas sem medida'
+        }, em que a linha é interrompida`
+      : '';
+  return `${s.displayName}: ${value}${gaps}`;
+});
+const desc = `Pergunta espontânea, sem lista de nomes, ao longo do tempo, com faixa de 90% dominante. ${descParts.join(
+  '; ',
+)}. Data sem medida não é zero: a linha para e a lacuna é marcada na linha de cobertura.`;
+
+const ruleDomain: [number, number] = [geo.yDomain[0], geo.yDomain[1]];
+
+/** Índice de valores por data para o equivalente textual. */
+const byDate = new Map<number, Map<string, ElectorateBand | null>>();
+for (const t of geo.dates) byDate.set(t, new Map());
+for (const s of series) {
+  for (const p of s.points) byDate.get(p.t)?.set(s.key, p.band);
+}
+---
+
+<figure class:list={['chart spont-chart', className]}>
+  <figcaption class="label">{title}</figcaption>
+
+  <div class="chart-plot substrate-plot">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-labelledby={`${id}-title ${id}-desc`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <title id={`${id}-title`}>{title}</title>
+      <desc id={`${id}-desc`}>{desc}</desc>
+
+      <defs>
+        {/* Listras ortogonais: horizontais para "não citou nome", verticais para
+            branco/nulo. Cor nunca é o único diferenciador (docs/05 §2.1). */}
+        <pattern
+          id={`${id}-hachura-noCandidate`}
+          patternUnits="userSpaceOnUse"
+          width="8"
+          height="8"
+        >
+          <line class="spont-hachura-stroke is-noCandidate" x1="0" y1="4" x2="8" y2="4"></line>
+        </pattern>
+        <pattern id={`${id}-hachura-blankNull`} patternUnits="userSpaceOnUse" width="8" height="8">
+          <line class="spont-hachura-stroke is-blankNull" x1="4" y1="0" x2="4" y2="8"></line>
+        </pattern>
+      </defs>
+
+      {/* Substrato: eixos e ticks — instantâneos, nunca animados. */}
+      <g class="axes" aria-hidden="true">
+        {
+          geo.yTicks.map((t) => (
+            <g>
+              <line
+                class="axis-tick"
+                x1={margins.left}
+                y1={t.pos}
+                x2={width - margins.right}
+                y2={t.pos}
+              />
+              <text class="axis-label" x={margins.left - 6} y={t.pos + 3} text-anchor="end">
+                {t.label}
+              </text>
+            </g>
+          ))
+        }
+        {
+          geo.xTicks.map((t) => (
+            <text class="axis-label" x={t.pos} y={height - margins.bottom + 18} text-anchor="middle">
+              {t.label}
+            </text>
+          ))
+        }
+        <line
+          class="axis-line"
+          x1={margins.left}
+          y1={height - margins.bottom}
+          x2={width - margins.right}
+          y2={height - margins.bottom}></line>
+      </g>
+
+      {/* Vãos: onde ninguém mediu. Marca o lugar sem sugerir valor. */}
+      <g class="spont-gaps" aria-hidden="true">
+        {
+          geo.series.flatMap((s) =>
+            s.gapX.map((gx) => (
+              <line
+                class="spont-gap-line"
+                x1={gx}
+                y1={margins.top}
+                x2={gx}
+                y2={height - margins.bottom}
+              />
+            )),
+          )
+        }
+      </g>
+
+      {/* Séries: um path por SEGMENTO contíguo. Buraco = ausência de path. */}
+      {
+        geo.series.map((s, si) => (
+          <g class:list={['spont-series', `spont-${s.key}`]} data-series={s.key}>
+            {s.segments.map((seg) =>
+              seg.single ? (
+                <g class="spont-single">
+                  {/* Ponto isolado entre dois buracos: a banda vira barra
+                      vertical curta — ainda é a banda, não um valor pontual. */}
+                  <line
+                    class="spont-single-band"
+                    x1={seg.single.x}
+                    y1={seg.single.yLo}
+                    x2={seg.single.x}
+                    y2={seg.single.yHi}
+                  />
+                  <circle class="spont-single-dot" cx={seg.single.x} cy={seg.single.yMean} r={3} />
+                </g>
+              ) : (
+                <g>
+                  <path class="spont-band" d={seg.bandPath} />
+                  <path
+                    class="spont-band-hachura"
+                    d={seg.bandPath}
+                    fill={`url(#${id}-hachura-${s.key})`}
+                  />
+                  <path class="spont-center" d={seg.centerPath} />
+                </g>
+              ),
+            )}
+
+            {/* Linha de cobertura: marca cheia = medido, vazada = sem medida.
+                Na espontânea ela é ainda mais necessária que no eleitorado —
+                poucos institutos publicam o cenário, então os vãos são a regra. */}
+            <g class="spont-rail" aria-hidden="true">
+              <text class="spont-rail-label" x={margins.left} y={RAIL_TOP + si * RAIL_GAP - 7}>
+                {s.displayName}
+              </text>
+              <line
+                class="spont-rail-axis"
+                x1={margins.left}
+                y1={RAIL_TOP + si * RAIL_GAP}
+                x2={width - margins.right}
+                y2={RAIL_TOP + si * RAIL_GAP}
+              />
+              {series[si]?.points.map((p) => (
+                <circle
+                  class:list={['spont-rail-mark', { 'is-missing': p.band === null }]}
+                  cx={geo.x(p.t)}
+                  cy={RAIL_TOP + si * RAIL_GAP}
+                  r={MARK_R}
+                />
+              ))}
+            </g>
+          </g>
+        ))
+      }
+    </svg>
+  </div>
+
+  {/* Readout: último valor MEDIDO de cada grandeza, sempre com a régua ao lado
+      (docs/05 §1.1 — número de destaque nunca aparece sem a sua régua). */}
+  <ul class="spont-readout">
+    {
+      geo.series.map((s) => (
+        <li class:list={['spont-readout-item', `spont-${s.key}`]}>
+          <span class="spont-readout-name">
+            <span class="spont-readout-swatch" aria-hidden="true" />
+            {s.displayName}
+          </span>
+          {s.latest ? (
+            <>
+              <span class="spont-readout-value">
+                <AnimatedNum
+                  value={s.latest.band.mean}
+                  decimals={1}
+                  suffix="%"
+                  label={`${s.displayName}: ${formatPct(s.latest.band.mean)} por cento`}
+                />
+              </span>
+              <span class="spont-readout-rule">
+                <UncertaintyRule
+                  mean={s.latest.band.mean}
+                  lo90={s.latest.band.lo90}
+                  hi90={s.latest.band.hi90}
+                  domain={ruleDomain}
+                  label={s.displayName}
+                  width={200}
+                />
+              </span>
+              <span class="spont-readout-meta">
+                em{' '}
+                <time datetime={isoDateOnly(isoOf(s.latest.t))}>
+                  <Num>{formatDayMonth(isoOf(s.latest.t))}</Num>
+                </time>
+              </span>
+            </>
+          ) : (
+            <span class="spont-readout-value spont-readout-none">sem medida na janela</span>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+
+  {/* Equivalente textual: tabela HTML real, fechada por padrão (docs/05 §7). */}
+  <details class="chart-table">
+    <summary>Ver a série espontânea em tabela</summary>
+    <table>
+      <caption>
+        Pergunta espontânea, central e faixa de <Num>90</Num>%, por data, em pontos percentuais do
+        eleitorado. Data sem pesquisa espontânea aparece como sem medida, nunca como zero.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Data</th>
+          {series.map((s) => (
+            <th class="num" scope="col">
+              {s.displayName}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          geo.dates.map((t) => (
+            <tr>
+              <td>
+                <time datetime={isoDateOnly(isoOf(t))}>
+                  <Num>{formatDayMonth(isoOf(t))}</Num>
+                </time>
+              </td>
+              {series.map((s) => {
+                const band = byDate.get(t)?.get(s.key) ?? null;
+                return (
+                  <td class="num">
+                    {band ? (
+                      <>
+                        <Num>{formatPct(band.mean)}</Num> (<Num>{formatPct(band.lo90)}</Num>–
+                        <Num>{formatPct(band.hi90)}</Num>)
+                      </>
+                    ) : (
+                      <span class="spont-cell-missing">sem medida</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<style>
+  /*
+   * Identidade: acento de INTERFACE na grandeza principal ("não citou nome") e
+   * grafite no branco/nulo — o mesmo grafite do gráfico do eleitorado, para que
+   * branco/nulo seja reconhecível entre as duas seções. Nenhuma cor do espectro
+   * de candidatos: não são candidatura (docs/05 §2.1).
+   */
+  .spont-chart {
+    margin-block: calc(var(--rhythm) * 2);
+  }
+  .spont-noCandidate {
+    --spont-color: var(--accent);
+  }
+  .spont-blankNull {
+    --spont-color: var(--c8);
+  }
+
+  .chart-plot {
+    position: relative;
+  }
+
+  /* Banda dominante (docs/05 §1.1), linha central secundária — como no herói. */
+  .spont-band {
+    fill: var(--spont-color);
+    fill-opacity: 0.2;
+  }
+  .spont-band-hachura {
+    fill-opacity: 0.45;
+    pointer-events: none;
+  }
+  .spont-hachura-stroke {
+    stroke-width: 1;
+    opacity: 0.5;
+  }
+  .spont-hachura-stroke.is-noCandidate {
+    stroke: var(--accent);
+  }
+  .spont-hachura-stroke.is-blankNull {
+    stroke: var(--c8);
+  }
+  .spont-series {
+    color: var(--spont-color);
+  }
+  .spont-center {
+    fill: none;
+    stroke: var(--spont-color);
+    stroke-width: 1.5;
+    opacity: 0.75;
+  }
+  /* Traço diferente por grandeza: distinguível sem depender de cor nem hachura. */
+  .spont-blankNull .spont-center {
+    stroke-dasharray: 6 4;
+  }
+
+  /* Ponto medido isolado entre dois buracos. */
+  .spont-single-band {
+    stroke: var(--spont-color);
+    stroke-width: 6;
+    stroke-linecap: round;
+    opacity: 0.28;
+  }
+  .spont-single-dot {
+    fill: var(--spont-color);
+    opacity: 0.85;
+  }
+
+  /* Vão: onde não houve medida. Pontilhado discreto, sem valor associado. */
+  .spont-gap-line {
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    stroke-dasharray: 2 5;
+    opacity: 0.6;
+  }
+
+  /* Linha de cobertura (topo): cheia = medido, vazada = sem medida. */
+  .spont-rail-axis {
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+  .spont-rail-mark {
+    fill: var(--spont-color);
+    opacity: 0.75;
+  }
+  .spont-rail-mark.is-missing {
+    fill: var(--bg);
+    stroke: var(--ink-3);
+    stroke-width: 1.5;
+    stroke-dasharray: 2 2;
+    opacity: 1;
+  }
+  .spont-rail-label {
+    fill: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  /* Readout ------------------------------------------------------------- */
+  .spont-readout {
+    list-style: none;
+    margin: calc(var(--rhythm) * 2) 0 0;
+    padding: 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 1.5);
+  }
+  .spont-readout-item {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto minmax(160px, 220px) auto;
+    align-items: center;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .spont-readout-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+  }
+  .spont-readout-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    background: var(--spont-color);
+    opacity: 0.55;
+    border: 1px solid var(--spont-color);
+    flex: 0 0 auto;
+  }
+  .spont-readout-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+    color: var(--ink);
+  }
+  .spont-readout-none {
+    color: var(--ink-3);
+    font-size: var(--fs-label);
+  }
+  .spont-readout-meta {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  /* A régua herda a cor da grandeza; <UncertaintyRule> escreve --rule-color em
+     style inline (só conhece slot de candidato), daí o !important. */
+  .spont-readout-item :global([data-uncertainty-rule]) {
+    --rule-color: var(--spont-color) !important;
+  }
+
+  .spont-cell-missing {
+    color: var(--ink-3);
+    font-family: var(--font-body);
+  }
+
+  @media (max-width: 640px) {
+    .spont-readout-item {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'name value'
+        'rule rule'
+        'meta meta';
+    }
+    .spont-readout-name {
+      grid-area: name;
+    }
+    .spont-readout-value {
+      grid-area: value;
+    }
+    .spont-readout-rule {
+      grid-area: rule;
+    }
+    .spont-readout-meta {
+      grid-area: meta;
+    }
+  }
+</style>

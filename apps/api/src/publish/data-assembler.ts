@@ -137,6 +137,32 @@ export const assemblePublicData = (input: AssembleInput): AssembleResult => {
       })),
     },
 
+    /**
+     * Desengajamento medido na ESPONTÂNEA (Q-14). `null` quando nenhum instituto
+     * publicou cenário espontâneo — e é `null`, não série vazia, para a UI poder
+     * dizer "ninguém mediu isso" em vez de desenhar um eixo sem dado.
+     *
+     * `pollCount`/`instituteCount` acompanham por exigência de auditabilidade: uma
+     * afirmação forte como "mais de um terço não tem candidato" precisa dizer sobre
+     * quantas pesquisas e quantos institutos ela se sustenta.
+     */
+    spontaneous: (() => {
+      const espontaneas = input.electorate.filter(
+        (e) => e.scenarioKind === SCENARIO_KIND.t1Espontaneo,
+      );
+      if (espontaneas.length === ZERO || model.latent.spontaneous.length === ZERO) return null;
+      return {
+        series: model.latent.spontaneous.map((p) => ({
+          date: p.date,
+          noCandidate: p.noCandidate === null ? null : toPublicBand(p.noCandidate),
+          blankNull: p.blankNull === null ? null : toPublicBand(p.blankNull),
+          named: p.named === null ? null : toPublicBand(p.named),
+        })),
+        pollCount: new Set(espontaneas.map((e) => e.tseId)).size,
+        instituteCount: new Set(espontaneas.map((e) => e.instituteId)).size,
+      };
+    })(),
+
     // Transferência de votos (Q-10). Passthrough do modelo, incluindo a banda e o
     // veredito `notIdentifiable` de cada fluxo — o montador NÃO filtra fluxo
     // indistinguível de zero. Esconder aqui seria publicar só as setas bonitas.

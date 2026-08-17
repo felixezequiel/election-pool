@@ -1,0 +1,54 @@
+===== PAGE 1 =====
+
+===== PAGE 2 =====
+
+===== PAGE 3 =====
+
+===== PAGE 4 =====
+
+===== PAGE 5 =====
+
+===== PAGE 6 =====
+Intenção de voto para Presidente (Espontânea)
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 7 =====
+Intenção de voto para Presidente (Espontânea) | Região
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 8 =====
+Intenção de voto para Presidente (Espontânea) | Sexo
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 9 =====
+Intenção de voto para Presidente (Espontânea) | Idade
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 10 =====
+Intenção de voto para Presidente (Espontânea) | Escolaridade
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 11 =====
+Intenção de voto para Presidente (Espontânea) | Renda familiar
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 12 =====
+Intenção de voto para Presidente (Espontânea) | Religião
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 13 =====
+Intenção de voto para Presidente (Espontânea) | Cor/raça
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 14 =====
+Intenção de voto para Presidente (Espontânea) | Identificação política
+Você já escolheu em quem vai votar? (Se sim) Em quem?
+===== PAGE 15 =====
+
+===== PAGE 16 =====
+Intenção de voto para Presidente - 1º turno
+Em quem você votaria se o primeiro turno fosse disputado entre os seguintes candidatos:
+===== PAGE 17 =====
+Intenção de voto para Presidente - 1º turno | Região
+Em quem você votaria se o primeiro turno fosse disputado entre os seguintes candidatos:
+===== PAGE 18 =====
+Intenção de voto para Presidente - 1º turno | Sexo
+Em quem você votaria se o primeiro turno fosse disputado entre os seguintes candidatos:
+===== PAGE 19 =====
+Intenção de voto para Presidente - 1º turno | Idade
+Em quem você votaria se o primeiro turno fosse disputado entre os seguintes candidatos:
+===== PAGE 20 =====
+Intenção de voto para Presidente - 1º turno | Escolaridade
+Em quem você votaria se o primeiro turno fosse disputado entre os seguintes candidatos:

@@ -1,0 +1,638 @@
+---
+/**
+ * <SpontaneousContrast> — o CORAÇÃO da seção da pergunta espontânea (Q-14).
+ *
+ * Uma barra por FORMA DE PERGUNTA, cada uma representando o eleitorado inteiro
+ * (100 p.p.), com a grandeza "quem não tem candidato" ancorada em zero nas duas.
+ * Ancorar na mesma origem é o que transforma dois números distantes numa leitura
+ * imediata: o leitor vê um bloco longo na pergunta aberta e um toco na pergunta
+ * com lista, na MESMA escala, sem precisar fazer conta.
+ *
+ * Três decisões que não são estéticas:
+ *
+ *  1. A banda de 90% é desenhada só na grandeza ancorada — a única cuja posição
+ *     na barra não carrega a incerteza dos segmentos anteriores (ver
+ *     `lib/contrast-geometry.ts`). As outras medidas levam a régua no readout,
+ *     em HTML, na mesma escala 0–100.
+ *  2. O complemento (`named`) entra APAGADO, sem hachura, com contorno tracejado
+ *     e rótulo dizendo que é aritmética. Ele não é medida independente e não pode
+ *     parecer uma: é 100 menos as duas pontas, com a banda somada de forma
+ *     conservadora.
+ *  3. Grandeza sem medida não é zero (R4): o trecho fica vazado e rotulado "sem
+ *     medida". Fechar a barra em 100 preenchendo o vão seria inventar dado.
+ *
+ * SSR-completo: o SVG já sai inteiro e correto sem JS. Os rótulos e todos os
+ * números vivem em HTML fora do SVG — assim continuam legíveis em 375px, onde
+ * texto dentro de um viewBox de 1000 encolheria junto com o desenho.
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from './UncertaintyRule.astro';
+import {
+  buildContrastGeometry,
+  CONTRAST_BAR_HEIGHT,
+  CONTRAST_VIEW_HEIGHT,
+  type ContrastRowInput,
+} from './lib/contrast-geometry.js';
+import { formatInt, formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
+import { PCT_MAX, PCT_MIN } from '@election-pool/contracts/constants';
+import './lib/charts.css';
+
+interface Props {
+  /** As formas de pergunta, na ordem de leitura. */
+  rows: ContrastRowInput[];
+  title: string;
+  /** id único (namespace de padrões SVG). */
+  id: string;
+  class?: string | undefined;
+}
+
+const { rows, title, id, class: className } = Astro.props;
+
+const geo = buildContrastGeometry(rows);
+
+/**
+ * Hachura por grandeza — cor nunca é o único diferenciador (docs/05 §2.1).
+ *
+ * Aqui as texturas são LISTRAS ORTOGONAIS (horizontais para "sem candidato",
+ * verticais para branco/nulo) e não hachura a 45° como nos gráficos de série. O
+ * motivo é geométrico: esta barra estica só na horizontal (`preserveAspectRatio:
+ * none`, para não virar uma tira de 20px em 375px), e sob esse esticamento uma
+ * diagonal vira quase-vertical em telas estreitas — as duas texturas ficariam
+ * parecidas justamente onde a tela é pequena. Listra horizontal e listra vertical
+ * continuam distinguíveis em qualquer largura.
+ */
+const HACHURA_TILE = 8;
+const isBlankNull = (key: string): boolean => key === 'blankNull';
+
+/** Respiro vertical: a barra centralizada no viewBox da linha. */
+const BAR_Y = (CONTRAST_VIEW_HEIGHT - CONTRAST_BAR_HEIGHT) / 2;
+/** A banda transborda um pouco a barra — ela é o elemento dominante (docs/05 §1.1). */
+const BAND_OVERFLOW = 4;
+/** A linha central passa da barra nas duas pontas, como marca de leitura. */
+const CENTER_OVERFLOW = 6;
+
+/** Réguas do readout na MESMA escala da barra: 0–100 do eleitorado. */
+const RULE_DOMAIN: [number, number] = [PCT_MIN, PCT_MAX];
+
+/** Prosa do <desc> (docs/05 §7): diz o valor, diz o que é derivado, diz o vão. */
+function rowDesc(rowKey: string): string {
+  const input = rows.find((r) => r.key === rowKey);
+  const g = geo.rows.find((r) => r.key === rowKey);
+  if (!input || !g) return title;
+  const parts = input.segments.map((seg) => {
+    if (!seg.band) return `${seg.label}: sem medida`;
+    const band = `faixa de 90% de ${formatPct(seg.band.lo90)} a ${formatPct(seg.band.hi90)}`;
+    const nature = seg.kind === 'derived' ? ', complemento aritmético e não medida' : '';
+    return `${seg.label}: ${formatPct(seg.band.mean)} por cento, ${band}${nature}`;
+  });
+  const gap = g.unaccounted
+    ? ` Sobram ${formatPct(g.unaccounted.pct)} pontos sem medida, marcados em vazado.`
+    : '';
+  return `${input.scenarioLabel} — ${input.questionLabel}. A barra é o eleitorado inteiro, cem pontos percentuais. ${parts.join('; ')}.${gap}`;
+}
+
+/** Formata a data do snapshot para o corpo (DD/MM), preservando o ISO no <time>. */
+const dayMonth = (iso: string): string => formatDayMonth(iso);
+---
+
+<figure class:list={['chart contrast-chart', className]}>
+  <figcaption class="label">{title}</figcaption>
+
+  {/* Legenda sempre visível (docs/05 §5.1), com a natureza de cada grandeza. */}
+  <ul class="chart-legend contrast-legend">
+    <li class="contrast-legend-item contrast-anchored">
+      <span class="swatch contrast-swatch" aria-hidden="true"></span>
+      Sem candidato — medida
+    </li>
+    <li class="contrast-legend-item contrast-blankNull">
+      <span class="swatch contrast-swatch" aria-hidden="true"></span>
+      Branco, nulo ou nenhum — medida
+    </li>
+    <li class="contrast-legend-item contrast-named">
+      <span class="swatch contrast-swatch" aria-hidden="true"></span>
+      Citaram um nome — aritmética
+    </li>
+    <li class="contrast-legend-item contrast-missing-legend">
+      <span class="swatch contrast-swatch" aria-hidden="true"></span>
+      Sem medida — não é zero
+    </li>
+  </ul>
+
+  <div class="contrast-rows">
+    {
+      geo.rows.map((row) => (
+        <div class:list={['contrast-row', `contrast-row-${row.key}`]}>
+          <div class="contrast-row-head">
+            <p class="display-m contrast-row-name">{row.scenarioLabel}</p>
+            <p class="body-muted contrast-row-question">
+              {row.questionLabel}
+              {row.dateIso && (
+                <>
+                  {' · medida em '}
+                  <time datetime={isoDateOnly(row.dateIso)}>
+                    <Num>{dayMonth(row.dateIso)}</Num>
+                  </time>
+                </>
+              )}
+            </p>
+          </div>
+
+          <svg
+            class="contrast-bar"
+            viewBox={`0 0 ${geo.width} ${CONTRAST_VIEW_HEIGHT}`}
+            role="img"
+            aria-labelledby={`${id}-${row.key}-title ${id}-${row.key}-desc`}
+            preserveAspectRatio="none"
+          >
+            <title id={`${id}-${row.key}-title`}>
+              {row.scenarioLabel} — composição do eleitorado
+            </title>
+            <desc id={`${id}-${row.key}-desc`}>{rowDesc(row.key)}</desc>
+
+            <defs>
+              {row.segments
+                .filter((s) => s.kind === 'measured')
+                .map((s) => (
+                  <pattern
+                    id={`${id}-${row.key}-hachura-${s.key}`}
+                    patternUnits="userSpaceOnUse"
+                    width={HACHURA_TILE}
+                    height={HACHURA_TILE}
+                  >
+                    {/* O conteúdo de um <pattern> não herda cor de quem o
+                        referencia: cada hachura declara a sua tinta por classe. */}
+                    {isBlankNull(s.key) ? (
+                      <line
+                        class:list={['contrast-hachura-stroke', `is-${s.key}`]}
+                        x1={HACHURA_TILE / 2}
+                        y1={0}
+                        x2={HACHURA_TILE / 2}
+                        y2={HACHURA_TILE}
+                      />
+                    ) : (
+                      <line
+                        class:list={['contrast-hachura-stroke', `is-${s.key}`]}
+                        x1={0}
+                        y1={HACHURA_TILE / 2}
+                        x2={HACHURA_TILE}
+                        y2={HACHURA_TILE / 2}
+                      />
+                    )}
+                  </pattern>
+                ))}
+            </defs>
+
+            {/* Substrato: marcas do eixo dentro da barra, instantâneas. */}
+            <g class="contrast-grid" aria-hidden="true">
+              {geo.ticks.map((t) => (
+                <line
+                  class="contrast-grid-line"
+                  x1={t.fraction * geo.width}
+                  y1={BAR_Y}
+                  x2={t.fraction * geo.width}
+                  y2={BAR_Y + CONTRAST_BAR_HEIGHT}
+                />
+              ))}
+            </g>
+
+            {/* Trilho: o eleitorado inteiro, o quadro dentro do qual tudo cabe. */}
+            <rect
+              class="contrast-track"
+              x={0}
+              y={BAR_Y}
+              width={geo.width}
+              height={CONTRAST_BAR_HEIGHT}
+            />
+
+            {row.segments.map((seg) => (
+              <g class:list={['contrast-seg', `contrast-${seg.key}`, `is-${seg.kind}`]}>
+                <rect
+                  class="contrast-seg-fill"
+                  x={seg.x}
+                  y={BAR_Y}
+                  width={seg.width}
+                  height={CONTRAST_BAR_HEIGHT}
+                />
+                {seg.kind === 'measured' && (
+                  <rect
+                    class="contrast-seg-hachura"
+                    x={seg.x}
+                    y={BAR_Y}
+                    width={seg.width}
+                    height={CONTRAST_BAR_HEIGHT}
+                    fill={`url(#${id}-${row.key}-hachura-${seg.key})`}
+                  />
+                )}
+                {/* Banda DOMINANTE do segmento ancorado (docs/05 §1.1). */}
+                {seg.bandRect && (
+                  <rect
+                    class="contrast-band"
+                    x={seg.bandRect.x}
+                    y={BAR_Y - BAND_OVERFLOW}
+                    width={seg.bandRect.width}
+                    height={CONTRAST_BAR_HEIGHT + BAND_OVERFLOW * 2}
+                  />
+                )}
+                <line
+                  class="contrast-center"
+                  x1={seg.centerX}
+                  y1={BAR_Y - CENTER_OVERFLOW}
+                  x2={seg.centerX}
+                  y2={BAR_Y + CONTRAST_BAR_HEIGHT + CENTER_OVERFLOW}
+                />
+              </g>
+            ))}
+
+            {/* Vão sem medida: vazado e tracejado, nunca preenchido (R4). */}
+            {row.unaccounted && (
+              <rect
+                class="contrast-unaccounted"
+                x={row.unaccounted.x}
+                y={BAR_Y}
+                width={row.unaccounted.width}
+                height={CONTRAST_BAR_HEIGHT}
+              />
+            )}
+          </svg>
+
+          {/* Readout em HTML: números legíveis em qualquer largura, cada medida
+              com a sua régua na mesma escala 0–100 (docs/05 §1.1). */}
+          <ul class="contrast-readout">
+            {rows
+              .find((r) => r.key === row.key)
+              ?.segments.map((seg) => (
+                <li class:list={['contrast-readout-item', `contrast-${seg.key}`, `is-${seg.kind}`]}>
+                  <span class="contrast-readout-name">
+                    <span class="contrast-swatch" aria-hidden="true" />
+                    {seg.label}
+                    {seg.kind === 'derived' && (
+                      <span class="label contrast-derived-tag">aritmética</span>
+                    )}
+                  </span>
+                  {seg.band ? (
+                    <>
+                      <span class="contrast-readout-value">
+                        {seg.kind === 'measured' ? (
+                          <AnimatedNum
+                            value={seg.band.mean}
+                            decimals={1}
+                            suffix="%"
+                            label={`${seg.label}: ${formatPct(seg.band.mean)} por cento`}
+                          />
+                        ) : (
+                          <Num>{`${formatPct(seg.band.mean)}%`}</Num>
+                        )}
+                      </span>
+                      <span class="contrast-readout-rule">
+                        {seg.kind === 'measured' ? (
+                          <UncertaintyRule
+                            mean={seg.band.mean}
+                            lo90={seg.band.lo90}
+                            hi90={seg.band.hi90}
+                            domain={RULE_DOMAIN}
+                            label={seg.label}
+                            width={200}
+                          />
+                        ) : (
+                          <span class="body-muted contrast-derived-note">
+                            complemento para <Num>100</Num>, faixa somada de forma conservadora
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <span class="contrast-readout-value contrast-readout-none">sem medida</span>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+
+  {/* Eixo em HTML, alinhado às barras porque compartilha a mesma caixa: texto
+      real que não encolhe com o viewBox (o que aconteceria dentro do SVG). */}
+  <div class="contrast-axis" aria-hidden="true">
+    {
+      geo.ticks.map((t, i) => (
+        <span
+          class="contrast-tick"
+          style={`left: ${t.fraction * PCT_MAX}%; transform: translateX(${
+            i === 0 ? '0' : i === geo.ticks.length - 1 ? '-100%' : '-50%'
+          })`}
+        >
+          <Num>{formatInt(t.pct)}</Num>
+        </span>
+      ))
+    }
+  </div>
+  <p class="label contrast-axis-caption">% do eleitorado</p>
+
+  {/* Equivalente textual: tabela real, fechada por padrão (docs/05 §7). */}
+  <details class="chart-table">
+    <summary>Ver o contraste em tabela</summary>
+    <table>
+      <caption>
+        Composição do eleitorado por forma de pergunta, em pontos percentuais, com a faixa de
+        <Num>90</Num>%. A coluna de natureza distingue o que foi perguntado do que é conta nossa.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Pergunta</th>
+          <th scope="col">Data</th>
+          <th scope="col">Grandeza</th>
+          <th class="num" scope="col">Central</th>
+          <th class="num" scope="col">Faixa de <Num>90</Num>%</th>
+          <th scope="col">Natureza</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.flatMap((row) =>
+            row.segments.map((seg) => (
+              <tr>
+                <td>{row.scenarioLabel}</td>
+                <td>
+                  {row.dateIso ? (
+                    <time datetime={isoDateOnly(row.dateIso)}>
+                      <Num>{dayMonth(row.dateIso)}</Num>
+                    </time>
+                  ) : (
+                    <span class="contrast-cell-missing">sem data</span>
+                  )}
+                </td>
+                <td>{seg.label}</td>
+                <td class="num">
+                  {seg.band ? (
+                    <Num>{formatPct(seg.band.mean)}</Num>
+                  ) : (
+                    <span class="contrast-cell-missing">sem medida</span>
+                  )}
+                </td>
+                <td class="num">
+                  {seg.band ? (
+                    <>
+                      <Num>{formatPct(seg.band.lo90)}</Num>–<Num>{formatPct(seg.band.hi90)}</Num>
+                    </>
+                  ) : (
+                    <span class="contrast-cell-missing">—</span>
+                  )}
+                </td>
+                <td>{seg.kind === 'derived' ? 'complemento aritmético' : 'medida publicada'}</td>
+              </tr>
+            )),
+          )
+        }
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<style>
+  /*
+   * Identidade das grandezas. NENHUMA cor do espectro de candidatos entra aqui:
+   * não são candidatura (docs/05 §2.1). O acento de interface marca as duas
+   * grandezas ANCORADAS — "não citou nome" e "não sabe" são a mesma ideia medida
+   * de dois jeitos, e a cor repetida diz isso. Branco/nulo herda o grafite que
+   * já usa no gráfico do eleitorado, para o leitor reconhecê-lo entre as seções.
+   */
+  .contrast-chart {
+    margin-block: calc(var(--rhythm) * 2);
+  }
+  .contrast-noCandidate,
+  .contrast-undecided,
+  .contrast-anchored {
+    --seg-color: var(--accent);
+  }
+  .contrast-blankNull {
+    --seg-color: var(--c8);
+  }
+  .contrast-named {
+    --seg-color: var(--ink-3);
+  }
+  .contrast-missing-legend {
+    --seg-color: transparent;
+  }
+
+  .contrast-legend {
+    margin-top: var(--rhythm);
+  }
+  .contrast-swatch {
+    width: 18px;
+    height: 12px;
+    border-radius: 2px;
+    flex: 0 0 auto;
+    background: var(--seg-color);
+    opacity: 0.55;
+    border: 1px solid var(--seg-color);
+  }
+  /* Derivado e ausente não recebem preenchimento cheio: a diferença de textura
+     é o que impede que sejam lidos como medida. */
+  .contrast-named > .contrast-swatch {
+    opacity: 0.28;
+    border-style: dashed;
+  }
+  .contrast-missing-legend > .contrast-swatch {
+    background: transparent;
+    border: 1px dashed var(--ink-3);
+    opacity: 1;
+  }
+
+  .contrast-rows {
+    margin-top: calc(var(--rhythm) * 3);
+    display: grid;
+    gap: calc(var(--rhythm) * 5);
+  }
+  .contrast-row-name {
+    color: var(--ink);
+  }
+  .contrast-row-question {
+    margin-top: calc(var(--rhythm) * 0.5);
+    max-width: 60ch;
+  }
+
+  /*
+   * `preserveAspectRatio: none` é deliberado: a barra é uma escala horizontal,
+   * não um desenho com proporção a preservar. Assim ela ocupa a largura toda em
+   * 375px sem virar uma tira de 20px de altura.
+   */
+  .contrast-bar {
+    display: block;
+    width: 100%;
+    height: 56px;
+    margin-top: calc(var(--rhythm) * 1.5);
+    overflow: visible;
+  }
+  @media (max-width: 640px) {
+    .contrast-bar {
+      height: 48px;
+    }
+  }
+
+  /*
+   * Como o SVG estica só na horizontal, todo traço leva `non-scaling-stroke`:
+   * sem isso a linha central de 1,5px viraria meio pixel em 375px (some) e o
+   * tracejado do vão viraria pontinhos irreconhecíveis em 1440px.
+   */
+  .contrast-bar :where(line, rect) {
+    vector-effect: non-scaling-stroke;
+  }
+  .contrast-grid-line {
+    stroke: var(--grid);
+    stroke-width: 1;
+  }
+  .contrast-track {
+    fill: var(--surface);
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+  .contrast-seg-fill {
+    fill: var(--seg-color);
+    fill-opacity: 0.2;
+  }
+  .contrast-seg-hachura {
+    fill-opacity: 0.45;
+    pointer-events: none;
+  }
+  .contrast-hachura-stroke {
+    stroke-width: 1;
+    opacity: 0.5;
+  }
+  .contrast-hachura-stroke.is-noCandidate,
+  .contrast-hachura-stroke.is-undecided {
+    stroke: var(--accent);
+  }
+  .contrast-hachura-stroke.is-blankNull {
+    stroke: var(--c8);
+  }
+  /* Complemento aritmético: fraco e tracejado. Não pode competir com medida. */
+  .contrast-seg.is-derived .contrast-seg-fill {
+    fill-opacity: 0.08;
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+  }
+  .contrast-seg.is-derived .contrast-center {
+    opacity: 0.3;
+    stroke-dasharray: 3 3;
+  }
+
+  /* Banda DOMINANTE; linha central discreta (docs/05 §1.1 — não invertar). */
+  .contrast-band {
+    fill: var(--seg-color);
+    fill-opacity: 0.38;
+    stroke: var(--seg-color);
+    stroke-opacity: 0.5;
+    stroke-width: 1;
+  }
+  .contrast-center {
+    stroke: var(--seg-color);
+    stroke-width: 1.5;
+    opacity: 0.6;
+  }
+  /* Vão sem medida: vazado, tracejado, sem valor associado. */
+  .contrast-unaccounted {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    stroke-dasharray: 3 4;
+    opacity: 0.7;
+  }
+
+  /* Readout ------------------------------------------------------------- */
+  .contrast-readout {
+    list-style: none;
+    margin: calc(var(--rhythm) * 2) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--rhythm);
+  }
+  .contrast-readout-item {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 240px);
+    align-items: center;
+    gap: calc(var(--rhythm) * 2);
+    padding-block: var(--rhythm);
+    border-top: 1px solid var(--border);
+  }
+  .contrast-readout-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+  }
+  .contrast-derived-tag {
+    color: var(--ink-3);
+  }
+  .contrast-readout-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+    color: var(--ink);
+  }
+  .contrast-readout-item.is-derived .contrast-readout-value {
+    color: var(--ink-2);
+  }
+  .contrast-readout-none {
+    color: var(--ink-3);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+  }
+  .contrast-derived-note {
+    display: block;
+  }
+  /* A régua herda a cor da grandeza; <UncertaintyRule> escreve --rule-color em
+     style inline (só conhece slot de candidato), então precisa de !important. */
+  .contrast-readout-item :global([data-uncertainty-rule]) {
+    --rule-color: var(--seg-color) !important;
+  }
+
+  /* Eixo em HTML ------------------------------------------------------- */
+  .contrast-axis {
+    position: relative;
+    height: calc(var(--rhythm) * 3);
+    margin-top: calc(var(--rhythm) * 2);
+    border-top: 1px solid var(--border);
+  }
+  .contrast-tick {
+    position: absolute;
+    top: calc(var(--rhythm) * 0.75);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .contrast-axis-caption {
+    margin-top: var(--rhythm);
+  }
+
+  .contrast-cell-missing {
+    color: var(--ink-3);
+    font-family: var(--font-body);
+  }
+
+  @media (max-width: 640px) {
+    .contrast-readout-item {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'name value'
+        'rule rule';
+      row-gap: var(--rhythm);
+    }
+    .contrast-readout-name {
+      grid-area: name;
+    }
+    .contrast-readout-value {
+      grid-area: value;
+    }
+    .contrast-readout-rule {
+      grid-area: rule;
+    }
+  }
+</style>

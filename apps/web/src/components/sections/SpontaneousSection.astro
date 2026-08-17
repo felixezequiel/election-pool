@@ -1,0 +1,487 @@
+---
+/**
+ * Seção — QUEM AINDA NÃO TEM CANDIDATO (pergunta ESPONTÂNEA, docs/OPEN-QUESTIONS
+ * Q-14). É a informação mais reveladora que o site publica hoje, e também a mais
+ * fácil de ler errado. As duas coisas vêm do mesmo fato:
+ *
+ * Institutos medem intenção de voto de duas formas na MESMA pesquisa. Na
+ * ESTIMULADA mostram uma lista de nomes, e a lista ancora a resposta — quem não
+ * pensou no assunto reconhece um nome e escolhe, então o "não sabe" fica em
+ * poucos pontos. Na ESPONTÂNEA a pergunta é aberta, sem lista, e quem não tem
+ * candidato não cita ninguém. Medido no mesmo campo (BR-06833/2026): 37 p.p. não
+ * citam nome na aberta contra 3 p.p. de não-sabe com a lista à vista.
+ *
+ * Por que a ORDEM desta seção é a que está aqui:
+ *
+ *  1. O número grande primeiro, com a banda. É a manchete e é medida.
+ *  2. O CONTRASTE imediatamente depois, em prosa, ANTES de qualquer gráfico. Sem
+ *     a explicação, "um terço não tem candidato" parece contradizer os "3% de
+ *     indecisos" que o leitor viu no jornal, e a reação natural é concluir que um
+ *     dos dois números está errado. Nenhum está: são perguntas diferentes. Se o
+ *     leitor só ler um parágrafo desta seção, tem de ser esse.
+ *  3. Só então as duas barras do eleitorado lado a lado — a prosa arma a leitura,
+ *     o desenho a confirma.
+ *  4. Por último a série no tempo, que responde à pergunta seguinte: isso cresce
+ *     ou encolhe?
+ *
+ * A seção vem logo depois da série latente de propósito: é lá que o leitor acaba
+ * de ver o não-sabe da estimulada. O contraste chega enquanto o número pequeno
+ * ainda está fresco.
+ *
+ * Esta série NÃO entra em `μ_t` (Q-14, docs/01 §3): espontâneo e estimulado são
+ * medidas incomparáveis, e agrupá-las quebra a restrição de soma. Aqui ela é
+ * descrição publicada como tal.
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from '../charts/UncertaintyRule.astro';
+import SpontaneousContrast from '../charts/SpontaneousContrast.astro';
+import SpontaneousSeriesChart from '../charts/SpontaneousSeriesChart.astro';
+import { formatPct, formatDayMonth, isoDateOnly } from '../charts/lib/format.js';
+import type { ContrastRowInput } from '../charts/lib/contrast-geometry.js';
+import type { ChartInputs } from '../../data/chart-inputs.js';
+import { PCT_MAX, PCT_MIN } from '@election-pool/contracts/constants';
+
+interface Props {
+  /** Pergunta espontânea; `null` = nenhum instituto publicou o cenário. */
+  spontaneous: ChartInputs['spontaneous'];
+  /** Último retrato medido da estimulada — o outro lado do contraste. */
+  electorateLatest: ChartInputs['electorateLatest'];
+  /** Quando não houver espontânea, dizer para quando é a próxima checagem. */
+  nextUpdateAt: string;
+}
+
+const { spontaneous, electorateLatest, nextUpdateAt } = Astro.props;
+
+const latest = spontaneous?.latest ?? null;
+
+/**
+ * Régua das duas leituras de destaque na MESMA escala (docs/06 §4): sem isso o
+ * leitor compara larguras de banda que estão em escalas diferentes, o que é pior
+ * que não mostrar banda nenhuma. Teto folgado acima do maior hi90.
+ */
+const READING_DOMAIN_PAD = 8;
+const readingMaxHi = Math.max(
+  latest?.noCandidate.hi90 ?? PCT_MIN,
+  electorateLatest?.undecided.hi90 ?? PCT_MIN,
+);
+const readingDomain: [number, number] = [
+  PCT_MIN,
+  Math.min(PCT_MAX, Math.ceil(readingMaxHi + READING_DOMAIN_PAD)),
+];
+
+/**
+ * Distância entre as duas leituras. A central é subtração simples; a faixa é a
+ * soma CONSERVADORA das duas incertezas (lo − hi, hi − lo), que é o limite mais
+ * largo defensável sem supor nada sobre a correlação entre os dois cenários.
+ * Fica em prosa, não como número de destaque: é conta nossa sobre duas medidas,
+ * não uma terceira medida.
+ */
+const gap =
+  latest && electorateLatest
+    ? {
+        mean: latest.noCandidate.mean - electorateLatest.undecided.mean,
+        lo90: latest.noCandidate.lo90 - electorateLatest.undecided.hi90,
+        hi90: latest.noCandidate.hi90 - electorateLatest.undecided.lo90,
+      }
+    : null;
+
+/**
+ * As duas barras do eleitorado. A grandeza "sem candidato" é o PRIMEIRO segmento
+ * das duas, para as duas nascerem na mesma origem e serem comparáveis a olho.
+ * O complemento entra como `derived` — é 100 menos as pontas medidas, não medida.
+ */
+const contrastRows: ContrastRowInput[] = [];
+
+if (latest) {
+  contrastRows.push({
+    key: 'espontanea',
+    scenarioLabel: 'Espontânea',
+    questionLabel: 'pergunta aberta — nenhum nome é mostrado ao entrevistado',
+    dateIso: latest.date,
+    segments: [
+      {
+        key: 'noCandidate',
+        label: 'Não citaram nenhum nome',
+        kind: 'measured',
+        band: latest.noCandidate,
+      },
+      {
+        key: 'blankNull',
+        label: 'Branco, nulo ou nenhum',
+        kind: 'measured',
+        band: latest.blankNull,
+      },
+      // Vem pronto do contrato, já como complemento aritmético (Q-14).
+      { key: 'named', label: 'Citaram algum nome', kind: 'derived', band: latest.named },
+    ],
+  });
+}
+
+if (electorateLatest) {
+  /**
+   * Complemento da estimulada: 100 menos as duas pontas medidas do MESMO dia,
+   * com a banda somada de forma conservadora — o mesmo tratamento que o contrato
+   * dá ao `named` da espontânea, e exibido com a mesma (menor) autoridade. Sem
+   * as duas pontas não há complemento: `null`, e a barra fica com o vão marcado
+   * em vez de um número inventado (R4).
+   */
+  const restEstimulada =
+    electorateLatest.blankNull !== null
+      ? {
+          mean: PCT_MAX - electorateLatest.undecided.mean - electorateLatest.blankNull.mean,
+          lo90: PCT_MAX - electorateLatest.undecided.hi90 - electorateLatest.blankNull.hi90,
+          hi90: PCT_MAX - electorateLatest.undecided.lo90 - electorateLatest.blankNull.lo90,
+        }
+      : null;
+
+  contrastRows.push({
+    key: 'estimulada',
+    scenarioLabel: 'Estimulada',
+    questionLabel: 'pergunta com lista de nomes à vista — é a que a imprensa publica',
+    dateIso: electorateLatest.date,
+    segments: [
+      {
+        key: 'undecided',
+        label: 'Disseram não saber',
+        kind: 'measured',
+        band: electorateLatest.undecided,
+      },
+      {
+        key: 'blankNull',
+        label: 'Branco, nulo ou nenhum',
+        kind: 'measured',
+        band: electorateLatest.blankNull,
+      },
+      {
+        key: 'named',
+        label: 'Escolheram um nome da lista',
+        kind: 'derived',
+        band: restEstimulada,
+      },
+    ],
+  });
+}
+
+/** Há série para plotar? Uma ponta medida em alguma data basta. */
+const hasSeries = (spontaneous?.series ?? []).some((s) => s.points.some((p) => p.band !== null));
+
+const nextUpdateLabel = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(nextUpdateAt));
+---
+
+<section class="section" aria-labelledby="spont-title">
+  <div class="container">
+    <p class="label">Pergunta espontânea</p>
+    <h2 id="spont-title" class="display-l spont-heading">
+      Sem a lista de nomes, boa parte do eleitorado não cita ninguém.
+    </h2>
+    <p class="body spont-lead">
+      Os institutos perguntam a intenção de voto de duas formas, na mesma pesquisa e com a mesma
+      amostra: mostrando uma lista de nomes, e sem mostrar nada. Os dois números que saem daí são
+      muito diferentes, e a diferença é a informação.
+    </p>
+
+    {
+      latest ? (
+        <>
+          {/* As duas leituras de destaque, cada uma com a sua régua na MESMA
+              escala — o contraste começa aqui, antes de qualquer explicação. */}
+          <div class="spont-readings">
+            <article class="spont-reading card is-spontaneous">
+              <p class="label spont-reading-name">Não têm candidato próprio</p>
+              <p class="body-s spont-reading-question">
+                pergunta aberta, sem lista de nomes
+              </p>
+              <p class="data-xl spont-reading-value">
+                <AnimatedNum
+                  value={latest.noCandidate.mean}
+                  decimals={1}
+                  suffix="%"
+                  label="Não citaram nenhum nome na pergunta aberta"
+                />
+              </p>
+              <UncertaintyRule
+                mean={latest.noCandidate.mean}
+                lo90={latest.noCandidate.lo90}
+                hi90={latest.noCandidate.hi90}
+                domain={readingDomain}
+                label="Não citaram nenhum nome"
+              />
+              <p class="body-muted spont-reading-range">
+                Intervalo de <Num>90</Num>% entre <Num>{formatPct(latest.noCandidate.lo90)}</Num>% e{' '}
+                <Num>{formatPct(latest.noCandidate.hi90)}</Num>%, em{' '}
+                <time datetime={isoDateOnly(latest.date)}>
+                  <Num>{formatDayMonth(latest.date)}</Num>
+                </time>
+                .
+              </p>
+            </article>
+
+            <article class="spont-reading card is-estimulada">
+              <p class="label spont-reading-name">Dizem não saber</p>
+              <p class="body-s spont-reading-question">
+                mesma janela, pergunta com lista de nomes
+              </p>
+              {electorateLatest ? (
+                <>
+                  <p class="data-xl spont-reading-value">
+                    <AnimatedNum
+                      value={electorateLatest.undecided.mean}
+                      decimals={1}
+                      suffix="%"
+                      label="Disseram não saber na pergunta com lista de nomes"
+                    />
+                  </p>
+                  <UncertaintyRule
+                    mean={electorateLatest.undecided.mean}
+                    lo90={electorateLatest.undecided.lo90}
+                    hi90={electorateLatest.undecided.hi90}
+                    domain={readingDomain}
+                    label="Disseram não saber, pergunta com lista"
+                  />
+                  <p class="body-muted spont-reading-range">
+                    Intervalo de <Num>90</Num>% entre{' '}
+                    <Num>{formatPct(electorateLatest.undecided.lo90)}</Num>% e{' '}
+                    <Num>{formatPct(electorateLatest.undecided.hi90)}</Num>%, em{' '}
+                    <time datetime={isoDateOnly(electorateLatest.date)}>
+                      <Num>{formatDayMonth(electorateLatest.date)}</Num>
+                    </time>
+                    .
+                  </p>
+                </>
+              ) : (
+                <p class="body-muted spont-reading-range">
+                  Sem não-sabe estimado na janela: nenhuma data com a grandeza medida. Sem medida não
+                  é zero, então o lugar fica vazio.
+                </p>
+              )}
+            </article>
+          </div>
+
+          {/* Proveniência à vista (R6): afirmação forte diz sobre quantas
+              pesquisas se sustenta, junto do número, não em nota de rodapé. */}
+          {spontaneous && (
+            <p class="label spont-provenance">
+              A leitura da pergunta aberta vem de <Num>{String(spontaneous.pollCount)}</Num>{' '}
+              {spontaneous.pollCount === 1 ? 'pesquisa' : 'pesquisas'} de{' '}
+              <Num>{String(spontaneous.instituteCount)}</Num>{' '}
+              {spontaneous.instituteCount === 1 ? 'instituto' : 'institutos'} · cenário espontâneo é
+              minoria, e por isso a faixa é mais larga
+            </p>
+          )}
+
+          {/* ── O coração da seção: por que os dois números diferem ─────── */}
+          <div class="spont-why">
+            <h3 class="display-m spont-why-heading">Por que os dois números são tão diferentes.</h3>
+            <p class="body spont-why-body">
+              Não é divergência entre institutos, e não é erro de nenhum dos dois. São perguntas
+              diferentes, e cada uma mede uma coisa.
+            </p>
+            <p class="body spont-why-body">
+              Na pergunta <strong>estimulada</strong>, o entrevistador mostra uma lista de nomes e
+              pede que a pessoa escolha. A lista faz metade do trabalho: quem não havia pensado no
+              assunto reconhece um nome conhecido e aponta. O não-sabe fica pequeno porque quase
+              todo mundo consegue apontar alguma coisa quando as opções estão à vista.
+            </p>
+            <p class="body spont-why-body">
+              Na <strong>espontânea</strong>, a pergunta é aberta — em quem você votaria? — e não há
+              lista. Quem não tem candidato não cita ninguém, e entra na conta como tal.
+            </p>
+            {gap && (
+              <p class="body spont-why-body">
+                É o mesmo eleitorado, respondendo de dois jeitos. A distância entre as duas centrais
+                é de <Num>{formatPct(gap.mean)}</Num> pontos percentuais — entre{' '}
+                <Num>{formatPct(gap.lo90)}</Num> e <Num>{formatPct(gap.hi90)}</Num> p.p. somando as
+                faixas das duas de forma conservadora. Essa distância é conta nossa sobre duas
+                medidas, não uma terceira medida.
+              </p>
+            )}
+            <p class="body spont-why-body">
+              Nenhuma das duas é a errada. A pergunta com lista se parece com a urna, onde os nomes
+              estão à vista, e é a que sai publicada. A pergunta aberta mede outra coisa: quanto do
+              eleitorado já tem escolha própria, sem ajuda. Ler só a primeira dá a impressão de um
+              eleitorado decidido que a segunda não sustenta.
+            </p>
+            <p class="body-muted spont-why-note">
+              Esta série não entra na estimativa de apoio dos candidatos. Espontâneo e estimulado
+              não são comparáveis, e somá-los produziria uma série que não mede nada — está aqui ao
+              lado do modelo, nunca dentro dele. <a href="/metodologia">Como o modelo funciona</a>.
+            </p>
+          </div>
+
+          {contrastRows.length > 0 && (
+            <div class="spont-contrast">
+              <SpontaneousContrast
+                id="spont-contrast"
+                title="O eleitorado inteiro, por forma de pergunta"
+                rows={contrastRows}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        /* Estado vazio EXPLICADO, no espírito do <NoDataNotice>: dizer por que
+           não há número é melhor que desenhar eixo vazio ou sumir com a seção. */
+        <div class="card spont-empty">
+          <p class="label spont-empty-eyebrow">Sem cenário espontâneo publicado</p>
+          <p class="body">
+            {spontaneous
+              ? 'Há pesquisa com cenário espontâneo colhida, mas nenhuma data da janela tem a grandeza medida. Sem medida não é zero: enquanto não houver ponto, não há linha nem número aqui.'
+              : 'Nenhum instituto publicou cenário espontâneo nesta janela. A pergunta aberta é opcional, e a maioria das pesquisas divulga só a versão com lista de nomes.'}
+          </p>
+          <p class="body-muted spont-empty-note">
+            O que existe acima é o não-sabe da pergunta com lista — e ele mede outra coisa: com os
+            nomes à vista, quem não tem candidato costuma reconhecer um e escolher. Assim que um
+            instituto publicar a pergunta aberta, o número aparece aqui. Próxima checagem às{' '}
+            {nextUpdateLabel}.
+          </p>
+        </div>
+      )
+    }
+  </div>
+
+  {/* Série no tempo: bleed de 12 colunas, como as outras séries — a pergunta
+      "isso cresce ou encolhe?" é de dado, e dado é protagonista (docs/05 §4). */}
+  {
+    hasSeries && spontaneous && (
+      <div class="bleed substrate-plot spont-series-block">
+        <div class="bleed-inner">
+          <h3 class="display-m spont-series-heading">O desengajamento ao longo do tempo.</h3>
+          <p class="body spont-series-lead">
+            Cada faixa é o intervalo de <Num>90</Num>% da grandeza medida na pergunta aberta. Onde
+            nenhum instituto publicou cenário espontâneo, a linha é <strong>interrompida</strong> —
+            não interpolada e nunca zero. Um zero aqui afirmaria que todo mundo tem candidato.
+          </p>
+          <SpontaneousSeriesChart
+            id="spont-series"
+            title="Pergunta espontânea — quem não cita nome, ao longo do tempo"
+            series={spontaneous.series}
+          />
+          <p class="body-muted spont-series-note">
+            Base da série: <Num>{String(spontaneous.pollCount)}</Num>{' '}
+            {spontaneous.pollCount === 1 ? 'pesquisa' : 'pesquisas'} com cenário espontâneo, de{' '}
+            <Num>{String(spontaneous.instituteCount)}</Num>{' '}
+            {spontaneous.instituteCount === 1 ? 'instituto' : 'institutos'}. Cada uma aparece com o
+            seu registro TSE em <a href="/dados">dados e proveniência</a>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .spont-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 26ch;
+  }
+  .spont-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+
+  /* As duas leituras: mesma largura, mesma escala de régua. A régua de topo
+     colorida distingue a natureza (acento = pergunta aberta; borda neutra =
+     pergunta com lista), sem cor de espectro partidário. */
+  .spont-readings {
+    margin-top: calc(var(--rhythm) * 4);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gutter);
+    max-width: 720px;
+  }
+  .spont-reading.is-spontaneous {
+    border-top: 2px solid var(--accent);
+  }
+  .spont-reading.is-estimulada {
+    border-top: 2px solid var(--border-strong);
+  }
+  .spont-reading-question {
+    margin-top: calc(var(--rhythm) * 0.5);
+    color: var(--ink-2);
+  }
+  .spont-reading-value {
+    margin-top: calc(var(--rhythm) * 1.5);
+    margin-bottom: calc(var(--rhythm) * 1.5);
+  }
+  .spont-reading-range {
+    margin-top: var(--rhythm);
+  }
+  .spont-reading.is-spontaneous :global([data-uncertainty-rule]) {
+    --rule-color: var(--accent) !important;
+  }
+  .spont-reading.is-estimulada :global([data-uncertainty-rule]) {
+    --rule-color: var(--ink-2) !important;
+  }
+
+  .spont-provenance {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 72ch;
+    color: var(--ink-2);
+    text-transform: none;
+    letter-spacing: 0.04em;
+  }
+
+  /* O bloco de explicação tem peso de seção, não de nota: régua de acento à
+     esquerda e tipo de corpo cheio. É a parte que impede a leitura errada. */
+  .spont-why {
+    margin-top: calc(var(--rhythm) * 5);
+    max-width: 68ch;
+    padding: calc(var(--rhythm) * 3);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+  }
+  .spont-why-body {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .spont-why-note {
+    margin-top: calc(var(--rhythm) * 3);
+    padding-top: calc(var(--rhythm) * 2);
+    border-top: 1px solid var(--border);
+  }
+  .spont-contrast {
+    margin-top: calc(var(--rhythm) * 5);
+  }
+
+  .spont-empty {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 64ch;
+  }
+  .spont-empty-eyebrow {
+    color: var(--accent);
+    margin-bottom: calc(var(--rhythm) * 1.5);
+  }
+  .spont-empty-note {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+
+  .spont-series-block {
+    margin-top: calc(var(--rhythm) * 6);
+  }
+  .spont-series-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 64ch;
+  }
+  .spont-series-note {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 64ch;
+  }
+
+  @media (max-width: 640px) {
+    .spont-readings {
+      grid-template-columns: 1fr;
+    }
+    .spont-why {
+      padding: calc(var(--rhythm) * 2);
+    }
+  }
+</style>

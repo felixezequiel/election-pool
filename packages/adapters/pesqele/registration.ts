@@ -6,10 +6,12 @@
  *
  * São duas telas, com estratégias diferentes:
  *
- * - **Lista** (`formPesquisa:tabelaPesquisas`): `<tr data-ri="N">` com SEIS `<td>`
- *   sem nenhum atributo semântico. O parse é POSICIONAL — não há alternativa. Por
- *   isso o número de colunas é conferido: coluna a mais/a menos ⇒ LANÇA, porque
- *   uma coluna nova deslocaria todos os campos em silêncio.
+ * - **Lista** (`formPesquisa:tabelaPesquisas`): `<tr data-ri="N">` com `<td>` sem
+ *   nenhum atributo semântico. O parse é POSICIONAL — não há alternativa —, mas a
+ *   posição de cada coluna é lida do CABEÇALHO (`parseColunas`), não fixada em
+ *   código: as duas telas de busca têm colunas diferentes (a de 30 dias traz
+ *   "Cargos", a de período traz "Eleição") e um mapa fixo trocaria os campos em
+ *   silêncio (T-28). Contagem de `<td>` diferente do cabeçalho ⇒ LANÇA.
  * - **Detalhe** (`detalhar.xhtml`): pares rótulo/valor. O parse é POR RÓTULO, que
  *   sobrevive a mudança de ordem e de `j_id_*` (os ids gerados pelo JSF mudam a
  *   cada build).
@@ -29,6 +31,7 @@ import type { HTMLElement } from 'node-html-parser';
 import { tseIdSchema } from '@election-pool/contracts/branded';
 import { parsePtBrNumber } from '../parse-ptbr-number.js';
 import { SAO_PAULO_OFFSET } from './constants.js';
+import { cleanText, normalizeLabel } from './texto.js';
 
 export class PesqEleParseError extends Error {
   constructor(message: string) {
@@ -71,8 +74,17 @@ export interface PesqEleLinhaLista {
   tseId: string;
   /** Coluna "Empresa Contratada/ Nome Fantasia", como o TSE escreve. */
   instituteName: string;
-  /** Coluna "Cargos" — o DiscoveryJob mapeia para `race_id`. */
-  raceLabel: string;
+  /**
+   * Coluna "Cargos". `null` na busca por período, que não tem essa coluna — o
+   * `raceLabel` que o DiscoveryJob usa para resolver `race_id` vem do DETALHE, que
+   * tem o campo em toda tela. Nunca preenchido com o valor de outra coluna.
+   */
+  raceLabel: string | null;
+  /**
+   * Coluna "Eleição" (ex.: 'Eleições Gerais 2026'). `null` na tela de 30 dias, que
+   * não tem essa coluna.
+   */
+  eleicaoLabel: string | null;
   registeredAt: string;
   /** Coluna "Abrangência" (ex.: 'BRASIL'). */
   abrangenciaLabel: string;
@@ -91,6 +103,13 @@ export interface PesqElePaginador {
 export interface PesqEleTabelaResultado {
   linhas: PesqEleLinhaLista[];
   paginador: PesqElePaginador;
+  /** Mapa de colunas lido do cabeçalho — a paginação reusa este mapa. */
+  colunas: PesqEleColunas;
+  /**
+   * Teto de registros que a própria resposta DECLARA ("limitado a 50 registros"),
+   * ou `null` se o aviso não estiver lá. É o insumo da detecção de truncagem.
+   */
+  limiteDeclarado: number | null;
 }
 
 /** Um contratante da tela de detalhe (pode haver mais de um). */
@@ -119,20 +138,9 @@ export interface PesqEleDetalhe {
 
 // --- helpers ---------------------------------------------------------------
 
-/** Normaliza texto vindo do HTML: NBSP vira espaço, espaços colapsam. */
-const cleanText = (raw: string): string =>
-  raw
-    .replace(/\u00a0/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-/** Compara rótulos ignorando acento, caixa, espaço e o ':' final. */
-const normalizeLabel = (raw: string): string =>
-  cleanText(raw)
-    .replace(/:\s*$/, '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+// `cleanText` e `normalizeLabel` vivem em `texto.js`: sao compartilhados com o
+// resolvedor dos campos de periodo, e duas normalizacoes diferentes fariam um
+// rotulo casar num parser e nao casar no outro.
 
 const required = (value: string, field: string, hint: string): string => {
   const text = cleanText(value);
@@ -179,18 +187,79 @@ const parseValorBrl = (raw: string): number | null => {
 
 // --- lista -----------------------------------------------------------------
 
-// A tabela real tem SEIS colunas, nesta ordem, sem atributo semântico algum.
-const COLUNA = {
-  tseId: 0,
-  empresa: 1,
-  cargos: 2,
-  dataRegistro: 3,
-  abrangencia: 4,
-  acoes: 5,
-} as const;
-const COLUNAS_ESPERADAS = 6;
+/**
+ * Índice de cada coluna da tabela de resultados, resolvido a partir do CABEÇALHO.
+ *
+ * Isto era um mapa FIXO (`tseId:0, empresa:1, cargos:2, …`), válido só para a tela
+ * de 30 dias. A busca por período (`listar.xhtml`, T-28) tem a coluna "Eleição" no
+ * lugar de "Cargos": com o mapa fixo, o nome do instituto passaria a ser
+ * "Eleições Gerais 2026" EM SILÊNCIO e a data de registro sairia deslocada. O
+ * parse continua posicional — as `<td>` não têm atributo semântico algum —, mas a
+ * posição agora vem do `<th>` correspondente, que é a única coisa nomeada na
+ * tabela. Coluna obrigatória ausente ⇒ LANÇA (R4).
+ */
+export interface PesqEleColunas {
+  tseId: number;
+  empresa: number;
+  dataRegistro: number;
+  abrangencia: number;
+  /** "Cargos": existe na tela de 30 dias, não existe na busca por período. */
+  cargos: number | null;
+  /** "Eleição": existe na busca por período, não existe na tela de 30 dias. */
+  eleicao: number | null;
+  /** Colunas declaradas no cabeçalho — toda linha precisa ter exatamente isso. */
+  total: number;
+}
 
-const parseLinha = (tr: HTMLElement): PesqEleLinhaLista => {
+/** Rótulos das colunas, exatamente como o TSE os escreve (comparados sem acento). */
+const ROTULO_COLUNA = {
+  tseId: 'Número de identificação',
+  empresa: 'Empresa Contratada/ Nome Fantasia',
+  dataRegistro: 'Data de Registro',
+  abrangencia: 'Abrangência',
+  cargos: 'Cargos',
+  eleicao: 'Eleição',
+} as const;
+
+export const parseColunas = (html: string): PesqEleColunas => {
+  const titulos = parseHtml(html)
+    .querySelectorAll('span.ui-column-title')
+    .map((span) => normalizeLabel(span.text));
+
+  if (titulos.length === 0) {
+    // Sem cabeçalho não há como saber o que é cada `<td>`. Adivinhar por posição é
+    // exatamente o que produziria dado trocado sem ninguém perceber.
+    throw new PesqEleParseError(
+      'Cabeçalho da tabela do PesqEle ausente (nenhum span.ui-column-title): estrutura mudou?',
+    );
+  }
+
+  const indice = (rotulo: string): number | null => {
+    const i = titulos.indexOf(normalizeLabel(rotulo));
+    return i < 0 ? null : i;
+  };
+  const obrigatoria = (rotulo: string): number => {
+    const i = indice(rotulo);
+    if (i === null) {
+      throw new PesqEleParseError(
+        `Coluna "${rotulo}" ausente no cabeçalho da tabela do PesqEle (achei: ${titulos.join(' | ')})`,
+      );
+    }
+    return i;
+  };
+
+  return {
+    tseId: obrigatoria(ROTULO_COLUNA.tseId),
+    empresa: obrigatoria(ROTULO_COLUNA.empresa),
+    dataRegistro: obrigatoria(ROTULO_COLUNA.dataRegistro),
+    abrangencia: obrigatoria(ROTULO_COLUNA.abrangencia),
+    cargos: indice(ROTULO_COLUNA.cargos),
+    eleicao: indice(ROTULO_COLUNA.eleicao),
+    total: titulos.length,
+  };
+};
+
+const parseLinha = (tr: HTMLElement, colunas: PesqEleColunas): PesqEleLinhaLista => {
   const ri = tr.getAttribute('data-ri');
   if (ri === undefined || !/^\d+$/.test(ri)) {
     throw new PesqEleParseError(`Linha da lista sem data-ri numérico: "${String(ri)}"`);
@@ -198,36 +267,43 @@ const parseLinha = (tr: HTMLElement): PesqEleLinhaLista => {
   const rowIndex = Number(ri);
 
   const tds = tr.querySelectorAll('td');
-  if (tds.length !== COLUNAS_ESPERADAS) {
+  if (tds.length !== colunas.total) {
     // Coluna a mais/a menos deslocaria TODOS os campos em silêncio (o parse é
     // posicional). Falhar aqui é o que impede atribuir o dado errado.
     throw new PesqEleParseError(
-      `Linha data-ri=${rowIndex} tem ${tds.length} colunas; esperado ${COLUNAS_ESPERADAS}`,
+      `Linha data-ri=${rowIndex} tem ${tds.length} colunas; esperado ${colunas.total}`,
     );
   }
   const celula = (index: number): string => tds[index]?.text ?? '';
 
   const hint = `data-ri=${rowIndex}`;
-  const tseId = requireTseId(celula(COLUNA.tseId), hint);
+  const tseId = requireTseId(celula(colunas.tseId), hint);
   return {
     rowIndex,
     tseId,
-    instituteName: required(celula(COLUNA.empresa), 'empresa contratada', tseId),
-    raceLabel: required(celula(COLUNA.cargos), 'cargos', tseId),
-    registeredAt: toIsoDateTime(required(celula(COLUNA.dataRegistro), 'data de registro', tseId)),
-    abrangenciaLabel: required(celula(COLUNA.abrangencia), 'abrangência', tseId),
+    instituteName: required(celula(colunas.empresa), 'empresa contratada', tseId),
+    // Cargo e eleição são `null` quando a tela não tem a coluna. Não colocamos o
+    // valor da outra coluna no lugar: o `raceLabel` autoritativo vem do detalhe, e
+    // é lá que o DiscoveryJob o lê para resolver o `race_id`.
+    raceLabel: colunas.cargos === null ? null : required(celula(colunas.cargos), 'cargos', tseId),
+    eleicaoLabel:
+      colunas.eleicao === null ? null : required(celula(colunas.eleicao), 'eleição', tseId),
+    registeredAt: toIsoDateTime(required(celula(colunas.dataRegistro), 'data de registro', tseId)),
+    abrangenciaLabel: required(celula(colunas.abrangencia), 'abrangência', tseId),
   };
 };
 
 /**
  * Linhas de um fragmento HTML qualquer que contenha `<tr data-ri>`. Serve tanto
  * para a tabela inteira (resposta da busca) quanto para o fragmento só-de-linhas
- * que a paginação PrimeFaces devolve.
+ * que a paginação PrimeFaces devolve — e é por isso que `colunas` é PARÂMETRO: o
+ * fragmento da paginação não traz cabeçalho, então quem pagina precisa carregar o
+ * mapa lido na busca. Deduzir a posição sem cabeçalho seria adivinhar.
  */
-export const parseLinhasLista = (html: string): PesqEleLinhaLista[] =>
+export const parseLinhasLista = (html: string, colunas: PesqEleColunas): PesqEleLinhaLista[] =>
   parseHtml(html)
     .querySelectorAll('tr[data-ri]')
-    .map((tr) => parseLinha(tr));
+    .map((tr) => parseLinha(tr, colunas));
 
 /**
  * Config do widget DataTable, que é a fonte AUTORITATIVA da paginação:
@@ -256,12 +332,43 @@ export const parsePaginador = (html: string): PesqElePaginador => {
 };
 
 /**
- * Parseia a resposta da BUSCA: a tabela completa (linhas + paginador). O número
- * de linhas é conferido contra o paginador — divergência significa que estamos
- * lendo uma página parcial e achando que é o total.
+ * Teto de registros que o PesqEle DECLARA na própria tela de busca por período:
+ * "O resultado da consulta está limitado a 50 registros. Utilize os filtros para
+ * pesquisar." Ler o número daqui, em vez de confiar apenas na constante, é o que
+ * faz a detecção de truncagem acompanhar a fonte se o TSE mudar o teto (Q-11).
+ *
+ * Devolve `null` quando o aviso não está no documento — o fragmento da paginação,
+ * por exemplo, não o traz, e a tela de 30 dias nunca o trouxe (mesmo aplicando o
+ * mesmo corte de 50). Quem chama decide o que fazer com o `null`; no cliente isso
+ * vira ALERTA, nunca silêncio.
+ */
+const LIMITE_DECLARADO_RE = /limitado a\s*([\d.]+)\s*registros/i;
+
+export const parseLimiteDeclarado = (html: string): number | null => {
+  // `cleanText` primeiro: o TSE emite o aviso com NBSP entre as palavras, e um
+  // NBSP no meio faria o número escapar do match e a truncagem passar batida.
+  const m = LIMITE_DECLARADO_RE.exec(cleanText(html));
+  if (m === null || m[1] === undefined) return null;
+  const limite = Number(m[1].replace(/\./g, ''));
+  if (!Number.isInteger(limite) || limite <= 0) {
+    throw new PesqEleParseError(`Limite declarado pelo PesqEle ilegível: "${m[1]}"`);
+  }
+  return limite;
+};
+
+/**
+ * Parseia a resposta da BUSCA: tabela completa (linhas + paginador + mapa de
+ * colunas + teto declarado). O número de linhas é conferido contra o paginador —
+ * divergência significa que estamos lendo uma página parcial achando que é o total.
+ *
+ * Atenção ao `paginador.page`: a DataTable do PesqEle GUARDA a página corrente
+ * entre buscas (verificado ao vivo em 2026-08-17 — uma busca feita depois de
+ * paginar volta em `page:1`). Por isso o esperado é calculado com a página que a
+ * resposta declara, e não com a suposição de que a busca traz a primeira.
  */
 export const parseTabelaResultado = (html: string): PesqEleTabelaResultado => {
-  const linhas = parseLinhasLista(html);
+  const colunas = parseColunas(html);
+  const linhas = parseLinhasLista(html, colunas);
   const paginador = parsePaginador(html);
 
   const esperadoNaPagina = Math.max(
@@ -276,7 +383,7 @@ export const parseTabelaResultado = (html: string): PesqEleTabelaResultado => {
       `Página ${paginador.page} trouxe ${linhas.length} linhas; o paginador diz ${esperadoNaPagina} (total ${paginador.totalRecords})`,
     );
   }
-  return { linhas, paginador };
+  return { linhas, paginador, colunas, limiteDeclarado: parseLimiteDeclarado(html) };
 };
 
 // --- detalhe ---------------------------------------------------------------

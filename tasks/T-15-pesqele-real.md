@@ -124,3 +124,11 @@ Base: `https://pesqele-divulgacao.tse.jus.br`
   que escondeu o bug de T-05 por uma task inteira.
 - Fixture sintética de fonte externa não é evidência de integração. Capture antes
   de escrever o parser, nunca o contrário.
+- **O "Total de registros: 50" desta captura NÃO era o total: era o teto do
+  servidor.** A tela de 30 dias corta a listagem em 50 registros e não avisa. Quem
+  ler esta task depois de T-28 precisa saber que o `discover` migrou para
+  `/app/pesquisa/listar.xhtml` (busca com período livre) e varre a janela de 30 dias
+  em fatias de data — ver `tasks/T-28-pesqele-teto-50.md` e Q-11. O protocolo AJAX
+  documentado aqui continua válido; o que mudou foi a tela, o filtro de período e o
+  fato de o mapa de colunas vir do cabeçalho (a tabela de `listar.xhtml` tem
+  "Eleição" onde esta tem "Cargos").

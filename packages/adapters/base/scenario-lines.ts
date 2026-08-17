@@ -30,6 +30,14 @@ const BLANK_NULL_LABELS = [
   'nenhum',
   'nenhum deles',
   'nenhum/nao sabe', // só quando a fonte funde os dois num rótulo explícito
+  // Grafias COLHIDAS de release real, uma a uma (não especulação):
+  'nulo/branco', // Real Time Big Data — ordem invertida
+  'branco ou nulo', // Ipec
+  'brancos ou nulos',
+  'nenhum/branco/nulo', // Paraná Pesquisas
+  'nenhum/branco',
+  'branco/nulo/nenhum',
+  'voto em branco ou nulo',
 ];
 
 /** Rótulos que representam indecisos / não-resposta. */
@@ -43,10 +51,34 @@ const UNDECIDED_LABELS = [
   'indecisos',
   'nao opinaram',
   'nao opinou',
+  // Grafias COLHIDAS de release real, uma a uma (não especulação):
+  'ns/nr', // Real Time Big Data — abreviação do deck
+  'nao sabem ou preferem nao opinar', // Ipec
+  'nao sabe/nao opinou', // Paraná Pesquisas
+  'nao sabe/nao opina',
+  'nao sabe ou nao opinou',
+  'nao sabe/prefere nao responder',
+  'nao sabe/nao quis responder',
+  'nao declarado',
 ];
 
+/**
+ * Normaliza o rótulo para comparação: sem acento, minúsculo, espaço colapsado —
+ * e SEM espaço em volta de `/`. Essa última regra não é cosmética: institutos
+ * grafam `Nenhum/ Branco/ Nulo` e `NS / NR` com espaço depois da barra, e sem
+ * colapsar isso o rótulo não casa a lista e o item vira CANDIDATO. O sintoma é um
+ * candidato fantasma chamado "Nenhum/ Branco/ Nulo" carregando os votos brancos —
+ * ou, se o alias não resolver, a pesquisa inteira em quarentena. Três institutos
+ * (Ipec, Paraná Pesquisas, Real Time) esbarraram nisto em capturas reais.
+ */
 const normalizeLabel = (label: string): string =>
-  label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export type LineCategory =
   | { kind: 'candidate'; alias: string; valuePct: number }

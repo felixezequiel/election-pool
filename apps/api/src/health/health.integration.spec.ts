@@ -1,4 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { canCreateSymlink, SYMLINK_SKIP_REASON } from '../publish/can-symlink.js';
+
+if (!canCreateSymlink()) {
+  console.warn(`[skip] ${SYMLINK_SKIP_REASON}`);
+}
 import { mkdtempSync, rmSync, mkdirSync, symlinkSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +27,7 @@ let buildDir: string;
 
 const NOW = new Date(Date.parse('2026-08-14T15:00:00-03:00'));
 
-describe('buildHealthSnapshot (staleness, docs/02 §5)', () => {
+describe.skipIf(!canCreateSymlink())('buildHealthSnapshot (staleness, docs/02 §5)', () => {
   beforeAll(async () => {
     // job_runs pode ter lixo de outros testes; isolamos por truncate aqui.
     await db.query(`TRUNCATE job_runs`);

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Recorte REAL — BR-01166/2026</title>
+  </head>
+  <body>
+    <!--
+      RECORTE MÍNIMO de captura REAL (2026-08-17):
+      https://datafolha.folha.uol.com.br/eleicoes/2026/07/em-cenario-estavel-lula-pt-lidera-no-1o-turno-e-2o-turno.shtml
+      sha256 do corpo capturado: a1549807ad6c9500a493c93695474bbbf06219ea254c564faf6f235a4e7d7bfe
+
+      Cadeia de elementos e trechos mantidos BYTE A BYTE. Tudo que o parser não lê
+      para chegar ao veredito foi elidido com "[…]" — R3/docs/08 §2 (repo público:
+      guardamos o mínimo necessário como evidência, nunca a reportagem). Os trechos
+      mantidos são: (a) a oração em que o valor do 1º colocado está preso a uma
+      DESCRIÇÃO e não a um nome; (b) a mesma coisa no 2º turno; (c) o parágrafo de
+      ficha técnica, que carrega o registro TSE lido pelo V6.
+
+      Resultado esperado, idêntico ao da captura completa: V6 confirma
+      BR-01166/2026 e o parse RECUSA por percentual sem candidato nomeado.
+    -->
+    <div class="c-news__body" data-news-content-text data-disable-copy itemprop="articleBody">
+      <p>
+        No cenário que também envolve […], o atual presidente tem 40% das intenções de voto, contra
+        32% do presidenciável do PL. […]
+      </p>
+
+      <p>
+        No segundo turno, Lula tem 48% das intenções de voto, contra 43% do senador pelo PL, com 9%
+        de brancos e nulos e 1% indecisos. […]
+      </p>
+
+      <p>[…] A pesquisa está registrada no <b>TSE: BR-01166/2026.</b></p>
+    </div>
+  </body>
+</html>

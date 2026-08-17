@@ -6,6 +6,13 @@
  * upsert por `tse_id`. NUNCA deleta: registro que sumiu da origem recebe
  * `source_expired_at` e permanece na tabela (docs/04 §2).
  *
+ * A janela de 30 dias NÃO é uma consulta só: o PesqEle corta toda listagem em 50
+ * registros, então o adapter varre a janela em FATIAS de data e alerta quando uma
+ * fatia continua no teto mesmo subdividida (T-28, `docs/OPEN-QUESTIONS.md` Q-11).
+ * O `sweep` do resultado é a contagem verificável dessa varredura: se
+ * `truncagensSuspeitas` for maior que zero, o número colhido é um PISO e falta
+ * registro. União com repetição é segura porque o upsert é idempotente.
+ *
  * Idempotente:
  * - Rodar duas vezes seguidas não duplica nem altera `first_seen_at` (o upsert
  *   preserva o valor existente no conflito).
@@ -26,6 +33,7 @@ import type { PollRegistration } from '@election-pool/contracts/domain';
 import { DISCLOSURE_STATUS } from '@election-pool/contracts/enums';
 import { HttpClient } from '@election-pool/adapters/http-client';
 import { PesqEleClient } from '@election-pool/adapters/pesqele/client';
+import type { PesqEleSweepStats } from '@election-pool/adapters/pesqele/client';
 import { classifyContractor } from '@election-pool/adapters/pesqele/contractor-classifier';
 import type { RawRegistration } from '@election-pool/adapters/pesqele/registration';
 import { configurePgTypes } from '../db/types.js';
@@ -55,11 +63,23 @@ const RACE_LABEL_PREFIX: ReadonlyArray<{ prefix: string; raceId: string }> = [
 
 export interface DiscoveryAlert {
   /**
-   * `empty_search`: a busca no PesqEle voltou VAZIA com filtro válido. É alerta,
-   * não sucesso — foi o silêncio nesse caso que escondeu o bug de T-05 por uma
-   * task inteira (docs/OPEN-QUESTIONS.md Q-09). Não tem `tse_id` associado.
+   * Alertas sem `tse_id` associado, todos vindos do adapter e todos sobre a MESMA
+   * armadilha — sucesso silencioso:
+   *
+   * - `empty_search`: a varredura voltou VAZIA com filtro válido. Foi o silêncio
+   *   nesse caso que escondeu o bug de T-05 por uma task inteira (Q-09).
+   * - `truncation_suspected`: uma fatia de data continuou no teto de registros do
+   *   PesqEle mesmo subdividida até um dia ⇒ há registro que não conseguimos ver e
+   *   o total é um PISO (Q-11, T-28).
+   * - `limit_mismatch`: o teto que o PesqEle declara mudou (ou o aviso sumiu). A
+   *   detecção de truncagem depende desse número.
    */
-  kind: 'unknown_institute' | 'unmapped_race' | 'empty_search';
+  kind:
+    | 'unknown_institute'
+    | 'unmapped_race'
+    | 'empty_search'
+    | 'truncation_suspected'
+    | 'limit_mismatch';
   tseId: string | null;
   detail: string;
 }
@@ -69,6 +89,11 @@ export interface DiscoveryResult {
   upserted: number;
   expired: number;
   alerts: DiscoveryAlert[];
+  /**
+   * Contagem da varredura fatiada do PesqEle (fatias, linhas, distintos, teto).
+   * `null` só quando o adapter não a reportou — nunca zerada por conveniência.
+   */
+  sweep: PesqEleSweepStats | null;
 }
 
 const resolveRaceId = (raceLabel: string): string | null => {
@@ -115,6 +140,7 @@ export class DiscoveryJob {
     const alerts: DiscoveryAlert[] = [];
     const seenTseIds = new Set<string>();
     let upserted = 0;
+    let sweep: PesqEleSweepStats | null = null;
 
     // O detalhe do PesqEle custa 2 requisições por registro e o rate limit é de
     // 1 req/10s (docs/04 §6). Como o registro é imutável depois de publicado, o
@@ -123,7 +149,12 @@ export class DiscoveryJob {
     const pages = this.pesqEle.discover({
       shouldFetchDetalhe: (tseId) => this.isUnknown(tseId),
       onTseIdSeen: (tseId) => seenTseIds.add(tseId),
-      onAlert: (alert) => alerts.push({ kind: 'empty_search', tseId: null, detail: alert.detail }),
+      // O `kind` vem do adapter e é REPASSADO: fixá-lo em `empty_search` (como
+      // era) transformaria uma suspeita de truncagem em "busca vazia" no log.
+      onAlert: (alert) => alerts.push({ kind: alert.kind, tseId: null, detail: alert.detail }),
+      onSweepStats: (stats) => {
+        sweep = stats;
+      },
     });
 
     for await (const rawPage of pages) {
@@ -138,7 +169,7 @@ export class DiscoveryJob {
     if (revived > 0) {
       console.warn(`[discovery] ${revived} registro(s) reapareceram na origem`);
     }
-    return { seen: seenTseIds.size, upserted, expired, alerts };
+    return { seen: seenTseIds.size, upserted, expired, alerts, sweep };
   }
 
   /** `true` se o `tse_id` ainda não existe no banco (⇒ vale pagar o detalhe). */
@@ -300,6 +331,28 @@ export const makePoolTransaction = (pool: pg.Pool): WithTransaction => {
   };
 };
 
+/**
+ * Log da varredura fatiada. É a linha que precisa deixar ÓBVIO se algo foi
+ * perdido: `truncadas>0` significa que existe registro no PesqEle que não
+ * conseguimos ver, e `sweep=ausente` significa que nem sabemos dizer.
+ */
+const logSweep = (sweep: PesqEleSweepStats | null): void => {
+  if (sweep === null) {
+    console.warn('[discovery][sweep] ausente: o adapter não reportou a contagem da varredura');
+    return;
+  }
+  const linha =
+    `[discovery][sweep] janela=${sweep.janela.inicio}..${sweep.janela.fim} ` +
+    `fatias=${sweep.fatias} linhas=${sweep.linhasVistas} distintos=${sweep.tseIdsDistintos} ` +
+    `no_teto=${sweep.fatiasNoTeto} truncadas=${sweep.truncagensSuspeitas} ` +
+    `teto_declarado=${sweep.limiteDeclarado ?? 'ausente'}`;
+  if (sweep.truncagensSuspeitas > 0) {
+    console.warn(`${linha} :: PERDA POSSÍVEL — o total colhido é um PISO`);
+    return;
+  }
+  console.log(linha);
+};
+
 /** Ponto de entrada de `pnpm ingest:discover`. */
 export const runDiscoveryJob = async (): Promise<DiscoveryResult> => {
   configurePgTypes();
@@ -319,6 +372,7 @@ export const runDiscoveryJob = async (): Promise<DiscoveryResult> => {
     console.log(
       `[discovery] seen=${result.seen} upserted=${result.upserted} expired=${result.expired} alerts=${result.alerts.length}`,
     );
+    logSweep(result.sweep);
     for (const alert of result.alerts) {
       console.warn(`[discovery][alert] ${alert.kind} tse_id=${alert.tseId} :: ${alert.detail}`);
     }

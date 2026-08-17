@@ -1,4 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { canCreateSymlink, SYMLINK_SKIP_REASON } from './publish/can-symlink.js';
+
+if (!canCreateSymlink()) {
+  console.warn(`[skip] ${SYMLINK_SKIP_REASON}`);
+}
 import { mkdtempSync, rmSync, mkdirSync, symlinkSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,41 +107,48 @@ describe('createOrchestrator (integration)', () => {
     expect(await orch.jobRuns.countByJobStatus('model', 'ok')).toBe(1);
   });
 
-  it('checkAndAlert dispara alerta de dist velho (aceite T-14: dispara de fato)', async () => {
-    // dist/ symlink cujo build-alvo está envelhecido além do limite de 6h.
-    const build = join(base, 'dist-build');
-    mkdirSync(build, { recursive: true });
-    symlinkSync(build, join(base, 'dist'));
-    const old = (NOW.getTime() - (DIST_STALE_MAX_HOURS + 2) * 3_600_000) / 1000;
-    utimesSync(build, old, old);
+  // Cria o `dist` (symlink) para envelhecê-lo: Windows sem privilégio não roda.
+  it.skipIf(!canCreateSymlink())(
+    'checkAndAlert dispara alerta de dist velho (aceite T-14: dispara de fato)',
+    async () => {
+      // dist/ symlink cujo build-alvo está envelhecido além do limite de 6h.
+      const build = join(base, 'dist-build');
+      mkdirSync(build, { recursive: true });
+      symlinkSync(build, join(base, 'dist'));
+      const old = (NOW.getTime() - (DIST_STALE_MAX_HOURS + 2) * 3_600_000) / 1000;
+      utimesSync(build, old, old);
 
-    const lines: string[] = [];
-    const orch = makeOrch(lines);
-    const fired = await orch.checkAndAlert();
-    expect(fired).toBeGreaterThanOrEqual(1);
-    // O alerta virou log de erro (destino padrão docs/02 §5).
-    const distAlert = lines
-      .map((l) => JSON.parse(l) as { kind?: string })
-      .find((o) => o.kind === 'dist_stale');
-    expect(distAlert).toBeDefined();
-  });
+      const lines: string[] = [];
+      const orch = makeOrch(lines);
+      const fired = await orch.checkAndAlert();
+      expect(fired).toBeGreaterThanOrEqual(1);
+      // O alerta virou log de erro (destino padrão docs/02 §5).
+      const distAlert = lines
+        .map((l) => JSON.parse(l) as { kind?: string })
+        .find((o) => o.kind === 'dist_stale');
+      expect(distAlert).toBeDefined();
+    },
+  );
 
-  it('checkAndAlert dispara alerta de adapter em falha (3 ciclos)', async () => {
-    const build = join(base, 'dist-build');
-    mkdirSync(build, { recursive: true });
-    symlinkSync(build, join(base, 'dist')); // dist fresco (só o adapter deve alertar)
+  it.skipIf(!canCreateSymlink())(
+    'checkAndAlert dispara alerta de adapter em falha (3 ciclos)',
+    async () => {
+      const build = join(base, 'dist-build');
+      mkdirSync(build, { recursive: true });
+      symlinkSync(build, join(base, 'dist')); // dist fresco (só o adapter deve alertar)
 
-    const lines: string[] = [];
-    const orch = makeOrch(lines);
-    orch.failureCounter.recordFailure('nexus');
-    orch.failureCounter.recordFailure('nexus');
-    orch.failureCounter.recordFailure('nexus');
+      const lines: string[] = [];
+      const orch = makeOrch(lines);
+      orch.failureCounter.recordFailure('nexus');
+      orch.failureCounter.recordFailure('nexus');
+      orch.failureCounter.recordFailure('nexus');
 
-    const fired = await orch.checkAndAlert();
-    expect(fired).toBeGreaterThanOrEqual(1);
-    const adapterAlert = lines
-      .map((l) => JSON.parse(l) as { kind?: string })
-      .find((o) => o.kind === 'adapter_failing');
-    expect(adapterAlert).toBeDefined();
-  });
+      const fired = await orch.checkAndAlert();
+      expect(fired).toBeGreaterThanOrEqual(1);
+      const adapterAlert = lines
+        .map((l) => JSON.parse(l) as { kind?: string })
+        .find((o) => o.kind === 'adapter_failing');
+      expect(adapterAlert).toBeDefined();
+    },
+  );
 });

@@ -41,8 +41,28 @@ export const documentContainsTseId = (documentText: string, tseId: string): bool
   // espaço, ou nada. A sequência tem de casar exata (ancorada por não-dígito nas
   // bordas) para não confundir '591' com '06591'.
   const sep = '[\\s\\u2010-\\u2015-]*';
-  const pattern = new RegExp(`(?:BR${sep})?(?<![0-9])${sequence}${sep}/${sep}${year}(?![0-9])`);
-  return pattern.test(documentText);
+  const tail = `${sep}/${sep}${year}(?![0-9])`;
+
+  /**
+   * BURACO CORRIGIDO (achado pelo adapter do Datafolha): o prefixo era OPCIONAL e
+   * o lookbehind só barrava dígito, então um documento contendo `PE-04519/2026`
+   * confirmava um registro `BR-04519/2026`. Não é hipótese: o Datafolha publica o
+   * protocolo nacional e o do TRE na MESMA frase ("BR-07601/2026 … PE-04519/2026"),
+   * então uma pesquisa de Pernambuco podia validar o V6 de um registro nacional
+   * cuja sequência coincidisse — e o V6 é justamente a defesa contra atribuir
+   * números à rodada errada.
+   *
+   * Agora há duas formas aceitas, e nenhuma delas casa um prefixo de UF:
+   *  1. `BR` explícito antes da sequência — sempre aceito;
+   *  2. sequência "nua" (`06591/2026`, como o TSE às vezes grafa), aceita apenas
+   *     quando NÃO vem precedida de duas letras + hífen, que é exatamente a forma
+   *     de um protocolo de UF (`PE-`, `SP-`). Duas letras seguidas de ESPAÇO não
+   *     disparam a exclusão, para "registro 06591/2026" continuar valendo.
+   */
+  const ufPrefix = '(?<![A-Za-z]{2}[-\\u2010-\\u2015])';
+  const withBr = new RegExp(`BR${sep}(?<![0-9])${sequence}${tail}`);
+  const bare = new RegExp(`${ufPrefix}(?<![0-9])${sequence}${tail}`);
+  return withBr.test(documentText) || bare.test(documentText);
 };
 
 /**

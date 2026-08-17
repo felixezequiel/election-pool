@@ -41,7 +41,8 @@
     "./tse-candidatos/matching": "./tse-candidatos/matching.ts",
     "./tse-candidatos/image": "./tse-candidatos/image.ts",
     "./tse-candidatos/constants": "./tse-candidatos/constants.ts",
-    "./tse-candidatos/binary-fetch": "./tse-candidatos/binary-fetch.ts"
+    "./tse-candidatos/binary-fetch": "./tse-candidatos/binary-fetch.ts",
+    "./*": "./*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

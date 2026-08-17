@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  parseColunas,
+  parseLimiteDeclarado,
   parseLinhasLista,
   parsePaginador,
   parseTabelaResultado,
@@ -11,7 +13,7 @@ import {
   __test,
 } from './registration.js';
 import { parsePartialResponse, requireUpdate } from './partial-response.js';
-import { FIELD } from './constants.js';
+import { FIELD, LIMITE_RESULTADO_DECLARADO } from './constants.js';
 
 /**
  * Todas as fixtures são CAPTURAS REAIS do PesqEle (2026-08-16) — ver
@@ -24,6 +26,13 @@ const fixture = (name: string): string =>
 
 const tabelaDaBusca = (): string =>
   requireUpdate(parsePartialResponse(fixture('02-busca-partial-response.xml')), FIELD.form);
+
+/** Mapa de colunas da tela de 30 dias, lido do cabeçalho da própria captura. */
+const colunas30Dias = () => parseColunas(tabelaDaBusca());
+
+/** Tabela da busca por PERÍODO (`listar.xhtml`), captura de 2026-08-17. */
+const tabelaDoPeriodo = (): string =>
+  requireUpdate(parsePartialResponse(fixture('09-busca-periodo-partial-response.xml')), FIELD.form);
 
 describe('lista — parse posicional das 6 colunas reais', () => {
   it('extrai as 10 linhas da página 1 com o tse_id certo', () => {
@@ -54,6 +63,8 @@ describe('lista — parse posicional das 6 colunas reais', () => {
       instituteName:
         'INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS',
       raceLabel: 'Presidente',
+      // A tela de 30 dias não tem coluna "Eleição": null, nunca o valor de outra coluna.
+      eleicaoLabel: null,
       registeredAt: '2026-08-16T00:00:00-03:00',
       abrangenciaLabel: 'BRASIL',
     });
@@ -61,7 +72,7 @@ describe('lista — parse posicional das 6 colunas reais', () => {
 
   it('lê o fragmento só-de-linhas da paginação, com data-ri global', () => {
     const partial = parsePartialResponse(fixture('03-paginacao-pagina2-partial-response.xml'));
-    const linhas = parseLinhasLista(requireUpdate(partial, FIELD.tabela));
+    const linhas = parseLinhasLista(requireUpdate(partial, FIELD.tabela), colunas30Dias());
 
     expect(linhas).toHaveLength(10);
     expect(linhas[0]?.rowIndex).toBe(10); // índice GLOBAL, não o da página
@@ -86,8 +97,8 @@ describe('lista — falha alta (R4)', () => {
       '<td role="gridcell"></td>',
     );
 
-    expect(() => parseLinhasLista(mutado)).toThrow(PesqEleParseError);
-    expect(() => parseLinhasLista(mutado)).toThrow(/abrang/i);
+    expect(() => parseLinhasLista(mutado, colunas30Dias())).toThrow(PesqEleParseError);
+    expect(() => parseLinhasLista(mutado, colunas30Dias())).toThrow(/abrang/i);
   });
 
   it('LANÇA quando a empresa contratada está vazia', () => {
@@ -96,7 +107,7 @@ describe('lista — falha alta (R4)', () => {
       '<td role="gridcell">   </td>',
     );
 
-    expect(() => parseLinhasLista(mutado)).toThrow(/empresa contratada/);
+    expect(() => parseLinhasLista(mutado, colunas30Dias())).toThrow(/empresa contratada/);
   });
 
   it('LANÇA quando a tabela ganha/perde coluna (o parse é posicional)', () => {
@@ -105,13 +116,13 @@ describe('lista — falha alta (R4)', () => {
       '<td role="gridcell">BR-06783/2026</td><td role="gridcell">coluna nova</td>',
     );
 
-    expect(() => parseLinhasLista(mutado)).toThrow(/colunas; esperado 6/);
+    expect(() => parseLinhasLista(mutado, colunas30Dias())).toThrow(/colunas; esperado 6/);
   });
 
   it('LANÇA quando o tse_id não tem o formato canônico', () => {
     const mutado = tabelaDaBusca().replace('BR-06783/2026', 'BR-6783/2026');
 
-    expect(() => parseLinhasLista(mutado)).toThrow(/tse_id inválido/);
+    expect(() => parseLinhasLista(mutado, colunas30Dias())).toThrow(/tse_id inválido/);
   });
 
   it('LANÇA quando o config do paginador some (não assume 1 página)', () => {
@@ -124,6 +135,85 @@ describe('lista — falha alta (R4)', () => {
     const mutado = tabelaDaBusca().replace('rowCount:50', 'rowCount:3');
 
     expect(() => parseTabelaResultado(mutado)).toThrow(/o paginador diz/);
+  });
+});
+
+describe('lista — busca por período (listar.xhtml) tem OUTRAS colunas', () => {
+  it('mapeia as colunas pelo cabeçalho: "Eleição" no lugar de "Cargos"', () => {
+    const periodo = parseColunas(tabelaDoPeriodo());
+    const trintaDias = colunas30Dias();
+
+    expect(periodo).toEqual({
+      tseId: 0,
+      eleicao: 1,
+      empresa: 2,
+      dataRegistro: 3,
+      abrangencia: 4,
+      cargos: null,
+      total: 6,
+    });
+    // A MESMA posição (índice 1) é "Empresa" numa tela e "Eleição" na outra: é
+    // exatamente por isso que o mapa fixo trocava os campos em silêncio.
+    expect(trintaDias.empresa).toBe(1);
+    expect(periodo.eleicao).toBe(1);
+    expect(trintaDias.cargos).toBe(2);
+    expect(periodo.empresa).toBe(2);
+  });
+
+  it('extrai o instituto certo (e não o rótulo da eleição) na busca por período', () => {
+    const { linhas, paginador } = parseTabelaResultado(tabelaDoPeriodo());
+
+    expect(paginador).toEqual({ totalRecords: 13, rowsPerPage: 10, page: 0 });
+    expect(linhas[0]).toEqual({
+      rowIndex: 0,
+      tseId: 'BR-09275/2026',
+      instituteName: 'REAL TIME MIDIA LTDA / REAL TIME BIG DATA',
+      raceLabel: null, // esta tela não tem coluna de cargo — o detalhe tem
+      eleicaoLabel: 'Eleições Gerais 2026',
+      registeredAt: '2026-08-12T00:00:00-03:00',
+      abrangenciaLabel: 'BRASIL',
+    });
+  });
+
+  it('lê o TETO que o PesqEle declara na própria página', () => {
+    expect(parseLimiteDeclarado(tabelaDoPeriodo())).toBe(LIMITE_RESULTADO_DECLARADO);
+  });
+
+  it('a captura da janela de 30 dias inteira volta NO TETO (a prova do bug)', () => {
+    const tabela = parseTabelaResultado(
+      requireUpdate(
+        parsePartialResponse(fixture('11-busca-periodo-no-teto-partial-response.xml')),
+        FIELD.form,
+      ),
+    );
+
+    expect(tabela.paginador.totalRecords).toBe(50);
+    expect(tabela.limiteDeclarado).toBe(50);
+    // E a mesma captura prova que a DataTable NÃO volta na página 0 depois de
+    // paginar: aqui ela voltou na página 1, com o data-ri global 10..19.
+    expect(tabela.paginador.page).toBe(1);
+    expect(tabela.linhas[0]?.rowIndex).toBe(10);
+  });
+
+  it('teto não declarado é null (não vira 0 nem um chute)', () => {
+    const semAviso = tabelaDoPeriodo().replace(/limitado a 50 registros/, 'sem aviso nenhum');
+
+    expect(parseLimiteDeclarado(semAviso)).toBeNull();
+  });
+
+  it('LANÇA se o cabeçalho perder uma coluna obrigatória (nunca deduz por posição)', () => {
+    const mutado = tabelaDoPeriodo().replace(
+      '<span class="ui-column-title">Abrang&#234;ncia</span>',
+      '<span class="ui-column-title">Outra coisa</span>',
+    );
+
+    expect(() => parseColunas(mutado)).toThrow(/Abrangência/);
+  });
+
+  it('LANÇA se o cabeçalho da tabela desaparecer inteiro', () => {
+    const mutado = tabelaDoPeriodo().replace(/ui-column-title/g, 'ui-column-sumiu');
+
+    expect(() => parseColunas(mutado)).toThrow(/Cabeçalho da tabela/);
   });
 });
 

@@ -404,3 +404,301 @@ array vazio, e isso está dito em `docs/BACKTEST-RESULTS.md`). E o número de
 réplicas do bootstrap (400) ficou como constante local em `transitions.ts`: não é
 parâmetro de modelo, mas afeta o erro de Monte Carlo da largura da banda —
 candidata a migrar para `constants.ts` se virar objeto de ajuste.
+
+---
+
+## Q-11 — Os números da Palver só existem como imagem, e o registro dela não está na nossa varredura do PesqEle
+
+**Contexto (T-26).** Segui a receita da Q-09 — capturar a fonte real ANTES de
+escrever parser — e ela encerrou duas dúvidas e abriu duas decisões.
+
+**O que ficou resolvido.** A Palver publica **pesquisa de intenção de voto
+registrada no TSE** (`BR-06596/2026`, divulgação 2026-08-10, campo 03–07/08/2026,
+n=5.000, IC 95%, ± 3 p.p.), e **não** análise de menções. Isso foi verificado na
+metodologia declarada pela própria Palver, não em imprensa: survey online com
+questionário estruturado, amostra não-probabilística recrutada por anúncios em
+redes sociais, formulário de link único, calibração por *raking* (IPF) no `survey`
+do R ancorada em PNADc 2024 e no 2º turno de 2022. A empresa TAMBÉM opera uma
+plataforma de escuta social que monitora menções (inclusive em apps de mensagem) —
+esse produto nunca pode entrar no agregado, e o adapter só toca a pesquisa.
+
+### Decisão 1 — como (e se) obter os percentuais
+
+O relatório da onda (93 páginas, fonte de nível 2, `www.palver.com.br`) tem os
+resultados **RASTERIZADOS**. A camada de texto do PDF traz moldura de página,
+sumário, divisórias de seção, o registro TSE e a prosa de metodologia; as 74
+páginas de resultado devolvem `RESULTADOS` + número da página + banner, e nada
+mais. O repositório aberto `palverdata/pesquisa-palver` versiona a
+*especificação* da onda (config, questionário, margens) e `.gitignore`a os
+resultados de propósito. Ou seja: **não existe saída legível por máquina na fonte
+primária.** O `parse` do adapter LANÇA com diagnóstico explícito, que é o
+comportamento certo por R4.
+
+Opções: (a) **esperar os microdados**, que a Palver se compromete a publicar depois
+do 2º turno — é a única via que não exige nem OCR nem nível 4, e o
+`palver.live.spec.ts` já é o canário que avisa quando a estrutura mudar;
+(b) introduzir **OCR** no pipeline — não está proibido pelo nome, mas é vizinho do
+"sem headless browser na v1" e, pior, transforma incerteza de reconhecimento em
+número de pesquisa, o que colide de frente com R4; (c) tratar a Palver como fonte
+de **nível 4** (imprensa), que docs/04 §1 admite só com aprovação explícita e
+registro aqui.
+
+**Recomendação:** (a). A fonte é uma referência de transparência metodológica e
+vale esperar o dado dela em forma auditável, em vez de reconstruí-lo por OCR ou
+copiar de terceiro. (b) é a que eu recusaria: OCR de gráfico é exatamente onde um
+zero silencioso nasce.
+
+### Decisão 2 — a varredura do PesqEle pode estar cega além de 50 registros
+
+`BR-06596/2026` **não está** na janela de 30 dias do PesqEle. Sonda ao vivo em
+2026-08-17 com o `PesqEleClient` (só listagem): 50 registros nacionais, e a
+sequência 06596 cai no vão entre `BR-06267/2026` e `BR-06773/2026` — ausência de
+verdade, não erro de paginação. Por docs/08 §1 a pesquisa não entra no agregado, e
+o adapter fica corretamente sem uso.
+
+Só que o total voltou **exatamente 50**, o mesmo número da Q-09 — e "exatamente
+redondo" é suspeito. Se o PesqEle limita a listagem a 50, tudo além disso é
+invisível para nós e o `DiscoveryJob` **perde registro sem alertar**: sucesso
+silencioso, a mesma classe de bug da Q-09, um nível acima. Hoje o cliente só
+alerta em `empty_search` (zero resultado), não em "total suspeito de estar
+truncado".
+
+Opções: (a) conferir o `totalRecords` que o paginador do PesqEle declara contra as
+linhas efetivamente colhidas e **alertar** quando o total for igual a um limite
+redondo; (b) usar `/app/pesquisa/listar.xhtml` (busca com período livre) em janelas
+mais estreitas, fatiando por data até nenhuma fatia bater no limite; (c) verificar
+se o TSE publica os registros em dados abertos, contornando o JSF — a Q-09 já
+levanta essa hipótese para outro fim.
+
+**Recomendação:** (a) já, porque é barato e transforma o silêncio em alerta; (b) se
+(a) confirmar o truncamento. Enquanto não se souber, o número de pesquisas "no
+radar" que o site publica é um piso, não um total.
+
+**Decide:** Felix. Dono da implementação de (a)/(b): quem cuida de
+`packages/adapters/pesqele/**` (T-15), não T-26.
+
+### RESULTADO (T-28, 2026-08-17) — a suspeita estava certa: o teto é 50 e era real
+
+A desconfiança da Decisão 2 se confirmou, e o pior cenário era o verdadeiro. Fiz
+(a) **e** (b) — (a) sozinho teria transformado o silêncio em alerta, mas nos
+deixaria vendo 50 de 131.
+
+**Medido ao vivo, eleição 2026 / BRASIL, por data de registro:**
+
+| consulta | "Total de registros" |
+|---|---|
+| `listar30dias.xhtml` (o que o job usava) | **50** |
+| `listar.xhtml`, 01/01/2026–31/12/2026 | **50** |
+| `listar.xhtml`, 19/07/2026–17/08/2026 (a janela de 30 dias) | **50** |
+| `listar.xhtml`, 10/08/2026–12/08/2026 | 13 |
+| **as dez fatias de 3 dias da janela de 30 dias, somadas** | **131** |
+
+Ou seja: a varredura via **50 de 131 registros — 62% de perda, sem um único
+alerta**. E o teto não era dedução nossa: a tela `listar.xhtml` **declara** "O
+resultado da consulta está limitado a 50 registros. Utilize os filtros para
+pesquisar." A tela de 30 dias aplica o mesmo corte **sem dizer nada** — é por isso
+que o adapter migrou de tela.
+
+**O que foi implementado** (detalhe em `tasks/T-28-pesqele-teto-50.md`): varredura
+da janela de 30 dias em fatias de 3 dias por `listar.xhtml`, união por `tse_id`
+(upsert idempotente), subdivisão automática de qualquer fatia que volte no teto e
+`DiscoveryAlert` de `truncation_suspected` quando nem a fatia de um dia escapa —
+mais `limit_mismatch` se o teto declarado mudar ou o aviso sumir. Custo: ~21
+requisições (~3,5 min) por ciclo em vez de ~6 (~1 min).
+
+**Dois achados de brinde, ambos da mesma família de silêncio:**
+
+1. A tabela de `listar.xhtml` tem a coluna **"Eleição" onde a de 30 dias tem
+   "Cargos"**. O parse posicional fixo faria o nome do instituto virar "Eleições
+   Gerais 2026" sem erro nenhum. O mapa de colunas passou a vir do cabeçalho.
+2. A DataTable do PrimeFaces **guarda a página corrente entre buscas**: depois de
+   paginar, a busca seguinte volta em `page:1`. O laço antigo (`for pagina = 1`)
+   pularia a página 0 calado. Está congelado na fixture
+   `11-busca-periodo-no-teto-partial-response.xml`.
+
+**O que continua aberto, e é decisão sua:** se algum dia UM DIA inteiro estourar o
+teto (perto do pleito é plausível), não há mais como estreitar por data. As saídas
+seriam varrer por `formPesquisa:empresas_input` (o formulário tem filtro por
+empresa) — são **2.254 empresas no `<select>`, mais de 6 horas por ciclo a 1
+req/10s, inviável como regime** — ou insistir na hipótese (c), dados abertos do
+TSE, que resolveria Q-09 e Q-11 de uma vez. Até lá, o alerta
+`truncation_suspected` é o que garante que a perda seja VISTA em vez de suposta.
+
+**Sobre `BR-06596/2026`, o registro da Palver que motivou esta questão: era o teto,
+sim, e a varredura fatiada o RECUPEROU.** Execução ao vivo em 2026-08-17 com o
+conserto: `seen=131`, e o `BR-06596/2026` está entre eles — instituto "PALVER
+CONSULTORIA E DESENVOLVIMENTO TECNOLOGICO LTDA. / PALVER", registro em 04/08/2026,
+campo de 03/08 a **09/08**/2026 (a Q-11 dizia 03–07/08 a partir do material da
+própria Palver; o registro do TSE diz 09/08), n = 5.000. Ele estava na janela de 30
+dias o tempo todo — só não estava nos 50 que o servidor devolvia. A hipótese de
+"fora da janela" está descartada, e o valor da correção fica medido: **131 contra 50,
+com o registro concreto que faltava de volta**.
+
+---
+
+## Q-12 — O Ipec está atrás de um desafio Cloudflare: sem headless não há colheita live
+
+> Numeração: escrita em 2026-08-17 por T-23 (adapter Ipec), com sete agentes em
+> paralelo. Se outra task tomou `Q-12` no mesmo ciclo, renumerar — o conteúdo é
+> independente.
+
+**Contexto (T-23).** O adapter do Ipec foi escrito na ordem que a Q-09 pediu:
+investigar a fonte primeiro, congelar captura real, parser depois. A investigação
+achou coisas boas e uma parede.
+
+O bom: o Ipec publica release eleitoral em PDF em
+`ipec-inteligencia.com.br/Repository/Files/<id>/…`, indexado por uma API JSON
+(`/api/arquivo/ListAtivos/`), e **o release traz o número de registro no TSE**
+("registrada no Tribunal Superior Eleitoral sob o protocolo Nº BR-01979/2022").
+O V6 é viável e o parser funciona: extrai 1º turno espontâneo e 2º turno, por
+candidato, de duas capturas reais.
+
+A parede: **o host inteiro responde 403 com `Cf-Mitigated: challenge`** — site,
+`/robots.txt` e API. É desafio gerenciado do Cloudflare, que só passa executando
+JavaScript. A v1 não usa headless browser (`CLAUDE.md` "o que não fazer";
+docs/04 §6). Não é bloqueio ao nosso User-Agent: a única captura de 2026 do
+Internet Archive para o domínio também é 403 — o rastreador do archive.org
+tampouco entra. Verificado ao vivo em `ipec/ipec.live.spec.ts` (opt-in
+`IPEC_LIVE=1`), que é um CANÁRIO: no dia em que o acesso liberar, ele falha e
+avisa.
+
+Consequência: o `parse` está pronto e testado, mas o `discover` aponta para URLs
+que hoje devolvem 403. Pelo docs/04 §6, duas respostas 403 desabilitam a fonte e
+geram alerta — que é o comportamento correto. **Na prática, o Ipec não entra no
+agregado pela via automática.**
+
+**Opções.** (a) Aceitar e mover o Ipec para v1.1, com o adapter no repo pronto
+para o dia em que o bloqueio cair (o canário avisa) — o `parse` continua útil já,
+via `ingest:reparse`, para qualquer release do Ipec que chegue ao blob por outro
+caminho. (b) Abrir exceção de headless browser SÓ para resolver o desafio e obter
+o PDF, mantendo todo o resto da etiqueta — muda uma regra do `CLAUDE.md` e é
+decisão de projeto, não de implementação. (c) Ingestão manual assistida: um
+operador baixa o release e o joga no blob; o `parse` versionado faz o resto, com
+proveniência registrada. (d) Pedir ao Ipec um caminho de acesso (feed, allowlist
+de User-Agent) — é o que docs/08 §3 já pressupõe como postura, e o instituto tem
+interesse em ser citado corretamente.
+
+**Recomendação (minha, T-23):** (a) + (d). (a) porque é honesto e não custa nada:
+o trabalho está feito e o canário monitora. (d) porque é a única saída que
+respeita a etiqueta e resolve de verdade. (b) é o caminho que eu NÃO recomendo:
+resolver desafio de bot é exatamente o oposto de "um crawler educado é um crawler
+que sobrevive" (docs/08 §3), e abriria precedente para todas as fontes.
+
+**Nota menor, mas de contrato.** O release do Ipec publica uma linha `Outros` nas
+tabelas de intenção de voto (agregado dos candidatos que não são listados
+individualmente). O `ParsedPoll` (docs/04 §4) não tem campo para isso: só
+`values`, `blankNullPct` e `undecidedPct`. O parser do Ipec EXCLUI `Outros`, de
+forma declarada e comentada — se entrasse como candidato, toda pesquisa do Ipec
+cairia em quarentena; se virasse brancos/nulos, seria inventar semântica. Vale
+0% nas duas capturas, e a janela do V1 (97–103) absorve quando não valer. Se
+outra fonte publicar `Outros` com peso relevante, aí é preciso um campo no
+contrato — não mexi em `packages/contracts` (congelado).
+
+**Decide:** Felix — (a)/(b)/(c)/(d), e se `Outros` merece campo no contrato.
+
+---
+
+## Q-13 — O `cnt-mda` tem a doença da Q-09 e mais uma: ordem de fluxo em PDF
+
+**Contexto.** O adapter do Real Time Big Data (T-25) descobriu, contra PDFs REAIS,
+que **a ordem do fluxo de texto de um PDF de deck não corresponde à posição na
+página**. Em `BR-06833/2026` a extração por fluxo emite `51%` e depois `37%`, mas o
+`37%` está em x=511,3 (do lado do PRIMEIRO nome) e o `51%` em x=745,1. Extrair por
+fluxo TROCA os dois finalistas do 2º turno.
+
+Por que isso é do pior tipo de bug: a soma continua 100, V1–V7 todas passam, e o
+sinal do erro muda de documento para documento (num estado lidera o finalista da
+esquerda, noutro o da direita), então nem um viés constante que alguém notasse no
+gráfico. É número errado, atribuído ao candidato errado, com registro TSE correto e
+todos os gates verdes.
+
+**A dívida no `cnt-mda`.** Duas coisas verificadas hoje:
+
+1. `packages/adapters/cnt-mda/pdf.ts` extrai com
+   `extractText(pdf, { mergePages: true })` — **ordem de fluxo, zero coordenada**.
+   Está exposto exatamente à troca descrita acima.
+2. `packages/adapters/cnt-mda/__fixtures__/` contém APENAS `make-pdf.ts` (gerador
+   SINTÉTICO) e um README. **Não existe uma única captura real de PDF da CNT/MDA.**
+   É a Q-09 outra vez: os testes provam que o parser lê a fixture que o próprio
+   autor inventou, não que ele lê a CNT/MDA.
+
+Ou seja: não sabemos se o `cnt-mda` traz número certo. Ele está LIGADO no
+`AdapterRegistry` desde T-06. Hoje não há exposição real (a CNT/MDA não tem
+registro presidencial na janela corrente), mas isso é sorte, não desenho.
+
+**O que já existe de solução.** T-25 escreveu `packages/adapters/realtime/pdf-layout.ts`:
+extração POSICIONADA (dedupe da camada duplicada, faixas por baseline, junção de
+palavras por vão medido, pareamento por `x`), com duas fixtures em direções opostas
+travando o comportamento. É a ferramenta certa e está no diretório errado — deveria
+morar em `base/` e servir todo adapter de PDF.
+
+**Opções.** (a) Promover `pdf-layout.ts` para `base/`, migrar o `cnt-mda` para ele
+e capturar um PDF real da CNT/MDA como fixture antes de confiar em qualquer número
+— a ordem que a Q-09 ensinou. (b) Manter o `cnt-mda` como está e DESLIGÁ-LO do
+registry até haver captura real, para não publicar número que não sabemos ler.
+(c) Deixar como está e aceitar o risco.
+
+**Recomendação:** (a), e (b) no intervalo. (c) não é defensável: o projeto existe
+para não publicar número errado, e este é um caminho conhecido para publicar número
+errado com todos os gates verdes.
+
+**Decide:** Felix. Vale notar que (a) é trabalho de meio dia e elimina a classe
+inteira para os adapters de PDF que vierem.
+
+---
+
+## Q-14 — O modelo agrupava 1º turno ESPONTÂNEO com ESTIMULADO (desvio de docs/01 §3)
+
+**Como apareceu.** Na primeira vez que dado real de 1º turno **espontâneo** chegou
+ao modelo (rodadas do Real Time Big Data, 2026-08-17), `runModel` LANÇOU:
+
+```
+sum constraint violated at 2026-08-01: tracked μ sum 73.61 vs target 100.00
+(deviation 26.39 p.p. > 3); likely ingestion error (docs/01 §4.3)
+```
+
+A restrição de soma fez o trabalho dela. Mas a causa não era erro de ingestão: era
+o modelo somando peras com maçãs.
+
+**O desvio.** `packages/model/index.ts` filtrava o 1º turno como
+`t1Estimulado || t1Espontaneo` em três lugares (partição, série corrigida e
+`isFirstRoundKind` para o eleitorado). Ou seja, punha as duas medidas na MESMA série
+latente.
+
+São medidas diferentes por construção. Na rodada `BR-06833/2026`, medida pelo mesmo
+instituto no mesmo campo:
+
+| cenário | candidatos | branco/nulo | não-sabe |
+|---|---|---|---|
+| espontâneo (pergunta aberta) | **51** | 12 | 37 |
+| estimulado (lista de nomes) | **93** | 4 | 3 |
+
+Agrupar as duas produz uma série latente que não mede nada: o mesmo candidato
+aparece com dois valores incomparáveis no mesmo dia, e a soma dos rastreados fica
+onde caiu a mistura — daí 73,61.
+
+**Por que isto NÃO é uma questão de metodologia, e sim conformidade.** `docs/01` §3
+diz, na primeira linha: *"Uma pesquisa publica múltiplos cenários **estimulados**.
+Precisamos de uma regra determinística, senão comparamos coisas diferentes."* Toda a
+regra de canônico de 1º turno é escrita sobre cenário estimulado. A metodologia
+nunca previu espontâneo alimentando `μ_t` — o código é que divergiu do documento, e
+pela hierarquia do CLAUDE.md o documento vence. Não houve escolha metodológica minha
+aqui, e nenhum prior foi tocado (R1).
+
+**Correção aplicada.** O 1º turno do modelo passa a ser SÓ `t1_estimulado`, nos três
+pontos. O espontâneo continua sendo colhido, validado e PERSISTIDO (`poll_scenarios`
+guarda os dois) — ele só não entra na série latente. É dado bom para diagnóstico
+(quanto do eleitorado não cita nome sem ajuda é informação real), e há lugar para
+isso quando alguém quiser exibi-lo.
+
+**Verificação de que não mexeu no que já existia:** o teste de isolamento de
+`packages/model/__tests__/isolation.spec.ts` compara `μ_t` e house effects BIT A BIT
+contra um baseline congelado. Ele continua passando — a fixture de 2022 só tem
+cenário estimulado, então a saída para dado pré-existente é idêntica. Por isso NÃO
+houve incremento de `MODEL_VERSION`: não há mudança de comportamento sobre entrada
+válida, e sim recusa de uma entrada que nunca deveria ter sido misturada.
+
+**Decide:** nada pendente na correção. O que sobra para o Felix é de produto: **onde
+exibir a série espontânea**, que hoje é colhida e não aparece em lugar nenhum. É a
+medida mais honesta de "quanto do eleitorado ainda não tem candidato" — mais do que
+o não-sabe da estimulada, porque na estimulada a lista já ancora a resposta.

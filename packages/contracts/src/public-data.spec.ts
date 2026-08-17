@@ -91,6 +91,25 @@ const validFixture: PublicData = {
       estimable: true,
     },
   ],
+  /**
+   * Desengajamento na espontânea (Q-14). Os números refletem a diferença REAL
+   * medida em `BR-06833/2026`: na pergunta aberta 37 p.p. não citam nome nenhum,
+   * contra 3 p.p. de não-sabe na estimulada (que está em `latent.electorate`).
+   */
+  spontaneous: {
+    series: [
+      {
+        date: '2026-08-13',
+        noCandidate: { mean: 37.0, lo90: 34.2, hi90: 39.8 },
+        blankNull: { mean: 12.0, lo90: 10.1, hi90: 13.9 },
+        named: { mean: 51.0, lo90: 46.3, hi90: 55.7 },
+      },
+      // Ponta sem medida ⇒ null nas três, jamais zero (R4).
+      { date: '2026-08-06', noCandidate: null, blankNull: null, named: null },
+    ],
+    pollCount: 2,
+    instituteCount: 1,
+  },
   transitions: {
     states: [
       { id: 'cand-a', kind: 'candidate', displayName: 'Candidato A' },

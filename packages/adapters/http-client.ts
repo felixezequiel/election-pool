@@ -79,7 +79,24 @@ export interface FetchResponse {
   /** `true` quando o servidor respondeu 304 (nada mudou). */
   notModified: boolean;
   headers: Headers;
+  /**
+   * Corpo decodificado como UTF-8. Use SÓ para fonte de texto (HTML, XML, JSON).
+   * Para binário, use `bytes`: passar isto adiante DESTRÓI o arquivo (ver `bytes`).
+   */
   body: string;
+  /**
+   * Corpo em BYTES, exatamente como veio do servidor.
+   *
+   * Existe porque a alternativa corrompia PDF em silêncio: o corpo era decodificado
+   * como UTF-8 e o `RawStorage` refazia `Buffer.from(body, 'utf8')`, o que troca
+   * toda sequência inválida por U+FFFD — irreversível. O sintoma era o adapter
+   * reclamando de "PDF sem texto extraível", como se a fonte tivesse publicado uma
+   * varredura de imagem; o arquivo tinha sido destruído no caminho de entrada.
+   * Achado ao ligar o adapter do Real Time Big Data, cujo PDF tem texto de verdade.
+   *
+   * Vazio em 304 (não há corpo).
+   */
+  bytes: Uint8Array;
   url: string;
 }
 
@@ -97,6 +114,13 @@ export type FetchLike = (
   status: number;
   headers: Headers;
   url: string;
+  /**
+   * `arrayBuffer` é a fonte da verdade: o cliente lê os bytes e decodifica o texto
+   * a partir deles. `text` fica na assinatura porque mocks antigos de teste o
+   * fornecem — quando `arrayBuffer` faltar, o cliente cai em `text`, e nesse
+   * caminho binário NÃO sobrevive (é aceitável: só teste usa mock sem bytes).
+   */
+  arrayBuffer?: () => Promise<ArrayBuffer>;
   text: () => Promise<string>;
 }>;
 
@@ -109,6 +133,21 @@ interface HttpClientDeps {
 }
 
 const isRetryableStatus = (status: number): boolean => status >= 500 && status < 600;
+
+/**
+ * Bytes do corpo, lidos UMA vez. 304 não tem corpo. Mock de teste que só
+ * implementa `text()` cai no caminho de texto — binário não sobrevive ali, o que é
+ * aceitável porque `fetch` real sempre traz `arrayBuffer`.
+ */
+const readBodyBytes = async (res: {
+  status: number;
+  arrayBuffer?: () => Promise<ArrayBuffer>;
+  text: () => Promise<string>;
+}): Promise<Uint8Array> => {
+  if (res.status === 304) return new Uint8Array();
+  if (res.arrayBuffer !== undefined) return new Uint8Array(await res.arrayBuffer());
+  return new Uint8Array(Buffer.from(await res.text(), 'utf8'));
+};
 
 export class HttpClient {
   private readonly fetchImpl: FetchLike;
@@ -162,12 +201,15 @@ export class HttpClient {
           if (attempt < MAX_RETRIES) continue;
           break;
         }
-        const bodyText = res.status === 304 ? '' : await res.text();
+        // Lê UMA vez em bytes e decodifica a partir deles: o corpo de uma resposta
+        // só pode ser consumido uma vez, e é a forma binária que preserva tudo.
+        const raw = await readBodyBytes(res);
         return {
           status: res.status,
           notModified: res.status === 304,
           headers: res.headers,
-          body: bodyText,
+          body: new TextDecoder('utf-8').decode(raw),
+          bytes: raw,
           url: res.url.length > 0 ? res.url : req.url,
         };
       } catch (err) {

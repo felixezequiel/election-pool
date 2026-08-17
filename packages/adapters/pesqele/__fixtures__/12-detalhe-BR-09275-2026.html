@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head id="j_id_3"><link type="text/css" rel="stylesheet" href="/javax.faces.resource/theme.css.xhtml?ln=primefaces-aristo" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/bootstrap/bootstrap.min.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/timeline/timeline.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/chart/morris.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/sepel2.site.base.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/pesqele.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/font-awesome.min.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/components.css.xhtml?ln=primefaces&amp;v=8.0" />
+			<title></title>
+			<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+			<link rel="shortcut icon" href="http://www.tse.jus.br/internet/img/favicon.ico" type="image/x-icon" />
+			<!-- Bootstrap CSS -->
+		    <!-- Timeline CSS -->
+		    <!-- Morris Charts CSS -->
+			<!-- Cand CSS -->
+		    <!-- Custom Fonts --></head><body><div id="j_id_g" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="j_id_g_title" class="ui-dialog-title"></span></div><div class="ui-dialog-content ui-widget-content" id="j_id_g_content"><span id="groupAviso">
+					<div class="modal-body" align="center"><img id="j_id_j" src="/javax.faces.resource/wait.gif.xhtml?ln=images" alt="" /><img id="j_id_k" width="20" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><label id="j_id_l" class="ui-outputlabel ui-widget">Por favor, aguarde...</label>
+					</div></span></div></div>
+			<!-- CABE�ALHO --><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+		<div id="siteCabecalho" class="navbar navbar-default navbar-fixed-top site-cabecalho">
+			<div class="container-fluid">
+				<div class="navbar-header">
+					<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#siteCabecalhoMenu" aria-expanded="false" aria-controls="navbar">
+						<span class="sr-only">Toggle navigation</span> <span class="icon-bar"></span> <span class="icon-bar"></span> <span class="icon-bar"></span>
+					</button>
+					<a class="navbar-brand" href=""><img id="j_id_s" src="/javax.faces.resource/topo-tse.png.xhtml?ln=images" class="site-cabecalho-logo" alt="Logo do TSE" /> 
+							<span class="site-cabecalho-titulo">PesqEle P&#250;blico</span>
+							<span class="site-cabecalho-titulo-vermelho"></span>
+					</a>
+					<div class="site-versao-nome">3.9.2</div>
+				</div>
+			</div>
+		</div><script type="text/javascript" src="/javax.faces.resource/jquery/jquery.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/jquery/jquery-plugins.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/core.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/components.js.xhtml?ln=primefaces&amp;v=8.0"></script><script id="d954facb-9de2-45bd-9ac7-224d520b480f" type="text/javascript">var pf=window.PrimeFaces;if(pf){pf.settings.locale='pt_BR';pf.settings.partialSubmit=true;};
+pf.cw("Dialog","barraProgresso",{id:"j_id_g",modal:true,width:"300",height:"120",appendTo:"@(body)"});if(window.$){$(PrimeFaces.escapeClientId("d954facb-9de2-45bd-9ac7-224d520b480f")).remove();}</script></body>
+</html>
+			<div id="sitePrincipal" class="container-fluid site-principal">
+				<div id="wrapper">
+					<div id="page-content-wrapper"><div id="msg" class="ui-messages ui-widget" aria-live="polite"></div>
+		<style type="text/css">
+			.site-principal { padding-top: 72px; }
+		</style><form id="form" name="form" method="post" action="/app/pesquisa/detalhar.xhtml" enctype="application/x-www-form-urlencoded">
+			<p style="float: right;"><button id="form:j_id_14" name="form:j_id_14" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="window.history.back();" type="button"><span class="ui-button-icon-left ui-icon ui-c ui-icon-back"></span><span class="ui-button-text ui-c">Voltar</span></button><img id="form:j_id_15" width="5px;" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><button id="form:j_id_16" name="form:j_id_16" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="imprimir();" type="button"><span class="ui-button-icon-left ui-icon ui-c ui-icon-print"></span><span class="ui-button-text ui-c">Imprimir</span></button>
+			</p>
+			<br /><br /><fieldset id="form:detalhes" class="ui-fieldset ui-widget ui-widget-content ui-corner-all ui-hidden-container" style="margin-left: 10px;" data-widget="widget_form_detalhes"><div class="ui-fieldset-content">
+				<div id="print">
+					<h4 align="center">Visualizar Pesquisa Eleitoral - BR-09275/2026</h4>
+					<h5 align="center">BRASIL
+					</h5><table id="form:camposPesquisa" class="ui-panelgrid ui-widget" role="grid"><tbody><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNumeroProtocolo">N&#250;mero de identifica&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNumeroProtocolo">BR-09275/2026</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataRegistro">Data de registro:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataRegistro">12/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDescricaoCargos">Cargo(s):</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDescricaoCargos">Presidente</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataPublicacaoPesquisa">Data de divulga&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataPublicacaoPesquisa">18/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEmpresa">Empresa contratada/ Nome Fantasia:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEmpresa">CNPJ: 22345021000181 - 
+							REAL TIME MIDIA LTDA / REAL TIME BIG DATA</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEleicao">Elei&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEleicao">Elei&#231;&#245;es Gerais 2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEntrevistados">Entrevistados:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEntrevistados">1600</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataInicio">Data de in&#237;cio da pesquisa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataInicio">13/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataFinal">Data de t&#233;rmino da pesquisa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataFinal">17/08/2026</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNomeEstatistico">Estat&#237;stico respons&#225;vel:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNomeEstatistico">Isabela Zara Cremoneze</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNumeroRegistroEstatistico">Registro do estat&#237;stico no CONRE:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNumeroRegistroEstatistico">10839</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblTipoVinculoEstatisticoDesc">Tipo de v&#237;nculo do(a) estat&#237;stico(a) com a empresa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblTipoVinculoEstatisticoDesc">Contratado(a)</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25"><label id="form:j_id_28" class="ui-outputlabel ui-widget">Valor:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25">R$&#160;24.000,00</td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25"><label id="form:j_id_2a" class="ui-outputlabel ui-widget">Pesquisa &#233; realizada com recursos pr&#243;prios?</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25">Sim (Nota fiscal n&#227;o exigida)</td></tr></tbody></table>
+					<br /><table><tbody><tr><td class="colunas"><label id="form:j_id_2e" class="ui-outputlabel ui-widget">Contratante(s): </label></td><td><img id="form:j_id_2g" width="5px; " height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /> CNPJ: 22345021000181 - REAL TIME MIDIA LTDA</td></tr><tr><td class="colunas"><label id="form:j_id_2k" class="ui-outputlabel ui-widget">Pagante(s) do trabalho: </label></td><td><img id="form:j_id_2m" width="5px; " height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /> CNPJ: 22345021000181 - REAL TIME MIDIA LTDA</td></tr></tbody></table>
+					<br /><table><tbody><tr><td>
+						<label for="lblMetodologia">Metodologia de pesquisa:</label></td></tr><tr><td><span id="form:lblMetodologia">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblPlanoAmostral">Plano amostral e pondera&#231;&#227;o quanto a sexo, idade, grau de instru&#231;&#227;o e n&#237;vel econ&#244;mico do entrevistado; intervalo de confian&#231;a e margem de erro:</label></td></tr><tr><td><span id="form:lblPlanoAmostral">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblSistemaControle">Sistema interno de controle e verifica&#231;&#227;o, confer&#234;ncia e fiscaliza&#231;&#227;o da coleta de dados e do trabalho de campo:</label></td></tr><tr><td><span id="form:lblSistemaControle">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblDadoMunicipio">
+						Dados relativos aos munic&#237;pios e bairros abrangidos pela pesquisa. Na aus&#234;ncia de delimita&#231;&#227;o do bairro, 
+						ser&#225; identificada a &#225;rea em que foi realizada a pesquisa(conforme &#167;7&#186;. do art. 2&#186;. da Resolu&#231;&#227;o-TSE n&#186;. 23.600/2019, 
+						A partir do dia em que a pesquisa puder ser divulgada e at&#233; o dia seguinte, o registro dever&#225; ser complementado, sob pena de ser a pesquisa considerada n&#227;o registrada; 
+						na aus&#234;ncia de delimita&#231;&#227;o do bairro, ser&#225; identificada a &#225;rea em que foi realizada):
+						</label></td></tr><tr><td><span id="form:lblDadoMunicipio">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr></tbody></table>
+					<br />					
+					<br />
+					<br />
+						<div class="ui-g">
+							<div class="ui-g-12" style="background: #cccccc; font-weight: 800;">
+								<div class="ui-g-10" style="text-align: center; font-size: 14px">
+									Demonstrativo do resultado do exerc&#237;cio (arquivo DRE)
+								</div>
+								<div class="ui-g-2" style="text-align: left;">
+								    <!-- Hist�rico --><a id="form:historicoDre" href="#" class="ui-commandlink ui-widget btn btn-info btn-sm" aria-label="Visualizar hist&#243;rico de DRE" onclick="PrimeFaces.ab({s:&quot;form:historicoDre&quot;,f:&quot;form&quot;,onst:function(cfg){PF('barraProgresso').show();;},onsu:function(data,status,xhr){PF('barraProgresso').hide();;}});return false;" style="color: white; cursor: pointer;" title="Visualizar hist&#243;rico de DRE">
+										<span class="glyphicon glyphicon-list" aria-hidden="true"><img id="form:j_id_3x" width="5px;" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><label id="form:j_id_3y" class="ui-outputlabel ui-widget">Visualizar Hist&#243;rico</label>
+										</span></a>
+								</div>
+							</div>	
+							<div class="ui-g-12" style="background: #eeeeee">
+									<div class="ui-g-12" style="background: #cccccc">
+										<div class="ui-g-10"><label style="margin:1px" for="form:j_id_41:0:btnArquivoDRE">Nome do arquivo</label>
+										</div>
+										<div class="ui-g-2"><label style="margin:1px" for="form:j_id_41:0:btnArquivoDRE">A&#231;&#245;es</label>
+										</div>
+									</div>
+									<div class="ui-g-10">D. R. E. - REAL TIME LTDA - Assinado.pdf
+									</div>
+									
+									<div class="ui-g-2"><button id="form:j_id_41:0:btnArquivoDRE" name="form:j_id_41:0:btnArquivoDRE" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only btn btn-default btn-sm" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank'},function(event){}]);" alt="Abrir arquivo DRE" title="Visualizar DRE" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-document"></span><span class="ui-button-text ui-c">Visualizar DRE</span></button>
+									</div>
+							</div>
+						</div>
+				</div>
+				<br /><table><tbody><tr><td><button id="form:arquivoQuestionario" name="form:arquivoQuestionario" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar question&#225;rio completo aplicado ou a ser aplicado.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoBairros" name="form:arquivoBairros" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar arquivo com detalhamento de bairros/munic&#237;pios.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoAssinado" name="form:arquivoAssinado" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar declara&#231;&#227;o assinada pelo respons&#225;vel t&#233;cnico.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoResultado" name="form:arquivoResultado" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar arquivo relat&#243;rio completo com o resultado de pesquisa.</span></button></td></tr><tr><td>
+				    <br /></td></tr></tbody></table></div></fieldset>
+			<br /><br /><input type="hidden" name="form_SUBMIT" value="1" /><input type="hidden" name="javax.faces.ViewState" id="j_id__v_0:javax.faces.ViewState:1" value="OWNkOTM1MzJiN2I5YmRlNTAwMDAwMDAy" autocomplete="off" /></form>
+					</div>
+				</div>
+			</div>
+        <div id="siteRodape" class="site-rodape site-rodape-sombra">
+            PesqEle - Sistema de Registro de Pesquisas Eleitorais, Vers&#227;o: 3.9.2, SECINP - Tribunal Superior Eleitoral.
+        </div>
+		    <!-- Custom Theme JavaScript -->
+			<!-- Bootstrap JavaScript --><script type="text/javascript" src="/javax.faces.resource/jquery/jquery.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/jquery/jquery-plugins.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/core.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/components.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/js/base/cand.js.xhtml"></script><script type="text/javascript" src="/javax.faces.resource/js/bootstrap/bootstrap.min.js.xhtml"></script><script id="12a8b8cd-9571-452b-b603-e6a7e0e47fe9" type="text/javascript">var pf=window.PrimeFaces;if(pf){pf.settings.locale='pt_BR';pf.settings.partialSubmit=true;};
+pf.cw("Dialog","barraProgresso",{id:"j_id_g",modal:true,width:"300",height:"120",appendTo:"@(body)"});
+pf.cw("CommandButton","widget_form_j_id_14",{id:"form:j_id_14"});
+pf.cw("CommandButton","widget_form_j_id_16",{id:"form:j_id_16"});
+pf.cw("CommandButton","widget_form_j_id_41_0_btnArquivoDRE",{id:"form:j_id_41:0:btnArquivoDRE"});
+pf.cw("CommandButton","widget_form_arquivoQuestionario",{id:"form:arquivoQuestionario"});
+pf.cw("CommandButton","widget_form_arquivoBairros",{id:"form:arquivoBairros"});
+pf.cw("CommandButton","widget_form_arquivoAssinado",{id:"form:arquivoAssinado"});
+pf.cw("CommandButton","widget_form_arquivoResultado",{id:"form:arquivoResultado"});
+pf.cw("Fieldset","widget_form_detalhes",{id:"form:detalhes"});if(window.$){$(PrimeFaces.escapeClientId("12a8b8cd-9571-452b-b603-e6a7e0e47fe9")).remove();}</script></body>
+</html>

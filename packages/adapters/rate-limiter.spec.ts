@@ -80,3 +80,52 @@ describe('PerHostRateLimiter', () => {
     expect(sleeps).toEqual([10_000, 10_000]);
   });
 });
+
+describe('a colheita em paralelo entre institutos não afrouxa a etiqueta', () => {
+  /**
+   * Depois de o HarvestJob passar a colher institutos em PARALELO (um grupo por
+   * instituto, serial dentro do grupo), a garantia de docs/04 §6 passou a depender
+   * inteiramente deste limitador. Estes dois testes fixam a invariante que
+   * sustenta a mudança: hosts distintos avançam juntos, o mesmo host nunca.
+   */
+  it('dois hosts distintos são liberados SEM esperar um pelo outro', async () => {
+    let now = 0;
+    const clock = {
+      now: () => now,
+      sleep: (ms: number) => {
+        now += ms;
+        return Promise.resolve();
+      },
+    };
+    const limiter = new PerHostRateLimiter(clock, 10_000);
+
+    await Promise.all([
+      limiter.acquire('https://a.example/x'),
+      limiter.acquire('https://b.example/y'),
+    ]);
+
+    // Nenhum sleep foi necessário: hosts diferentes não formam fila entre si.
+    expect(now).toBe(0);
+  });
+
+  it('o MESMO host espera o intervalo inteiro, mesmo em chamadas concorrentes', async () => {
+    let now = 0;
+    const clock = {
+      now: () => now,
+      sleep: (ms: number) => {
+        now += ms;
+        return Promise.resolve();
+      },
+    };
+    const limiter = new PerHostRateLimiter(clock, 10_000);
+
+    await Promise.all([
+      limiter.acquire('https://a.example/1'),
+      limiter.acquire('https://a.example/2'),
+      limiter.acquire('https://a.example/3'),
+    ]);
+
+    // 3 requisições ao mesmo host ⇒ 2 esperas de 10s entre elas.
+    expect(now).toBe(20_000);
+  });
+});

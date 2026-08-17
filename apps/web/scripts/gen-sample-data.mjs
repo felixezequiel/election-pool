@@ -14,7 +14,9 @@
  *   - `latent.electorate` — branco/nulo e não-sabe como séries, com pontos
  *     `null` DE PROPÓSITO (ausência de medida ≠ zero, R4);
  *   - `polls[].blankNullPct` / `undecidedPct` — alguns declarados, alguns `null`;
- *   - `transitions` — três passos, com pelo menos um fluxo `notIdentifiable`.
+ *   - `transitions` — três passos, com pelo menos um fluxo `notIdentifiable`;
+ *   - `spontaneous` — a série da pergunta ESPONTÂNEA (Q-14), com pontos `null` e
+ *     com `named` (complemento aritmético) ausente quando falta uma das pontas.
  *
  * Como rodar (o pacote de contratos exporta `.ts`, então precisa de loader de TS):
  *   node ../../node_modules/.pnpm/tsx@4.19.2/node_modules/tsx/dist/cli.mjs \
@@ -31,6 +33,7 @@ import { dirname, join } from 'node:path';
 import { publicDataSchema } from '@election-pool/contracts/public-data';
 import {
   MODEL_VERSION,
+  PCT_MAX,
   PUBLIC_DATA_SCHEMA_VERSION,
   TRANSITION_STICKINESS_PRIOR,
   UPDATE_INTERVAL_MINUTES,
@@ -149,6 +152,67 @@ for (let i = 0; i < N_POINTS; i++) {
     undecided: UNDECIDED_MISSING.has(i) ? null : band(LEVELS['nao-sabe'](i), 2.1),
   });
 }
+
+/**
+ * Cenário ESPONTÂNEO (docs/OPEN-QUESTIONS Q-14) — a MESMA intenção de voto, mas
+ * com pergunta aberta, sem lista de nomes. É outra grandeza, não outra amostra:
+ * sem a lista para reconhecer, quem não tem candidato próprio não cita ninguém.
+ *
+ * Os níveis abaixo reproduzem a ORDEM DE GRANDEZA da medição real de
+ * BR-06833/2026 (37 não citam nome, 12 branco/nulo, 51 citam alguém), porque a
+ * amostra é o que se olha para conferir o visual: se ela trouxesse 5 em vez de
+ * 37, o contraste que a seção existe para mostrar não apareceria em
+ * desenvolvimento. Os nomes seguem fictícios — nenhum presidenciável real.
+ *
+ * Menos institutos publicam espontânea que estimulada, e é por isso que a série
+ * tem BURACOS de propósito: datas em que ninguém mediu (`null`, nunca zero, R4).
+ * Em i=11 as duas pontas faltam e i=12 fica isolado — o caso que obriga a UI a
+ * desenhar segmento de um ponto só sem interpolar por cima do vão.
+ */
+const SPONTANEOUS_NO_CANDIDATE = (i) => 39 - 0.15 * i;
+const SPONTANEOUS_BLANK_NULL = (i) => 11 + 0.05 * i;
+const SPONT_NO_CANDIDATE_MISSING = new Set([1, 5, 11]);
+const SPONT_BLANK_NULL_MISSING = new Set([1, 5, 6, 11]);
+/** Semilarguras: a espontânea tem menos pesquisas, então banda mais larga. */
+const SPONT_NO_CANDIDATE_HALF = 2.6;
+const SPONT_BLANK_NULL_HALF = 1.5;
+
+const spontaneousSeries = [];
+for (let i = 0; i < N_POINTS; i++) {
+  const noCandidate = SPONT_NO_CANDIDATE_MISSING.has(i)
+    ? null
+    : band(SPONTANEOUS_NO_CANDIDATE(i), SPONT_NO_CANDIDATE_HALF);
+  const blankNull = SPONT_BLANK_NULL_MISSING.has(i)
+    ? null
+    : band(SPONTANEOUS_BLANK_NULL(i), SPONT_BLANK_NULL_HALF);
+  /**
+   * `named` é ARITMÉTICA, não medida independente: complemento para 100 das duas
+   * pontas medidas, com a banda somada de forma CONSERVADORA (as duas incertezas
+   * se acumulam, nunca se cancelam). Sem as duas pontas não há complemento —
+   * `null`, jamais um zero que afirmaria "ninguém citou nome" (R4).
+   */
+  const named =
+    noCandidate && blankNull
+      ? {
+          mean: round1(PCT_MAX - noCandidate.mean - blankNull.mean),
+          lo90: round1(PCT_MAX - noCandidate.hi90 - blankNull.hi90),
+          hi90: round1(PCT_MAX - noCandidate.lo90 - blankNull.lo90),
+        }
+      : null;
+  spontaneousSeries.push({ date: isoDay(i * 7), noCandidate, blankNull, named });
+}
+
+/**
+ * Proveniência da afirmação (R6): poucas pesquisas e poucos institutos, como no
+ * mundo real — cenário espontâneo é minoria. A UI é obrigada a exibir os dois
+ * números junto do "mais de um terço", porque afirmação forte precisa dizer sobre
+ * quantas pesquisas se sustenta.
+ */
+const spontaneous = {
+  series: spontaneousSeries,
+  pollCount: 6,
+  instituteCount: 2,
+};
 
 const runoffSeries = [];
 for (let i = 0; i < N_POINTS; i++) {
@@ -397,6 +461,7 @@ const data = {
     runoffs: [{ pair: ['cand-a', 'cand-b'], series: runoffSeries }],
     electorate,
   },
+  spontaneous,
   polls,
   houseEffects,
   transitions,

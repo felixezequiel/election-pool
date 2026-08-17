@@ -97,11 +97,13 @@ export function runModel(input: ModelInput): ModelOutput {
   const observations = [...input.observations].sort(compareObservations);
 
   // 1. Particiona por turno. 1º turno = cenários t1_*; 2º turno = t2 por par.
-  const firstRoundObs = observations.filter(
-    (o) =>
-      o.scenarioKind === SCENARIO_KIND.t1Estimulado ||
-      o.scenarioKind === SCENARIO_KIND.t1Espontaneo,
-  );
+  // SÓ estimulado (docs/01 §3, ver Q-14). Espontâneo é outra MEDIDA: na mesma
+  // rodada, os candidatos somam ~51 na pergunta aberta e ~93 na lista de nomes.
+  // Misturar os dois na mesma série latente põe dois valores incomparáveis do mesmo
+  // candidato no mesmo dia — e foi o que fez a restrição de soma (§4.3) LANÇAR na
+  // primeira vez que dado espontâneo real chegou aqui. O espontâneo continua
+  // colhido e persistido; só não alimenta μ_t.
+  const firstRoundObs = observations.filter((o) => o.scenarioKind === SCENARIO_KIND.t1Estimulado);
   const runoffGroups = groupRunoffs(observations);
 
   // 2+3. House effects estimados conjuntamente com μ_t sobre TODO o ciclo
@@ -120,9 +122,7 @@ export function runModel(input: ModelInput): ModelOutput {
 
   // 4. Séries latentes finais, já normalizadas pela restrição de soma (§4.3).
   const firstRoundCorrected = corrected.filter(
-    (o) =>
-      o.scenarioKind === SCENARIO_KIND.t1Estimulado ||
-      o.scenarioKind === SCENARIO_KIND.t1Espontaneo,
+    (o) => o.scenarioKind === SCENARIO_KIND.t1Estimulado,
   );
   const firstRoundLatent = runKalman(firstRoundCorrected, { referenceDate });
   const firstRoundSeries = buildDatedSeries(firstRoundLatent, firstRoundObs);
@@ -155,6 +155,29 @@ export function runModel(input: ModelInput): ModelOutput {
   );
   const electorateSeries = buildElectorateSeries(electorateLatent, firstRoundSeries);
 
+  /**
+   * 4b-bis. DESENGAJAMENTO, medido na pergunta ESPONTÂNEA (Q-14).
+   *
+   * Mesma matemática de suavização, entrada diferente e significado diferente. Na
+   * estimulada a lista de nomes ancora a resposta e o "não sabe" cai a poucos
+   * pontos; na espontânea a pergunta é aberta e quem não tem candidato não cita
+   * ninguém. Na mesma rodada do mesmo instituto: 37 p.p. contra 3 p.p.
+   *
+   * Reusa `runElectorateKalman` de propósito — escrever um segundo suavizador para
+   * a mesma grandeza em outra base abriria espaço para as duas divergirem por
+   * acidente de implementação, e não por diferença de medida.
+   *
+   * Não toca `μ_t`, não entra na restrição de soma, não realimenta nada. Se um dia
+   * entrar, quebrou a condição 7 da Q-10 pela porta de trás.
+   */
+  const spontaneousLatent = runElectorateKalman(
+    input.electorateObservations.filter((e) => e.scenarioKind === SCENARIO_KIND.t1Espontaneo),
+    firstRoundSeries[ZERO]
+      ? { referenceDate, gridStartDate: firstRoundSeries[ZERO]?.date ?? referenceDate }
+      : { referenceDate },
+  );
+  const spontaneousSeries = buildSpontaneousSeries(spontaneousLatent, firstRoundSeries);
+
   // 4c. Transferência de votos (Q-10). LÊ as séries acima e não as realimenta:
   // nada daqui volta para μ_t nem para h_i. Se um dia isso mudar, a condição 7 da
   // Q-10 foi violada e o número principal do site passa a depender de um prior
@@ -184,6 +207,7 @@ export function runModel(input: ModelInput): ModelOutput {
       firstRound: firstRoundSeries,
       runoffs: runoffSeries,
       electorate: electorateSeries,
+      spontaneous: spontaneousSeries,
     },
     houseEffects: houseEffectRows,
     diagnostics,
@@ -401,8 +425,22 @@ interface ElectoratePointOut {
   undecided: BandOut | null;
 }
 
+/** Ponto de desengajamento medido na espontânea (Q-14). */
+interface SpontaneousPointOut {
+  date: string;
+  noCandidate: BandOut | null;
+  blankNull: BandOut | null;
+  named: BandOut | null;
+}
+
+/**
+ * O 1º turno do MODELO é só o estimulado (docs/01 §3, Q-14). Vale também para a
+ * série de eleitorado: branco/nulo da espontânea (12 p.p.) e da estimulada (4 p.p.)
+ * medem coisas diferentes, e a série tem de ficar na mesma base dos candidatos para
+ * as duas somarem 100.
+ */
 function isFirstRoundKind(kind: Observation['scenarioKind']): boolean {
-  return kind === SCENARIO_KIND.t1Estimulado || kind === SCENARIO_KIND.t1Espontaneo;
+  return kind === SCENARIO_KIND.t1Estimulado;
 }
 
 /**
@@ -451,6 +489,45 @@ function buildElectorateSeries(
     });
   }
   return out;
+}
+
+/**
+ * Série de DESENGAJAMENTO a partir da espontânea (Q-14).
+ *
+ * Reusa a saída do mesmo suavizador, mas TRADUZ o significado: o que na estimulada
+ * é "não sabe" é aqui "não citou nenhum nome", que é uma afirmação muito mais forte
+ * — a pergunta era aberta e a pessoa não tinha nome para dar.
+ *
+ * `named` é ARITMÉTICA sobre valores publicados: quem citou alguém é o complemento
+ * de quem não citou e de quem citou branco/nulo. Só é calculado quando as DUAS
+ * pontas existem; faltando uma, fica `null` em vez de virar um número por dedução
+ * parcial (R4). A banda de `named` propaga somando as semilarguras — conservador
+ * de propósito: preferimos banda larga demais a estreita demais.
+ */
+function buildSpontaneousSeries(
+  latent: ElectorateKalmanResult,
+  firstRound: readonly DatedPointOut[],
+): SpontaneousPointOut[] {
+  const base = buildElectorateSeries(latent, firstRound);
+  return base.map((p) => {
+    const noCandidate = p.undecided;
+    const blankNull = p.blankNull;
+    let named: BandOut | null = null;
+    if (noCandidate !== null && blankNull !== null) {
+      const somaMedia = noCandidate.meanPct + blankNull.meanPct;
+      // Semilargura de cada ponta, somada (limite superior da incerteza conjunta).
+      const semi =
+        (noCandidate.hi90Pct - noCandidate.lo90Pct) / TWO +
+        (blankNull.hi90Pct - blankNull.lo90Pct) / TWO;
+      const media = PCT_MAX - somaMedia;
+      named = {
+        meanPct: clampPct(media),
+        lo90Pct: clampPct(media - semi),
+        hi90Pct: clampPct(media + semi),
+      };
+    }
+    return { date: p.date, noCandidate, blankNull, named };
+  });
 }
 
 // --- Transferência de votos (Q-10) -------------------------------------------

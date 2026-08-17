@@ -76,11 +76,20 @@ Três travas, todas com teste:
 - **T2** partido divergente derruba o casamento (nome casou, sigla não confere);
 - **T3** duas candidaturas para o mesmo candidato derrubam as duas.
 
-Resultado contra o registro real de 2026: casam **lula**, **flavio-bolsonaro** e
-**zema**. `tarcisio`, `ratinho-junior`, `ciro-gomes` e `simone-tebet` **não têm
-candidatura registrada** e ficam com `photoPath = null` + alerta `sem_candidatura`.
-Há teste explícito de que `RONALDO CAIADO (PSD)` **não** vira `ratinho-junior` só
-porque o partido bate.
+Resultado contra o cadastro atual (22 candidatos) e o registro real de 2026:
+**casam 13 candidaturas** — as 13 registradas no DivulgaCandContas, todas com alias
+cadastrado à mão no seed. `tarcisio`, `ratinho-junior`, `ciro-gomes` e
+`simone-tebet` **não têm candidatura registrada** e ficam com `photoPath = null` +
+alerta `sem_candidatura` (junto dos demais rastreados sem registro, 9 no total).
+Há teste explícito de que `RONALDO CAIADO (PSD)` **não** casa por partido — ele só
+casa porque existe o alias `RONALDO CAIADO`, cadastrado por humano.
+
+> **Casar candidatura ≠ ter foto.** São dois estados diferentes e o job os
+> distingue: dos 13 casados, só quem o TSE marca com `fotoUrlPublicavel: true` e
+> tem bytes de imagem recebe arquivo. Quem casa sem foto publicável fica `null` +
+> alerta `foto_nao_publicavel`, e **é reconsultado no ciclo seguinte** — não ter
+> foto hoje não significa não ter amanhã. Qualquer teste que confunda os dois
+> números volta a quebrar quando o cadastro crescer.
 
 ## Banco
 
@@ -116,6 +125,11 @@ Escrita é `write` em `.tmp` + `rename` (atômica, sem janela de arquivo pela me
   requisição** — nem o detalhe da candidatura. Como o TSE não fornece validador de
   cache, essa janela é a única forma honesta de não bater no servidor por nada.
   `pnpm ingest:photos --force` ignora a janela.
+- A janela vale para quem **tem** foto. Candidatura casada **sem** foto é
+  reconsultada a cada ciclo (é o detalhe que informa `fotoUrlPublicavel`), o que
+  hoje são 10 GETs por execução. É tráfego legítimo e o rate limit de 1 req/10s o
+  contém; suprimi-lo exigiria uma coluna de "última tentativa" independente do
+  bloco `photo_*`, que é tudo-ou-nada por desenho.
 - Bytes iguais ⇒ o arquivo **não** é reescrito (mtime preservado, verificado em
   teste).
 - Bytes diferentes ⇒ arquivo trocado **e alerta `foto_alterada` com os dois
@@ -162,8 +176,12 @@ linha em `processarCandidato` — está isolada de propósito.
 
 - `pnpm --filter @election-pool/adapters exec vitest run tse-candidatos` → **41
   testes**, todos verdes (parse das capturas reais, casamento, imagem, cliente).
-- `pnpm --filter @election-pool/api exec vitest run src/jobs/candidate-photos.job.integration.spec.ts`
-  → **15 testes**, todos verdes, contra Postgres real.
+- `pnpm --filter @election-pool/api test:integration` → o arquivo
+  `candidate-photos.job.integration.spec.ts` roda **15 testes**, todos verdes,
+  contra o banco derivado `election_pool_test` com o seed real de 22 candidatos.
+  As asserções são de INVARIANTE, não de contagem: nenhuma delas afirma quantos
+  candidatos existem no cadastro (foi o que quebrou este arquivo quando o campo de
+  2026 entrou no seed).
 - Typecheck limpo em `packages/adapters` e `apps/api` para os arquivos desta task,
   sem `any` e sem `@ts-ignore`. ESLint e Prettier limpos.
 - Migration aplicada, revertida e reaplicada no Postgres local.

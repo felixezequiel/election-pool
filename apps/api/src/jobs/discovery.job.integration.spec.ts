@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { RawRegistration } from '@election-pool/adapters/pesqele/registration';
-import type { PesqEleClient } from '@election-pool/adapters/pesqele/client';
+import type {
+  DiscoverOptions,
+  PesqEleAlert,
+  PesqEleClient,
+  PesqEleSweepStats,
+} from '@election-pool/adapters/pesqele/client';
 import { makeTestDatabase, truncateData } from '../db/test-helpers.js';
 import { seed } from '../db/seed.js';
 import { DiscoveryJob, makePoolTransaction } from './discovery.job.js';
@@ -28,6 +33,28 @@ const fakePesqEle = (pages: RawRegistration[][], failOnPageIndex?: number): Pesq
       }
       yield await Promise.resolve(pages[i]!);
     }
+  }
+  return { discover } as unknown as PesqEleClient;
+};
+
+/**
+ * Fake que exercita os CALLBACKS do adapter (alerta e contagem da varredura), sem
+ * emitir registro. É por eles que a suspeita de truncagem do PesqEle chega ao
+ * resultado do job (T-28) — se o job reescrevesse o `kind`, uma perda de dado
+ * apareceria no log como "busca vazia".
+ */
+const fakePesqEleComAlerta = (
+  alert: PesqEleAlert,
+  stats: PesqEleSweepStats | null,
+): PesqEleClient => {
+  async function* discover(
+    options: DiscoverOptions = {},
+  ): AsyncGenerator<RawRegistration[], void, undefined> {
+    options.onAlert?.(alert);
+    if (stats !== null) options.onSweepStats?.(stats);
+    // Uma varredura pode alertar e não emitir página nenhuma (é o caso de janela
+    // vazia); o `yield` de lista vazia mantém isso explícito para o job.
+    yield await Promise.resolve([]);
   }
   return { discover } as unknown as PesqEleClient;
 };
@@ -181,6 +208,43 @@ describe('DiscoveryJob (integration)', () => {
       tseId: 'BR-06591/2026',
       detail: 'Instituto Jamais Cadastrado',
     });
+  });
+
+  it('relays the truncation alert from the adapter WITHOUT rewriting its kind (T-28)', async () => {
+    const stats: PesqEleSweepStats = {
+      janela: { inicio: '2026-07-19', fim: '2026-08-17' },
+      fatias: 12,
+      fatiasNoTeto: 2,
+      truncagensSuspeitas: 1,
+      linhasVistas: 131,
+      tseIdsDistintos: 131,
+      limiteDeclarado: 50,
+    };
+    const alert: PesqEleAlert = {
+      kind: 'truncation_suspected',
+      detail: 'Fatia 10/08/2026–10/08/2026 voltou com 50 registros, no teto de 50',
+    };
+
+    const result = await new DiscoveryJob({
+      db,
+      withTransaction,
+      pesqEle: fakePesqEleComAlerta(alert, stats),
+      now: () => new Date('2026-08-17T12:00:00Z'),
+    }).run();
+
+    expect(result.alerts).toEqual([
+      { kind: 'truncation_suspected', tseId: null, detail: alert.detail },
+    ]);
+    // A contagem da varredura chega ao resultado: é o que permite ver no log que
+    // o número colhido é um PISO.
+    expect(result.sweep).toEqual(stats);
+    expect(result.sweep?.truncagensSuspeitas).toBe(1);
+  });
+
+  it('reports sweep as null when the adapter does not count (never a fabricated zero)', async () => {
+    const result = await runJob([[reg({ tseId: 'BR-06591/2026' })]]);
+
+    expect(result.sweep).toBeNull();
   });
 
   it('transaction per page: a network failure on page 2 keeps page 1 persisted', async () => {

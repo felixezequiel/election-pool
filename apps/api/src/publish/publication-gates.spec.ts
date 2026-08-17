@@ -26,6 +26,9 @@ const VALID_DATA = {
   institutes: [],
   latent: { firstRound: [], runoffs: [], electorate: [] },
   polls: [],
+  // Nenhum instituto publicou cenário espontâneo: `null` (Q-14). É o estado normal
+  // no começo, e o contrato o aceita.
+  spontaneous: null,
   // Sem passos suficientes para estimar fluxo: `null` é o estado normal e o
   // contrato o aceita (Q-10).
   transitions: null,

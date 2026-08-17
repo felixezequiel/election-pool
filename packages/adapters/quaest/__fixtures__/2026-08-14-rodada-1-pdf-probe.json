@@ -1,0 +1,54 @@
+{
+  "url": "https://quaest.com.br/wp-content/uploads/2026/08/QUAEST1PRESIDENCIAL1408.pdf",
+  "capturedAt": "2026-08-17",
+  "lastModifiedHeader": "Sat, 15 Aug 2026 23:14:21 GMT",
+  "bytes": 52904713,
+  "sha256": "6cf7e4b4eb1da3ad5854168dc8770cb1afb1ed3e2cca112bbbd9f7fb70fb96e0",
+  "numPages": 197,
+  "textLayerChars": 31560,
+  "percentSignsInTextLayer": 1,
+  "ptBrNumbersInTextLayer": 0,
+  "tseProtocolMatchesInTextLayer": 0,
+  "samplePages": {
+    "1": {
+      "textItems": 0,
+      "chars": 0
+    },
+    "2": {
+      "textItems": 0,
+      "chars": 0
+    },
+    "3": {
+      "textItems": 0,
+      "chars": 0
+    },
+    "4": {
+      "textItems": 0,
+      "chars": 0
+    },
+    "5": {
+      "textItems": 0,
+      "chars": 0
+    },
+    "6": {
+      "textItems": 3,
+      "chars": 98
+    },
+    "16": {
+      "textItems": 3,
+      "chars": 130
+    },
+    "30": {
+      "textItems": 4,
+      "chars": 176
+    },
+    "40": {
+      "textItems": 4,
+      "chars": 175
+    },
+    "197": {
+      "textItems": 0,
+      "chars": 0
+    }
+  }
+}
