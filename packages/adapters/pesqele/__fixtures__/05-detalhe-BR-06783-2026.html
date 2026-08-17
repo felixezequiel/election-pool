@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head id="j_id_3"><link type="text/css" rel="stylesheet" href="/javax.faces.resource/theme.css.xhtml?ln=primefaces-aristo" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/bootstrap/bootstrap.min.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/timeline/timeline.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/chart/morris.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/sepel2.site.base.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/pesqele.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/css/base/font-awesome.min.css.xhtml" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/components.css.xhtml?ln=primefaces&amp;v=8.0" />
+			<title></title>
+			<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+			<link rel="shortcut icon" href="http://www.tse.jus.br/internet/img/favicon.ico" type="image/x-icon" />
+			<!-- Bootstrap CSS -->
+		    <!-- Timeline CSS -->
+		    <!-- Morris Charts CSS -->
+			<!-- Cand CSS -->
+		    <!-- Custom Fonts --></head><body><div id="j_id_g" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="j_id_g_title" class="ui-dialog-title"></span></div><div class="ui-dialog-content ui-widget-content" id="j_id_g_content"><span id="groupAviso">
+					<div class="modal-body" align="center"><img id="j_id_j" src="/javax.faces.resource/wait.gif.xhtml?ln=images" alt="" /><img id="j_id_k" width="20" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><label id="j_id_l" class="ui-outputlabel ui-widget">Por favor, aguarde...</label>
+					</div></span></div></div>
+			<!-- CABE�ALHO --><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+		<div id="siteCabecalho" class="navbar navbar-default navbar-fixed-top site-cabecalho">
+			<div class="container-fluid">
+				<div class="navbar-header">
+					<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#siteCabecalhoMenu" aria-expanded="false" aria-controls="navbar">
+						<span class="sr-only">Toggle navigation</span> <span class="icon-bar"></span> <span class="icon-bar"></span> <span class="icon-bar"></span>
+					</button>
+					<a class="navbar-brand" href=""><img id="j_id_s" src="/javax.faces.resource/topo-tse.png.xhtml?ln=images" class="site-cabecalho-logo" alt="Logo do TSE" /> 
+							<span class="site-cabecalho-titulo">PesqEle P&#250;blico</span>
+							<span class="site-cabecalho-titulo-vermelho"></span>
+					</a>
+					<div class="site-versao-nome">3.9.2</div>
+				</div>
+			</div>
+		</div><script type="text/javascript" src="/javax.faces.resource/jquery/jquery.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/jquery/jquery-plugins.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/core.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/components.js.xhtml?ln=primefaces&amp;v=8.0"></script><script id="8cd0d34c-78f5-481e-aeb8-99df63b828b5" type="text/javascript">var pf=window.PrimeFaces;if(pf){pf.settings.locale='pt_BR';pf.settings.partialSubmit=true;};
+pf.cw("Dialog","barraProgresso",{id:"j_id_g",modal:true,width:"300",height:"120",appendTo:"@(body)"});if(window.$){$(PrimeFaces.escapeClientId("8cd0d34c-78f5-481e-aeb8-99df63b828b5")).remove();}</script></body>
+</html>
+			<div id="sitePrincipal" class="container-fluid site-principal">
+				<div id="wrapper">
+					<div id="page-content-wrapper"><div id="msg" class="ui-messages ui-widget" aria-live="polite"></div>
+		<style type="text/css">
+			.site-principal { padding-top: 72px; }
+		</style><form id="form" name="form" method="post" action="/app/pesquisa/detalhar.xhtml" enctype="application/x-www-form-urlencoded">
+			<p style="float: right;"><button id="form:j_id_14" name="form:j_id_14" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="window.history.back();" type="button"><span class="ui-button-icon-left ui-icon ui-c ui-icon-back"></span><span class="ui-button-text ui-c">Voltar</span></button><img id="form:j_id_15" width="5px;" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><button id="form:j_id_16" name="form:j_id_16" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="imprimir();" type="button"><span class="ui-button-icon-left ui-icon ui-c ui-icon-print"></span><span class="ui-button-text ui-c">Imprimir</span></button>
+			</p>
+			<br /><br /><fieldset id="form:detalhes" class="ui-fieldset ui-widget ui-widget-content ui-corner-all ui-hidden-container" style="margin-left: 10px;" data-widget="widget_form_detalhes"><div class="ui-fieldset-content">
+				<div id="print">
+					<h4 align="center">Visualizar Pesquisa Eleitoral - BR-06783/2026</h4>
+					<h5 align="center">BRASIL
+					</h5><table id="form:camposPesquisa" class="ui-panelgrid ui-widget" role="grid"><tbody><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNumeroProtocolo">N&#250;mero de identifica&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNumeroProtocolo">BR-06783/2026</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataRegistro">Data de registro:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataRegistro">16/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDescricaoCargos">Cargo(s):</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDescricaoCargos">Presidente</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataPublicacaoPesquisa">Data de divulga&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataPublicacaoPesquisa">22/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEmpresa">Empresa contratada/ Nome Fantasia:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEmpresa">CNPJ: 09409427000112 - 
+							INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEleicao">Elei&#231;&#227;o:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEleicao">Elei&#231;&#245;es Gerais 2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblEntrevistados">Entrevistados:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblEntrevistados">1200</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataInicio">Data de in&#237;cio da pesquisa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataInicio">17/08/2026</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblDataFinal">Data de t&#233;rmino da pesquisa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblDataFinal">21/08/2026</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNomeEstatistico">Estat&#237;stico respons&#225;vel:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNomeEstatistico">LUCAS ARAUJO DA SILVA</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblNumeroRegistroEstatistico">Registro do estat&#237;stico no CONRE:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblNumeroRegistroEstatistico">11002</span></td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25">
+						<label for="lblTipoVinculoEstatisticoDesc">Tipo de v&#237;nculo do(a) estat&#237;stico(a) com a empresa:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25"><span id="form:lblTipoVinculoEstatisticoDesc">Outros, Consultor</span></td></tr><tr class="ui-widget-content" role="row"><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25"><label id="form:j_id_28" class="ui-outputlabel ui-widget">Valor:</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25">R$&#160;148.800,00</td><td role="gridcell" class="ui-panelgrid-cell colunaNegrito25"><label id="form:j_id_2a" class="ui-outputlabel ui-widget">Pesquisa &#233; realizada com recursos pr&#243;prios?</label></td><td role="gridcell" class="ui-panelgrid-cell coluna25">N&#227;o</td></tr></tbody></table>
+					<br /><table><tbody><tr><td class="colunas"><label id="form:j_id_2e" class="ui-outputlabel ui-widget">Contratante(s): </label></td><td><img id="form:j_id_2g" width="5px; " height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" />CPF/CNPJ: 11523951000161 - ALVES QUATRO ASSESSORIA DE COMUNICACAO LTDA / ALVES QUATRO Origem do Recurso: (Outros: Recursos pr&#243;prios da contratante.) </td></tr><tr><td class="colunas"><label id="form:j_id_2k" class="ui-outputlabel ui-widget">Pagante(s) do trabalho: </label></td><td><img id="form:j_id_2m" width="5px; " height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /></td></tr></tbody></table>
+					<br /><table><tbody><tr><td>
+						<label for="lblMetodologia">Metodologia de pesquisa:</label></td></tr><tr><td><span id="form:lblMetodologia">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblPlanoAmostral">Plano amostral e pondera&#231;&#227;o quanto a sexo, idade, grau de instru&#231;&#227;o e n&#237;vel econ&#244;mico do entrevistado; intervalo de confian&#231;a e margem de erro:</label></td></tr><tr><td><span id="form:lblPlanoAmostral">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblSistemaControle">Sistema interno de controle e verifica&#231;&#227;o, confer&#234;ncia e fiscaliza&#231;&#227;o da coleta de dados e do trabalho de campo:</label></td></tr><tr><td><span id="form:lblSistemaControle">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr><tr><td>
+						<br />
+						<label for="lblDadoMunicipio">
+						Dados relativos aos munic&#237;pios e bairros abrangidos pela pesquisa. Na aus&#234;ncia de delimita&#231;&#227;o do bairro, 
+						ser&#225; identificada a &#225;rea em que foi realizada a pesquisa(conforme &#167;7&#186;. do art. 2&#186;. da Resolu&#231;&#227;o-TSE n&#186;. 23.600/2019, 
+						A partir do dia em que a pesquisa puder ser divulgada e at&#233; o dia seguinte, o registro dever&#225; ser complementado, sob pena de ser a pesquisa considerada n&#227;o registrada; 
+						na aus&#234;ncia de delimita&#231;&#227;o do bairro, ser&#225; identificada a &#225;rea em que foi realizada):
+						</label></td></tr><tr><td><span id="form:lblDadoMunicipio">[prosa do instituto removida na captura - R3 / docs/08 2.1]</span></td></tr></tbody></table>
+					<br />
+						<div class="ui-g">
+							<div class="ui-g-12" style="text-align: center; background: #cccccc; font-weight: 800;padding: 10px;font-size: 14px">
+								Notas Fiscais dos Contratantes
+							</div>
+							<div class="ui-g-12" style="background: #eeeeee">
+									<div class="ui-g-4"><label style="margin:10px">CPF/ CNPJ:</label>11523951000161
+									</div>
+									<div class="ui-g-6"><label style="margin:10px">Nome:</label>ALVES QUATRO ASSESSORIA DE COMUNICACAO LTDA / ALVES QUATRO
+									</div>
+									<div class="ui-g-2"><a id="form:j_id_33:0:historicoNotas" href="#" class="ui-commandlink ui-widget btn btn-info btn-sm" aria-label="Visualizar hist&#243;rico de movimenta&#231;&#245;es das Notas Fiscais do contratante" onclick="PrimeFaces.ab({s:&quot;form:j_id_33:0:historicoNotas&quot;,f:&quot;form&quot;,onst:function(cfg){PF('barraProgresso').show();;},onsu:function(data,status,xhr){PF('barraProgresso').hide();;}});return false;" style="color: white; cursor: pointer;" title="Visualizar hist&#243;rico de movimenta&#231;&#245;es das Notas Fiscais do contratante">
+											<span class="glyphicon glyphicon-list" aria-hidden="true"><img id="form:j_id_33:0:j_id_3d" width="5px;" height="" alt="" src="/javax.faces.resource/spacer/dot_clear.gif.xhtml?ln=primefaces&amp;v=8.0" /><label id="form:j_id_33:0:j_id_3e" class="ui-outputlabel ui-widget">Visualizar Hist&#243;rico</label>
+											</span></a>
+									</div>
+									<div class="ui-g-12" style="background: #cccccc">
+										<div class="ui-g-10"><label style="margin:1px">Nome do arquivo</label>
+										</div>
+										<div class="ui-g-2"><label style="margin:1px">A&#231;&#245;es</label>
+										</div>
+									</div>
+									<div class="ui-g-12" style="background: #FFFFFF">
+										<div class="ui-g-10">NF Pesquisa Bahia Ago.26.pdf
+										</div>
+										<div class="ui-g-2"><button id="form:j_id_33:0:j_id_3l:0:arquivoNotaFiscal" name="form:j_id_33:0:j_id_3l:0:arquivoNotaFiscal" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only btn btn-default btn-sm" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank'},function(event){}]);" alt="Abrir nota fiscal" title="Abrir nota fiscal" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-document"></span><span class="ui-button-text ui-c">Abrir nota fiscal</span></button>
+										</div>
+									</div>
+							</div>
+						</div>					
+					<br />
+					<br />
+				</div>
+				<br /><table><tbody><tr><td><button id="form:arquivoQuestionario" name="form:arquivoQuestionario" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar question&#225;rio completo aplicado ou a ser aplicado.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoBairros" name="form:arquivoBairros" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar arquivo com detalhamento de bairros/munic&#237;pios.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoAssinado" name="form:arquivoAssinado" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar declara&#231;&#227;o assinada pelo respons&#225;vel t&#233;cnico.</span></button></td></tr><tr><td>
+				    <br /></td></tr><tr><td><button id="form:arquivoResultado" name="form:arquivoResultado" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){this.form.target='_blank';},function(event){}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c ui-icon-arrowthick-1-s"></span><span class="ui-button-text ui-c">Visualizar arquivo relat&#243;rio completo com o resultado de pesquisa.</span></button></td></tr><tr><td>
+				    <br /></td></tr></tbody></table></div></fieldset>
+			<br /><br /><input type="hidden" name="form_SUBMIT" value="1" /><input type="hidden" name="javax.faces.ViewState" id="j_id__v_0:javax.faces.ViewState:1" value="NDkwNzgyYmVmYjM3NThiMjAwMDAwMDAy" autocomplete="off" /></form>
+					</div>
+				</div>
+			</div>
+        <div id="siteRodape" class="site-rodape site-rodape-sombra">
+            PesqEle - Sistema de Registro de Pesquisas Eleitorais, Vers&#227;o: 3.9.2, SECINP - Tribunal Superior Eleitoral.
+        </div>
+		    <!-- Custom Theme JavaScript -->
+			<!-- Bootstrap JavaScript --><script type="text/javascript" src="/javax.faces.resource/jquery/jquery.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/jquery/jquery-plugins.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/core.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/components.js.xhtml?ln=primefaces&amp;v=8.0"></script><script type="text/javascript" src="/javax.faces.resource/js/base/cand.js.xhtml"></script><script type="text/javascript" src="/javax.faces.resource/js/bootstrap/bootstrap.min.js.xhtml"></script><script id="3b5bf465-0a19-48b4-9d9a-a00ae35c14d3" type="text/javascript">var pf=window.PrimeFaces;if(pf){pf.settings.locale='pt_BR';pf.settings.partialSubmit=true;};
+pf.cw("Dialog","barraProgresso",{id:"j_id_g",modal:true,width:"300",height:"120",appendTo:"@(body)"});
+pf.cw("CommandButton","widget_form_j_id_14",{id:"form:j_id_14"});
+pf.cw("CommandButton","widget_form_j_id_16",{id:"form:j_id_16"});
+pf.cw("CommandButton","widget_form_j_id_33_0_j_id_3l_0_arquivoNotaFiscal",{id:"form:j_id_33:0:j_id_3l:0:arquivoNotaFiscal"});
+pf.cw("CommandButton","widget_form_arquivoQuestionario",{id:"form:arquivoQuestionario"});
+pf.cw("CommandButton","widget_form_arquivoBairros",{id:"form:arquivoBairros"});
+pf.cw("CommandButton","widget_form_arquivoAssinado",{id:"form:arquivoAssinado"});
+pf.cw("CommandButton","widget_form_arquivoResultado",{id:"form:arquivoResultado"});
+pf.cw("Fieldset","widget_form_detalhes",{id:"form:detalhes"});if(window.$){$(PrimeFaces.escapeClientId("3b5bf465-0a19-48b4-9d9a-a00ae35c14d3")).remove();}</script></body>
+</html>

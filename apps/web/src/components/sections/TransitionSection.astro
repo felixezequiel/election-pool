@@ -1,0 +1,283 @@
+---
+/**
+ * Seção — TRANSFERÊNCIA DE VOTOS (MODEL_VERSION 2.0.0, docs/OPEN-QUESTIONS Q-10).
+ *
+ * A seção mais delicada do site. A Q-10 explica por quê: fluxo de voto NÃO é
+ * identificável a partir de pesquisa agregada — com K estados há K² fluxos
+ * possíveis por passo e apenas K totais para restringi-los. O sistema só fecha
+ * com uma suposição nossa, e a medição do run de 2022 disse de quanto é essa
+ * dependência: o ajuste ao dado desloca ~7 p.p. de ~91 p.p. de massa por passo.
+ * A maior parte do número publicado é PRIOR.
+ *
+ * Consequências no layout — nenhuma é decoração:
+ *
+ *  1. O aviso vem ANTES do painel e com peso de manchete, não como nota de
+ *    rodapé (Q-10 condição 4). Se o leitor só ler uma coisa desta seção, tem de
+ *    ser "isto é suposição".
+ *  2. O prior é exibido com destaque: o peso (`stickiness`) e a nota
+ *    (`prior.note`), que é onde a medição da participação do prior é publicada
+ *    (condição 2). Sai da seção sabendo quanto do desenho é suposição.
+ *  3. O selo `notIdentifiable` é apresentado pelo que É — o dado não distingue
+ *    aquilo de zero, por ruído amostral (banda cruzando zero ou ponto abaixo do
+ *    piso de visibilidade) — e a seção diz explicitamente que a AUSÊNCIA do selo
+ *    não é aval. No run de 2022 só 34 de 272 fluxos foram marcados, e isso não
+ *    torna os outros 238 medidos.
+ *  4. `transitions: null` (o normal no começo) tem estado vazio EXPLICADO, no
+ *    espírito do <NoDataNotice>: dizer por que não há número é melhor que sumir
+ *    com a seção.
+ */
+import Num from '../Num.astro';
+import TransitionPanel from '../charts/TransitionPanel.astro';
+import { formatNumber, formatDayMonth, isoDateOnly } from '../charts/lib/format.js';
+import type { TransitionChart } from '../../data/chart-inputs.js';
+
+interface Props {
+  transitions: TransitionChart | null;
+  /** Passos mínimos de série latente para tentar estimar (constants.ts). */
+  minSteps: number;
+}
+
+const { transitions, minSteps } = Astro.props;
+
+/**
+ * O painel mostra o passo MAIS RECENTE. Os anteriores continuam publicados na
+ * tabela — empilhar um painel por semana produziria dezenas de faixas com ar de
+ * medida, que é exatamente o efeito que esta seção existe para evitar.
+ */
+const steps = transitions?.steps ?? [];
+const latestStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
+const olderCount = Math.max(0, steps.length - 1);
+
+const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayName]));
+---
+
+<section class="section" aria-labelledby="transitions-title">
+  <div class="container">
+    <p class="label">Transferência de votos</p>
+    <h2 id="transitions-title" class="display-l trans-heading">
+      Para onde o voto foi — sob suposição, não medida.
+    </h2>
+
+    {/*
+      Aviso de primeira classe: vem antes do painel, ocupa a largura do texto e
+      usa tipo de display. Não é caixinha de rodapé — é a informação mais
+      importante desta seção (Q-10 condição 4).
+    */}
+    <div class="trans-alert" role="note" aria-labelledby="trans-alert-title">
+      <p class="label trans-alert-eyebrow" id="trans-alert-title">
+        Estimativa de modelo — não é medida
+      </p>
+      <p class="display-m trans-alert-lead">
+        A maior parte do que aparece aqui vem de uma suposição nossa, não das pesquisas.
+      </p>
+      <p class="body trans-alert-body">
+        Pesquisa agregada informa o tamanho de cada grupo em cada data; ela nunca entrevista a
+        mesma pessoa duas vezes e, por isso, não registra o caminho de ninguém. Conjuntos de
+        fluxos bem diferentes produzem exatamente as mesmas pesquisas — o sistema é
+        indeterminado por construção, e nenhuma quantidade de dado agregado o resolve. O que
+        fecha a conta é a suposição de que, sem evidência em contrário, o eleitor permanece
+        onde estava.
+      </p>
+
+      {
+        transitions && (
+          <>
+            <dl class="trans-prior-grid">
+              <div class="trans-prior-cell">
+                <dt>Método</dt>
+                <dd class="trans-prior-mono">{transitions.prior.method}</dd>
+              </div>
+              <div class="trans-prior-cell">
+                <dt>Peso do prior de permanência</dt>
+                <dd class="trans-prior-mono">
+                  <Num>{formatNumber(transitions.prior.stickiness, 2)}</Num>
+                </dd>
+              </div>
+            </dl>
+            <p class="display-m trans-prior-note">{transitions.prior.note}</p>
+          </>
+        )
+      }
+
+      <p class="body trans-alert-body">
+        Cada relação abaixo aparece com a sua faixa de <Num>90</Num>% em escala real, e o zero
+        está marcado: o que o dado não distingue de zero é sinalizado, porque o movimento pode
+        não existir. Mas esse selo mede só o ruído amostral — ele <strong>não</strong> diz
+        quanto do valor veio do prior. Relação sem selo não é relação medida.
+      </p>
+    </div>
+
+    {
+      transitions ? (
+        <>
+          {latestStep && (
+            <div class="trans-panel">
+              <TransitionPanel
+                id="transitions-latest"
+                states={transitions.states}
+                flows={latestStep.flows}
+                fromDate={latestStep.fromDate}
+                toDate={latestStep.toDate}
+              />
+            </div>
+          )}
+
+          {olderCount > 0 && (
+            <p class="body-muted trans-older">
+              O painel mostra o passo mais recente. Os outros <Num>{String(olderCount)}</Num>{' '}
+              passos publicados estão na tabela abaixo, com a mesma faixa e o mesmo aviso.
+            </p>
+          )}
+
+          <details class="chart-table trans-table">
+            <summary>Ver todos os passos e fluxos em tabela</summary>
+            <table>
+              <caption>
+                Transferência estimada sob prior, em pontos percentuais do eleitorado, por passo.
+                Faixa de <Num>90</Num>% ao lado de cada média. Não é medida de trajetória.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Passo</th>
+                  <th scope="col">De</th>
+                  <th scope="col">Para</th>
+                  <th class="num" scope="col">
+                    Média (p.p.)
+                  </th>
+                  <th class="num" scope="col">
+                    Faixa de <Num>90</Num>%
+                  </th>
+                  <th scope="col">Distinguível de zero</th>
+                </tr>
+              </thead>
+              <tbody>
+                {steps.flatMap((step) =>
+                  step.flows.map((f) => (
+                    <tr>
+                      <td>
+                        <time datetime={isoDateOnly(step.fromDate)}>
+                          <Num>{formatDayMonth(step.fromDate)}</Num>
+                        </time>
+                        {' – '}
+                        <time datetime={isoDateOnly(step.toDate)}>
+                          <Num>{formatDayMonth(step.toDate)}</Num>
+                        </time>
+                      </td>
+                      <td>{nameOf.get(f.from) ?? f.from}</td>
+                      <td>{nameOf.get(f.to) ?? f.to}</td>
+                      <td class="num">
+                        <Num>{formatNumber(f.pp, 2)}</Num>
+                      </td>
+                      <td class="num">
+                        <Num>{formatNumber(f.lo90, 2)}</Num>–<Num>{formatNumber(f.hi90, 2)}</Num>
+                      </td>
+                      <td>{f.notIdentifiable ? 'não' : 'sim — só quanto ao ruído amostral'}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </details>
+        </>
+      ) : (
+        <div class="card trans-empty">
+          <p class="body">
+            Ainda não há transferência estimada. Decompor movimento exige pelo menos{' '}
+            <Num>{String(minSteps)}</Num> passos de série latente; com menos que isso, o
+            resultado seria o prior puro devolvido em forma de número — um desenho que não teria
+            aprendido nada com os dados.
+          </p>
+          <p class="body-muted trans-empty-note">
+            Enquanto isso, o que é de fato medido está acima: o tamanho de cada grupo em cada
+            data, branco/nulo e não-sabe inclusive, cada um com a sua faixa de incerteza.
+          </p>
+        </div>
+      )
+    }
+  </div>
+</section>
+
+<style>
+  .trans-heading {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 22ch;
+  }
+
+  /*
+   * O aviso tem peso de seção, não de nota: régua de acento à esquerda, fundo
+   * elevado e tipo de display. Deliberadamente pesado — a alternativa (uma linha
+   * cinza embaixo do gráfico) é a que produz leitor mal informado.
+   */
+  .trans-alert {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 68ch;
+    padding: calc(var(--rhythm) * 3);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+  }
+  .trans-alert-eyebrow {
+    color: var(--accent);
+  }
+  .trans-alert-lead {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 36ch;
+  }
+  .trans-alert-body {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .trans-prior-grid {
+    margin: calc(var(--rhythm) * 3) 0 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gutter);
+    padding-top: calc(var(--rhythm) * 2);
+    border-top: 1px solid var(--border);
+  }
+  .trans-prior-cell dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-2);
+  }
+  .trans-prior-cell dd {
+    margin: calc(var(--rhythm) * 0.5) 0 0;
+  }
+  .trans-prior-mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink);
+  }
+  /* A nota do prior é onde a participação medida do prior é publicada: tipo de
+     display, não corpo pequeno. */
+  .trans-prior-note {
+    margin-top: calc(var(--rhythm) * 2);
+    color: var(--ink);
+  }
+  .trans-panel {
+    margin-top: calc(var(--rhythm) * 4);
+  }
+  .trans-older,
+  .trans-empty-note {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .trans-table {
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .trans-empty {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 62ch;
+  }
+  @media (max-width: 640px) {
+    .trans-prior-grid {
+      grid-template-columns: 1fr;
+    }
+    .trans-alert {
+      padding: calc(var(--rhythm) * 2);
+    }
+  }
+</style>

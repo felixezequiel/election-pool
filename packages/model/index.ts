@@ -26,6 +26,7 @@
 
 import {
   modelOutputSchema,
+  type ElectorateObservation,
   type ModelOutput,
   type Observation,
 } from '@election-pool/contracts/model-io';
@@ -39,10 +40,24 @@ import {
   MODEL_MIN_DISTINCT_INSTITUTES,
   ACTIVE_WINDOW_DAYS,
 } from '@election-pool/contracts/constants';
-import { runKalman, type KalmanResult, type SmoothedPoint } from './kalman.js';
+import {
+  runKalman,
+  runElectorateKalman,
+  ELECTORATE_SERIES,
+  type ElectorateKalmanResult,
+  type KalmanResult,
+  type SmoothedPoint,
+} from './kalman.js';
 import { isoToDayNumber } from './calendar.js';
 import { estimateHouseEffects, type InstituteHouseEffect } from './house-effects.js';
 import { computeHerding, computeDivergence, type HouseEffectInput } from './diagnostics.js';
+import {
+  estimateTransitions,
+  type LatentBandInput,
+  type TransitionNodeInput,
+  type TransitionStateInput,
+  type TransitionsOut,
+} from './transitions.js';
 
 const ZERO = 0;
 const ONE = 1;
@@ -60,6 +75,15 @@ export interface ModelInput {
   observations: readonly Observation[];
   /** Data de referência do run (`YYYY-MM-DD` ou ISO com offset), docs/01 §4.4. */
   referenceDate: string;
+  /**
+   * Branco/nulo e não-sabe declarados por pesquisa (MODEL_VERSION 2.0.0, Q-10).
+   * OBRIGATÓRIO de propósito: um chamador que esquecesse de passar produziria uma
+   * série de eleitorado vazia em silêncio, e silêncio em dado de pesquisa é
+   * justamente o que o R4 proíbe — que quebre no typecheck. Array vazio é valor
+   * legítimo e significa "nenhuma pesquisa declarou essas grandezas": a série sai
+   * vazia, nunca zerada.
+   */
+  electorateObservations: readonly ElectorateObservation[];
 }
 
 // --- runModel ---------------------------------------------------------------
@@ -113,6 +137,30 @@ export function runModel(input: ModelInput): ModelOutput {
     });
   }
 
+  // 4b. Séries de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10 condição 1).
+  // Passam pelo MESMO suavizador dos candidatos — mesma variância amostral, mesma
+  // recência, mesma banda de 90%. Duas decisões explícitas aqui:
+  //  (i) NÃO são corrigidas por house effect. `h_i` é estimado sobre intenção por
+  //      candidato (docs/01 §5); não existe `h_i` identificado para estas
+  //      grandezas, e reaproveitar o do candidato transferiria um viés medido em
+  //      outra escala. Ficam como o instituto publicou.
+  //  (ii) NÃO entram na restrição de soma (§4.3): o resíduo de lá é estimado pela
+  //      mediana das pesquisas e continua exatamente como era, para que μ_t não
+  //      mude (Q-10 condição 7).
+  const electorateLatent = runElectorateKalman(
+    input.electorateObservations.filter((e) => isFirstRoundKind(e.scenarioKind)),
+    firstRoundSeries[ZERO]
+      ? { referenceDate, gridStartDate: firstRoundSeries[ZERO]?.date ?? referenceDate }
+      : { referenceDate },
+  );
+  const electorateSeries = buildElectorateSeries(electorateLatent, firstRoundSeries);
+
+  // 4c. Transferência de votos (Q-10). LÊ as séries acima e não as realimenta:
+  // nada daqui volta para μ_t nem para h_i. Se um dia isso mudar, a condição 7 da
+  // Q-10 foi violada e o número principal do site passa a depender de um prior
+  // que não é identificável.
+  const transitions = buildTransitions(firstRoundSeries, electorateSeries, firstRoundObs);
+
   // 5. houseEffects[] por (instituto, candidato).
   const houseEffectRows = expandHouseEffects(houseEffects.institutes);
 
@@ -135,9 +183,11 @@ export function runModel(input: ModelInput): ModelOutput {
     latent: {
       firstRound: firstRoundSeries,
       runoffs: runoffSeries,
+      electorate: electorateSeries,
     },
     houseEffects: houseEffectRows,
     diagnostics,
+    transitions,
     gates,
   };
 
@@ -335,6 +385,157 @@ function median(values: number[]): number {
   const lo = sorted[mid - ONE] ?? ZERO;
   const hi = sorted[mid] ?? ZERO;
   return (lo + hi) / TWO;
+}
+
+// --- Séries de branco/nulo e não-sabe (Q-10) ---------------------------------
+
+interface BandOut {
+  meanPct: number;
+  lo90Pct: number;
+  hi90Pct: number;
+}
+
+interface ElectoratePointOut {
+  date: string;
+  blankNull: BandOut | null;
+  undecided: BandOut | null;
+}
+
+function isFirstRoundKind(kind: Observation['scenarioKind']): boolean {
+  return kind === SCENARIO_KIND.t1Estimulado || kind === SCENARIO_KIND.t1Espontaneo;
+}
+
+/**
+ * Alinha a série de eleitorado ao grid da série de candidatos e traduz "sem
+ * medida" em `null`.
+ *
+ * O suavizador SEMPRE devolve um número — mesmo num trecho onde nenhuma pesquisa
+ * mediu a grandeza, onde esse número seria só o prior passeando. Publicar isso
+ * como estimativa seria o zero silencioso do R4 vestido de outra roupa. Por isso
+ * o ponto só sai com valor quando `measured` é verdadeiro; caso contrário sai
+ * `null`, e a UI mostra lacuna em vez de linha.
+ */
+function buildElectorateSeries(
+  latent: ElectorateKalmanResult,
+  firstRound: readonly DatedPointOut[],
+): ElectoratePointOut[] {
+  if (latent.points.length === ZERO) return [];
+
+  const byDate = new Map<string, { blankNull: BandOut | null; undecided: BandOut | null }>();
+  for (const p of latent.points) {
+    let row = byDate.get(p.date);
+    if (!row) {
+      row = { blankNull: null, undecided: null };
+      byDate.set(p.date, row);
+    }
+    if (!p.measured) continue; // sem medida na vizinhança ⇒ null, nunca o número do prior
+    const band: BandOut = {
+      meanPct: clampPct(p.mean),
+      lo90Pct: clampPct(p.lo90),
+      hi90Pct: clampPct(p.hi90),
+    };
+    if (p.seriesId === ELECTORATE_SERIES.blankNull) row.blankNull = band;
+    else row.undecided = band;
+  }
+
+  // Grid de saída = o da série de candidatos (para a UI casar os eixos sem
+  // interpolar); sem série de candidatos, o próprio grid do eleitorado.
+  const dates = firstRound.length > ZERO ? firstRound.map((p) => p.date) : [...latent.dates];
+  const out: ElectoratePointOut[] = [];
+  for (const date of dates) {
+    const row = byDate.get(date);
+    out.push({
+      date,
+      blankNull: row?.blankNull ?? null,
+      undecided: row?.undecided ?? null,
+    });
+  }
+  return out;
+}
+
+// --- Transferência de votos (Q-10) -------------------------------------------
+
+/**
+ * Monta a entrada do estimador de transferência a partir das séries latentes.
+ *
+ * Os NÓS são as datas em que houve medição de 1º turno dentro da janela ativa —
+ * não o grid diário inteiro. Dois motivos: entre duas medições o suavizador não
+ * recebeu informação nova, então um "fluxo" ali seria interpolação apresentada
+ * como movimento; e fora da janela ativa (§4.4) a série é prior puro, onde
+ * decompor movimento é decompor o prior.
+ *
+ * Devolve `null` quando o estimador não tem passos suficientes — a ausência de
+ * transferência é uma resposta legítima, um número inventado não é.
+ */
+function buildTransitions(
+  firstRound: readonly DatedPointOut[],
+  electorate: readonly ElectoratePointOut[],
+  firstRoundObs: readonly Observation[],
+): TransitionsOut | null {
+  if (firstRound.length === ZERO) return null;
+  const lastDate = firstRound[firstRound.length - ONE]?.date ?? '';
+  if (lastDate === '') return null;
+  const refDay = isoToDayNumber(lastDate);
+
+  const seriesByDate = new Map<string, DatedPointOut>();
+  for (const p of firstRound) seriesByDate.set(p.date, p);
+  const electorateByDate = new Map<string, ElectoratePointOut>();
+  for (const p of electorate) electorateByDate.set(p.date, p);
+
+  // Datas de medição dentro da janela ativa, ordenadas e sem repetição.
+  const measurementDates = new Set<string>();
+  for (const o of firstRoundObs) {
+    const delta = refDay - isoToDayNumber(o.fieldMedianDate);
+    if (delta < ZERO || delta > ACTIVE_WINDOW_DAYS) continue;
+    if (!seriesByDate.has(o.fieldMedianDate)) continue;
+    measurementDates.add(o.fieldMedianDate);
+  }
+  const nodeDates = [...measurementDates].sort();
+  if (nodeDates.length <= ONE) return null;
+
+  // Estados: candidatos rastreados presentes nos nós + as grandezas de eleitorado
+  // que têm ao menos uma medida entre os nós. Estado sem medida nenhuma não vira
+  // estado — não existe "zero de não-sabe" inferido por omissão (R4).
+  const candidateIds = new Set<string>();
+  let hasBlankNull = false;
+  let hasUndecided = false;
+  for (const date of nodeDates) {
+    const point = seriesByDate.get(date);
+    if (point) for (const id of Object.keys(point.byCandidate)) candidateIds.add(id);
+    const e = electorateByDate.get(date);
+    if (e?.blankNull) hasBlankNull = true;
+    if (e?.undecided) hasUndecided = true;
+  }
+
+  const states: TransitionStateInput[] = [...candidateIds]
+    .sort()
+    .map((id) => ({ id, kind: 'candidate' as const, displayName: id }));
+  if (hasBlankNull) {
+    states.push({
+      id: ELECTORATE_SERIES.blankNull,
+      kind: ELECTORATE_SERIES.blankNull,
+      displayName: 'Branco/nulo',
+    });
+  }
+  if (hasUndecided) {
+    states.push({
+      id: ELECTORATE_SERIES.undecided,
+      kind: ELECTORATE_SERIES.undecided,
+      displayName: 'Não sabe',
+    });
+  }
+
+  const nodes: TransitionNodeInput[] = nodeDates.map((date) => {
+    const byState: Record<string, LatentBandInput | null> = {};
+    const point = seriesByDate.get(date);
+    for (const id of candidateIds) byState[id] = point?.byCandidate[id] ?? null;
+    const e = electorateByDate.get(date);
+    if (hasBlankNull) byState[ELECTORATE_SERIES.blankNull] = e?.blankNull ?? null;
+    if (hasUndecided) byState[ELECTORATE_SERIES.undecided] = e?.undecided ?? null;
+    return { date, byState };
+  });
+
+  return estimateTransitions({ states, nodes });
 }
 
 // --- Expansão de house effects por (instituto, candidato) -------------------

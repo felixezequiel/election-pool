@@ -206,7 +206,7 @@ describe('RenderJob (integration)', () => {
       schemaVersion: string;
       polls: unknown[];
     };
-    expect(served.schemaVersion).toBe('1');
+    expect(served.schemaVersion).toBe('2');
     expect(served.polls).toHaveLength(3);
     // index.html > 10 KB presente
     expect(existsSync(join(paths.dist, 'index.html'))).toBe(true);

@@ -1,0 +1,97 @@
+{
+  "eleicao": {
+    "DT_ELEICAO": "2026-10-04",
+    "sq_ELEICAO": 20322002026,
+    "cd_ELEICAO": null,
+    "nr_ANO_REFERENCIA": 2026,
+    "nm_ELEICAO": "Eleição Geral Federal 2026",
+    "tp_ABRANGENCIA": "F",
+    "tp_ELEICAO": "O",
+    "cd_PLEITO": null,
+    "nr_ANO_BASE": null,
+    "dt_ELEICAO": 1791082800000
+  },
+  "resumoCandidaturas": [
+    {
+      "codigo": 1,
+      "sigla": null,
+      "nome": "Presidente",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 13
+    },
+    {
+      "codigo": 2,
+      "sigla": null,
+      "nome": "Vice-presidente",
+      "codSuperior": 1,
+      "titular": false,
+      "contagem": 13
+    },
+    {
+      "codigo": 3,
+      "sigla": null,
+      "nome": "Governador",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 195
+    },
+    {
+      "codigo": 4,
+      "sigla": null,
+      "nome": "Vice-governador",
+      "codSuperior": 3,
+      "titular": false,
+      "contagem": 196
+    },
+    {
+      "codigo": 5,
+      "sigla": null,
+      "nome": "Senador",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 315
+    },
+    {
+      "codigo": 9,
+      "sigla": null,
+      "nome": "1º Suplente",
+      "codSuperior": 5,
+      "titular": false,
+      "contagem": 318
+    },
+    {
+      "codigo": 10,
+      "sigla": null,
+      "nome": "2º Suplente",
+      "codSuperior": 5,
+      "titular": false,
+      "contagem": 319
+    },
+    {
+      "codigo": 6,
+      "sigla": null,
+      "nome": "Deputado Federal",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 7623
+    },
+    {
+      "codigo": 7,
+      "sigla": null,
+      "nome": "Deputado Estadual",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 11089
+    },
+    {
+      "codigo": 8,
+      "sigla": null,
+      "nome": "Deputado Distrital",
+      "codSuperior": 0,
+      "titular": false,
+      "contagem": 420
+    }
+  ],
+  "dataBaseUpdate": "16/08/2026 22:20"
+}

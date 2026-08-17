@@ -1,0 +1,156 @@
+---
+/**
+ * Estado vazio da página (docs/07 §1: "publicar dado velho é aceitável, publicar
+ * dado errado não" — e não publicar NADA, sem explicação, é pior que ambos).
+ *
+ * Renderizada no lugar das seções de dado quando o `data.json` publicado não tem
+ * série latente: ou o pipeline ainda não colheu pesquisa suficiente, ou o modelo
+ * não atingiu a cobertura mínima. A página continua sendo a MESMA — mesmo header,
+ * mesma tipografia, mesmo rodapé com proveniência —, só que o miolo diz por que
+ * não há número em vez de mostrar eixo vazio.
+ *
+ * Tudo aqui é DERIVADO do `PublicData` que já existe (contagem de pesquisas e de
+ * institutos, datas de geração). Nenhum campo novo no contrato, nenhum texto de
+ * terceiro (R3), nenhum número inventado (R4) — quando não há dado, a página diz
+ * exatamente isso.
+ */
+interface Props {
+  /** Pesquisas já registradas/colhidas que chegaram ao data.json. */
+  pollCount: number;
+  /** Institutos distintos entre essas pesquisas. */
+  instituteCount: number;
+  /** Mínimos de cobertura do gate M-1 (docs/07 §3), para explicar o que falta. */
+  minPolls: number;
+  minInstitutes: number;
+  windowDays: number;
+  nextUpdateAt: string;
+}
+const { pollCount, instituteCount, minPolls, minInstitutes, windowDays, nextUpdateAt } =
+  Astro.props;
+
+const nextUpdateLabel = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Sao_Paulo',
+}).format(new Date(nextUpdateAt));
+
+/**
+ * A frase de topo depende de ONDE o pipeline parou. Distinguir "ainda não colhi
+ * nada" de "colhi, mas não dá para estimar" é a diferença entre o leitor achar
+ * que o site está quebrado e entender que o critério é que não foi atingido.
+ */
+const headline =
+  pollCount === 0
+    ? 'Ainda não há pesquisa publicada para estimar.'
+    : 'Há pesquisa, mas ainda não o suficiente para estimar.';
+
+/** Itens da checklist de cobertura, com o estado de cada um. */
+const checks = [
+  {
+    label: `${String(minPolls)} pesquisas na janela de ${String(windowDays)} dias`,
+    have: pollCount,
+    need: minPolls,
+  },
+  {
+    label: `${String(minInstitutes)} institutos diferentes`,
+    have: instituteCount,
+    need: minInstitutes,
+  },
+];
+---
+
+<section class="section" aria-labelledby="nodata-title">
+  <div class="container">
+    <p class="label">Sem estimativa no ar</p>
+    <h1 id="nodata-title" class="display-l nodata-title">{headline}</h1>
+
+    <p class="body nodata-lead">
+      Este site só mostra número quando o modelo tem base para produzir um. Publicar uma
+      linha com uma pesquisa só, ou com um instituto só, seria dar aparência de medida a algo
+      que ainda é ruído — e é justamente isso que o projeto existe para não fazer.
+    </p>
+
+    <ul class="nodata-checks">
+      {
+        checks.map((check) => (
+          <li class="nodata-check">
+            <span class="label nodata-check-state" data-ok={check.have >= check.need}>
+              {check.have >= check.need ? 'ok' : 'falta'}
+            </span>
+            <span class="body nodata-check-label">{check.label}</span>
+            <span class="label nodata-check-count">
+              {check.have} de {check.need}
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+
+    <p class="body-muted nodata-next">
+      O pipeline consulta o registro do TSE e os institutos automaticamente. Próxima tentativa
+      às {nextUpdateLabel}. Nada aqui é preenchido à mão enquanto isso.
+    </p>
+
+    <p class="body nodata-links">
+      <a href="/metodologia">Como o modelo funciona</a>
+      <span aria-hidden="true" class="nodata-sep">·</span>
+      <a href="/dados">Dados e proveniência</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .nodata-title {
+    margin-top: calc(var(--rhythm) * 1.5);
+    max-width: 20ch;
+  }
+  .nodata-lead {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 58ch;
+  }
+  .nodata-checks {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 52ch;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0;
+  }
+  .nodata-check {
+    display: grid;
+    grid-template-columns: 5.5ch 1fr auto;
+    align-items: baseline;
+    gap: var(--gutter);
+    padding-block: calc(var(--rhythm) * 2);
+    border-top: 1px solid var(--border);
+  }
+  .nodata-check:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+  /* Estado do item: quem falta recebe o acento; quem já passou fica recuado. */
+  .nodata-check-state {
+    color: var(--accent);
+  }
+  .nodata-check-state[data-ok='true'] {
+    color: var(--ink-3);
+  }
+  .nodata-check-count {
+    color: var(--ink-3);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .nodata-next {
+    margin-top: calc(var(--rhythm) * 4);
+    max-width: 56ch;
+  }
+  .nodata-links {
+    margin-top: calc(var(--rhythm) * 3);
+  }
+  .nodata-sep {
+    color: var(--ink-3);
+    padding-inline: 0.5ch;
+  }
+</style>

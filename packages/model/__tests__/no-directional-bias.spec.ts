@@ -181,12 +181,18 @@ describe('no-directional-bias (docs/07 §5.1, R2)', () => {
 
   it('scans at least the known model source files', () => {
     // Sanidade: garante que o coletor está de fato lendo o código do modelo.
-    const names = files.map((f) => f.replace(`${packageRoot}/`, ''));
+    // Normaliza a barra antes de cortar o prefixo: no Windows `join` produz `\`
+    // e o corte silenciosamente não acontecia, deixando o teste passar por
+    // acidente (ou falhar, como falhava) em vez de checar o que promete.
+    const names = files.map((f) =>
+      f.replace(/\\/g, '/').replace(`${packageRoot.replace(/\\/g, '/')}/`, ''),
+    );
     expect(names).toContain('index.ts');
     expect(names).toContain('house-effects.ts');
     expect(names).toContain('kalman.ts');
     expect(names).toContain('calendar.ts');
     expect(names).toContain('linalg.ts');
+    expect(names).toContain('transitions.ts');
   });
 
   it('contains no Brazilian candidate or party proper name', () => {

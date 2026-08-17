@@ -136,6 +136,9 @@ describe('backtest run (docs/07 §4.2/§4.3)', () => {
     const a = runBacktest(fixture);
     const b = runBacktest(fixture);
     expect(JSON.stringify(a.comparisons)).toBe(JSON.stringify(b.comparisons));
+    // Inclui a checagem de transferência: o bootstrap dela é semeado, então dois
+    // runs têm de dar o MESMO JSON (docs/07 M-6).
+    expect(JSON.stringify(a.transition)).toBe(JSON.stringify(b.transition));
   });
 
   it('renders a table and a markdown report containing the CI width', () => {
@@ -146,5 +149,64 @@ describe('backtest run (docs/07 §4.2/§4.3)', () => {
     expect(md).toContain('Largura');
     expect(md).toContain('model_version');
     expect(md).toContain('git_sha');
+  });
+});
+
+/**
+ * Checagem de transferência 1º ⇒ 2º turno (Q-10 condição 6).
+ *
+ * Como no resto deste arquivo, NÃO se assere aprovação: o veredito honesto é o
+ * produto. Asserimos que a checagem RODA, é determinística, compara contra a urna
+ * (que o modelo nunca vê) e que o resultado — passando ou reprovando — chega ao
+ * markdown que vira `docs/BACKTEST-RESULTS.md`.
+ */
+describe('backtest de transferência (Q-10 condição 6)', () => {
+  const fixture = loadFixture();
+
+  it('monta o passo 1º ⇒ 2º turno com os eliminados como origem da massa', () => {
+    const result = runBacktest(fixture);
+    const t = result.transition;
+    expect(t).not.toBeNull();
+    if (!t) return;
+    expect(t.fromDate).toBe(CUTOFF_ROUND_1);
+    expect(t.toDate).toBe(CUTOFF_ROUND_2);
+    expect(t.eliminatedIds.length).toBeGreaterThan(0);
+    for (const id of t.eliminatedIds) expect(t.finalistIds).not.toContain(id);
+    expect(t.flowToFirstPp).toBeGreaterThanOrEqual(0);
+    expect(t.flowToSecondPp).toBeGreaterThanOrEqual(0);
+  });
+
+  it('compara contra a fração implícita na urna e reporta banda', () => {
+    const result = runBacktest(fixture);
+    const t = result.transition;
+    expect(t).not.toBeNull();
+    if (!t) return;
+    expect(t.evaluable).toBe(true);
+    expect(t.loShareToFirstPct).toBeLessThanOrEqual(t.hiShareToFirstPct);
+    expect(t.officialShareToFirstPct).toBeGreaterThan(0);
+    // `passed` é EXATAMENTE "o oficial cai na banda" — sem escapatória.
+    const inside =
+      t.officialShareToFirstPct >= t.loShareToFirstPct &&
+      t.officialShareToFirstPct <= t.hiShareToFirstPct;
+    expect(t.passed).toBe(inside);
+  });
+
+  it('o veredito da transferência entra no relatório, aprovado ou reprovado', () => {
+    const result = runBacktest(fixture);
+    const md = renderMarkdown(result, '2022-01-01T00:00:00.000Z');
+    expect(md).toContain('Transferência 1º ⇒ 2º turno');
+    expect(md).toMatch(/PASS|FAIL|N\/A/);
+    const table = formatTable(result);
+    expect(table).toContain('Transferência 1º ⇒ 2º turno');
+  });
+
+  it('uma transferência reprovada derruba o veredito geral (R1: não se ajusta para passar)', () => {
+    const result = runBacktest(fixture);
+    if (result.transition?.evaluable && !result.transition.passed) {
+      expect(result.allPassed).toBe(false);
+    } else {
+      // Se um dia passar, o veredito geral volta a depender só das comparações.
+      expect(result.allPassed).toBe(result.comparisons.every((c) => c.passed));
+    }
   });
 });

@@ -1,7 +1,7 @@
 ---
 id: T-05
 title: Adapter do PesqEle e DiscoveryJob
-status: done
+status: needs-rework  # ver docs/OPEN-QUESTIONS.md Q-09 e tasks/T-15-pesqele-real.md
 depends_on: [T-02]
 owns: [packages/adapters/pesqele/**, apps/api/src/jobs/discovery.job.ts]
 spec: docs/04-INGESTION-SPEC.md §2
@@ -26,9 +26,17 @@ sem este job rodando é dado perdido para sempre.
 - `DiscoveryJob` no cron `0 */2 * * *`, idempotente, executável via
   `pnpm ingest:discover`
 
+> **Reaberta em 2026-08-16.** Rodado contra o PesqEle real, este job devolve
+> `seen=0` sem erro. O cliente e o parser foram escritos contra uma estrutura
+> SUPOSTA do site — inclusive atributos `data-field`/`data-row` que só existem nas
+> fixtures sintéticas, o que manteve os testes verdes. O aceite abaixo marcado
+> "fixture de HTML **real**" nunca foi cumprido. Diagnóstico: `docs/OPEN-QUESTIONS.md`
+> Q-09. Reescrita, com o protocolo real já capturado: `tasks/T-15-pesqele-real.md`.
+
 ## Aceite
 
 - [ ] Teste com fixture de HTML real do PesqEle: parseia lista e detalhe
+      ← NÃO CUMPRIDO: as fixtures são sintéticas (ver Q-09)
 - [ ] Teste: rodar duas vezes seguidas não duplica nem altera `first_seen_at`
 - [ ] Teste: registro presente no run 1 e ausente no run 2 recebe `source_expired_at`
       e continua na tabela

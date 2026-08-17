@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { pctSchema } from '@election-pool/contracts/branded';
-import { scenarioKindSchema, primaryMethodSchema } from '@election-pool/contracts/enums';
+import {
+  scenarioKindSchema,
+  primaryMethodSchema,
+  SCENARIO_KIND,
+} from '@election-pool/contracts/enums';
 import type { Database } from '../db/pool.js';
 
 /**
@@ -50,15 +54,46 @@ const pollRowSchema = z.object({
   fieldEnd: z.string(),
   sampleSize: z.number().int().positive(),
   marginOfError: z.number().nullable(),
+  // Branco/nulo e não-sabe DECLARADOS pela pesquisa, do cenário canônico de 1º
+  // turno. `null` = o instituto não publicou a grandeza — que NÃO é zero (R4).
+  blankNullPct: z.number().nullable(),
+  undecidedPct: z.number().nullable(),
   sourceUrl: z.string(),
 });
 export type PollRow = z.infer<typeof pollRowSchema>;
+
+/**
+ * Branco/nulo e não-sabe por cenário canônico, para virar `ElectorateObservation`
+ * (MODEL_VERSION 2.0.0, Q-10). Vem SEPARADO de `ScenarioResultRow` porque não é
+ * por candidato: é do cenário inteiro. Uma linha por cenário, não por candidato —
+ * juntar as duas coisas na mesma query multiplicaria a grandeza pelo número de
+ * candidatos e inflaria a série.
+ */
+const electorateRowSchema = z.object({
+  tseId: z.string(),
+  instituteId: z.string(),
+  scenarioKind: scenarioKindSchema,
+  fieldStart: z.string(),
+  fieldEnd: z.string(),
+  sampleSize: z.number().int().positive(),
+  blankNullPct: pctSchema.nullable(),
+  undecidedPct: pctSchema.nullable(),
+});
+export type ElectorateRow = z.infer<typeof electorateRowSchema>;
 
 const candidateRowSchema = z.object({
   id: z.string(),
   displayName: z.string(),
   party: z.string().nullable(),
   colorSlot: z.number().int(),
+  /**
+   * Foto OFICIAL do registro de candidatura no TSE, servida por nós. `null` é
+   * comum e legítimo: candidato sem candidatura registrada, casamento ambíguo, ou
+   * o TSE não autorizando a publicação. A UI cai para monograma + cor — nunca
+   * busca foto em outro lugar (docs/08 §2).
+   */
+  photoPath: z.string().nullable(),
+  photoSourceUrl: z.string().nullable(),
 });
 export type CandidateRow = z.infer<typeof candidateRowSchema>;
 
@@ -170,10 +205,27 @@ export class RenderReadModel {
       field_end: string;
       sample_size: number;
       margin_of_error: number | null;
+      blank_null_pct: number | null;
+      undecided_pct: number | null;
       source_url: string | null;
     }>(
       `SELECT reg.tse_id, reg.institute_id, reg.contractor_name, reg.contractor_type,
               reg.field_start, reg.field_end, reg.sample_size, reg.margin_of_error,
+              -- Branco/nulo e não-sabe do cenário canônico de 1º turno desta
+              -- pesquisa. Subquery em vez de JOIN para não multiplicar a linha da
+              -- pesquisa quando houver cenário de 2º turno canônico também.
+              (SELECT ps.blank_null_pct
+                 FROM poll_scenarios ps
+                WHERE ps.tse_id = reg.tse_id AND ps.is_canonical
+                  AND ps.kind <> $2
+                ORDER BY ps.extracted_at DESC
+                LIMIT 1) AS blank_null_pct,
+              (SELECT ps.undecided_pct
+                 FROM poll_scenarios ps
+                WHERE ps.tse_id = reg.tse_id AND ps.is_canonical
+                  AND ps.kind <> $2
+                ORDER BY ps.extracted_at DESC
+                LIMIT 1) AS undecided_pct,
               (SELECT rd.url
                  FROM poll_scenarios ps
                  JOIN raw_documents rd ON rd.id = ps.raw_document_id
@@ -186,7 +238,7 @@ export class RenderReadModel {
           AND EXISTS (SELECT 1 FROM poll_scenarios ps
                        WHERE ps.tse_id = reg.tse_id AND ps.is_canonical)
         ORDER BY reg.field_end DESC, reg.tse_id`,
-      [raceId],
+      [raceId, SCENARIO_KIND.t2],
     );
     return rows.map((r) =>
       pollRowSchema.parse({
@@ -200,6 +252,8 @@ export class RenderReadModel {
         fieldEnd: r.field_end,
         sampleSize: r.sample_size,
         marginOfError: r.margin_of_error,
+        blankNullPct: r.blank_null_pct,
+        undecidedPct: r.undecided_pct,
         // Sem raw associado seria contraditório (só listamos tse_id com cenário canônico),
         // mas por segurança de tipo a query pode devolver null; falha alta adiante.
         sourceUrl: r.source_url ?? '',
@@ -208,14 +262,69 @@ export class RenderReadModel {
   }
 
   /** Candidatos referenciados por algum resultado da corrida (docs/03 §5). */
+  /**
+   * Branco/nulo e não-sabe dos cenários canônicos, uma linha POR CENÁRIO
+   * (MODEL_VERSION 2.0.0, Q-10). Vira `ElectorateObservation[]` na entrada do
+   * modelo.
+   *
+   * Duas decisões que valem comentário:
+   *
+   * - Não juntamos com `listCanonicalScenarioResults`: aquela query devolve uma
+   *   linha por CANDIDATO, e branco/nulo é do cenário. Juntar multiplicaria a
+   *   grandeza pelo número de candidatos e a série sairia inflada.
+   * - Trazemos o cenário mesmo quando as DUAS colunas são `null`. Parece inútil,
+   *   mas não é: "este instituto mediu e não publicou a grandeza" é informação
+   *   diferente de "este instituto não foi consultado", e é o modelo que decide o
+   *   que fazer com a ausência (R4: ausência não é zero, e quem decide não é a
+   *   query).
+   */
+  async listCanonicalElectorate(raceId: string): Promise<ElectorateRow[]> {
+    const rows = await this.db.query<{
+      tse_id: string;
+      institute_id: string;
+      kind: string;
+      field_start: string;
+      field_end: string;
+      sample_size: number;
+      blank_null_pct: number | null;
+      undecided_pct: number | null;
+    }>(
+      `SELECT ps.tse_id, reg.institute_id, ps.kind,
+              reg.field_start, reg.field_end, reg.sample_size,
+              ps.blank_null_pct, ps.undecided_pct
+         FROM poll_scenarios ps
+         JOIN poll_registrations reg ON reg.tse_id = ps.tse_id
+        WHERE reg.race_id = $1
+          AND ps.is_canonical
+          AND reg.institute_id IS NOT NULL
+        ORDER BY reg.field_end, ps.tse_id, ps.kind`,
+      [raceId],
+    );
+    return rows.map((r) =>
+      electorateRowSchema.parse({
+        tseId: r.tse_id,
+        instituteId: r.institute_id,
+        scenarioKind: r.kind,
+        fieldStart: r.field_start,
+        fieldEnd: r.field_end,
+        sampleSize: r.sample_size,
+        blankNullPct: r.blank_null_pct,
+        undecidedPct: r.undecided_pct,
+      }),
+    );
+  }
+
   async listCandidates(raceId: string): Promise<CandidateRow[]> {
     const rows = await this.db.query<{
       id: string;
       display_name: string;
       party: string | null;
       color_slot: number;
+      photo_path: string | null;
+      photo_source_url: string | null;
     }>(
-      `SELECT DISTINCT c.id, c.display_name, c.party, c.color_slot
+      `SELECT DISTINCT c.id, c.display_name, c.party, c.color_slot,
+              c.photo_path, c.photo_source_url
          FROM candidates c
          JOIN poll_results pr ON pr.candidate_id = c.id
          JOIN poll_scenarios ps ON ps.id = pr.scenario_id
@@ -230,6 +339,8 @@ export class RenderReadModel {
         displayName: r.display_name,
         party: r.party,
         colorSlot: r.color_slot,
+        photoPath: r.photo_path,
+        photoSourceUrl: r.photo_source_url,
       }),
     );
   }

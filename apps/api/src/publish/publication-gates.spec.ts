@@ -15,17 +15,20 @@ let base: string;
 let paths: PublishPaths;
 
 const VALID_DATA = {
-  schemaVersion: '1',
+  schemaVersion: '2',
   generatedAt: '2026-08-14T15:00:00-03:00',
   nextUpdateAt: '2026-08-14T17:00:00-03:00',
   updateIntervalMinutes: 120,
-  modelVersion: '1.0.0',
+  modelVersion: '2.0.0',
   gitSha: 'abc',
   race: { id: 'presidencia-2026', displayName: 'Presidência da República 2026' },
   candidates: [],
   institutes: [],
-  latent: { firstRound: [], runoffs: [] },
+  latent: { firstRound: [], runoffs: [], electorate: [] },
   polls: [],
+  // Sem passos suficientes para estimar fluxo: `null` é o estado normal e o
+  // contrato o aceita (Q-10).
+  transitions: null,
   houseEffects: [],
   diagnostics: { gaveta: [], herding: [] },
   historicalError: [],
@@ -106,7 +109,7 @@ describe('evaluatePublicationGates', () => {
   });
 
   it('fails when staging data.json does not match the schema (§6.2)', async () => {
-    writeStaging({ dataJson: JSON.stringify({ schemaVersion: '1' }) }); // faltam campos
+    writeStaging({ dataJson: JSON.stringify({ schemaVersion: '2' }) }); // faltam campos
     const verdict = await evaluatePublicationGates(baseInputs());
     expect(verdict.passed).toBe(false);
     expect(verdict.results.find((r) => r.name === 'data_json_validates')!.ok).toBe(false);

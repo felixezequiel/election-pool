@@ -1,82 +1,134 @@
 /**
- * Cliente do PesqEle (docs/04 §2). Cuida do protocolo JSF/MyFaces:
+ * Cliente do PesqEle (docs/04 §2), escrito contra o protocolo REAL capturado ao
+ * vivo em 2026-08-16 (PesqEle Público 3.9.2). O diagnóstico da versão anterior —
+ * que assumia uma estrutura inexistente e terminava com `seen=0` sem erro — está
+ * em `docs/OPEN-QUESTIONS.md` Q-09.
  *
- * 1. GET inicial em `index.xhtml` → estabelece a sessão (cookie JSESSIONID) e
- *    lê o primeiro `javax.faces.ViewState`. A landing traz um `formAviso`
- *    (aviso legal) que é submetido para chegar à busca.
- * 2. POST do filtro: eleição 2026, abrangência nacional (BR), janela dos últimos
- *    30 dias. Reenvia o ViewState corrente; lê o novo da resposta.
- * 3. Paginação também é POST com ViewState (não dá pra pular por URL, docs/04 §2).
- * 4. Se a resposta indicar sessão/ViewState expirado, reestabelece a sessão UMA
- *    vez e repete o passo — sem entrar em loop (docs/04 armadilha).
+ * Sequência (uma requisição por vez, nunca em paralelo):
  *
- * Sequencial por natureza: um POST depende do ViewState do anterior. Nunca
- * paralelizamos requisições ao TSE (docs/04 armadilha). O rate limit de 1
- * req/10s e o robots.txt são impostos pelo `HttpClient` compartilhado.
+ * 1. `GET /app/pesquisa/listar30dias.xhtml` — abre a sessão (cookies) e traz o
+ *    formulário de busca, o primeiro ViewState e os `<select>` de filtro.
+ *    NÃO passamos por `/index.xhtml`: é só o menu, não tem busca.
+ * 2. Resolve, POR RÓTULO, o valor da eleição ("Eleições Gerais 2026") e da
+ *    abrangência ("BRASIL"). Rótulo ausente ⇒ LANÇA — id errado devolveria a
+ *    eleição errada em silêncio.
+ * 3. `POST` AJAX do botão de busca ⇒ `<partial-response>` com a tabela em CDATA
+ *    e o ViewState NOVO noutro `<update>`.
+ * 4. Paginação: `POST` AJAX da DataTable (`_pagination/_first/_rows`). A resposta
+ *    traz SÓ as `<tr>` da página pedida.
+ * 5. Detalhe (só para `tse_id` inédito): `POST` AJAX `...:<ri>:detalhar` ⇒
+ *    `<redirect url="/app/pesquisa/detalhar.xhtml">` ⇒ `GET` nessa URL.
  *
- * NÃO usa headless browser (CLAUDE.md "O que não fazer").
+ * O ViewState é relido a CADA resposta. Robots, 1 req/10s, timeout e retries são
+ * do `HttpClient` compartilhado (docs/04 §6). Sem headless browser (CLAUDE.md).
+ *
+ * Custo (Q-09, opção (a) recomendada): o detalhe custa 2 requisições por
+ * registro; a 1 req/10s, colher os 50 do dia levaria ~17 min. Por isso o detalhe
+ * só é buscado para `tse_id` inédito — o `tse_id` já visto não muda, e o upsert
+ * do DiscoveryJob já é idempotente.
  */
 
-import type { HttpClient, FetchResponse } from '../http-client.js';
-import { extractViewState, isSessionExpired } from './viewstate.js';
-import { parseRegistrationPage } from './registration.js';
-import type { RawRegistration } from './registration.js';
+import type { HttpClient } from '../http-client.js';
+import {
+  PESQELE_BASE_URL,
+  LISTAR_30_DIAS_PATH,
+  DETALHAR_PATH,
+  ELEICAO_LABEL,
+  ABRANGENCIA_LABEL,
+  FIELD,
+  AJAX,
+  AJAX_HEADERS,
+} from './constants.js';
+import { parsePartialResponse, requireUpdate } from './partial-response.js';
+import type { PartialResponse } from './partial-response.js';
+import {
+  extractViewStateFromHtml,
+  extractViewStateFromPartial,
+  isSessionExpired,
+} from './viewstate.js';
+import { resolveOptionValue } from './select-options.js';
+import {
+  parseTabelaResultado,
+  parseLinhasLista,
+  parseDetalhe,
+  toRawRegistration,
+} from './registration.js';
+import type {
+  PesqEleDetalhe,
+  PesqEleLinhaLista,
+  PesqEleTabelaResultado,
+  RawRegistration,
+} from './registration.js';
 
-// docs/04 §2 — filtros fixos do DiscoveryJob.
-const ELECTION_YEAR = '2026';
-const SCOPE_NATIONAL = 'BR';
-const WINDOW_DAYS = 30;
+export class PesqEleClientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PesqEleClientError';
+  }
+}
 
-const BASE_URL = 'https://pesqele-divulgacao.tse.jus.br';
-const INDEX_PATH = '/index.xhtml';
+/**
+ * Alerta do cliente. Existe por causa da armadilha central de T-05: busca válida
+ * que volta VAZIA é indistinguível de filtro errado se ninguém reclamar. Foi o
+ * silêncio que escondeu o bug por uma task inteira.
+ */
+export interface PesqEleAlert {
+  kind: 'empty_search';
+  detail: string;
+}
 
-// Nomes de campo do JSF. O id do PesqEle real muda entre deploys; mantemos os
-// nomes canônicos aqui, num único lugar, para o dia em que a estrutura mudar
-// (docs/04 §2: "trate mudança de estrutura como evento esperado").
-const FIELD = {
-  viewState: 'javax.faces.ViewState',
-  formSearch: 'formPesquisa',
-  election: 'formPesquisa:eleicao',
-  scope: 'formPesquisa:abrangencia',
-  periodStart: 'formPesquisa:periodoInicio',
-  periodEnd: 'formPesquisa:periodoFim',
-  searchButton: 'formPesquisa:btnPesquisar',
-  pageInput: 'formPesquisa:tabela:pagina',
-  avisoForm: 'formAviso',
-  avisoSubmit: 'formAviso_SUBMIT',
-  avisoAccept: 'formAviso:aceitar',
-} as const;
+/** Documento bruto buscado, para virar `raw_documents` (R3: proveniência). */
+export interface PesqEleRawDocument {
+  url: string;
+  /** 'lista' | 'busca' | 'paginacao' | 'detalhe' — o passo que o produziu. */
+  step: 'lista' | 'busca' | 'paginacao' | 'detalhe';
+  body: string;
+  fetchedAt: string;
+}
+
+export interface DiscoverOptions {
+  /**
+   * `false` ⇒ o detalhe NÃO é buscado e o registro não é emitido (mas o `tse_id`
+   * ainda é reportado por `onTseIdSeen`, para não ser marcado como expirado).
+   * Ausente ⇒ busca o detalhe de todos (o cliente sozinho não sabe o que já
+   * existe no banco).
+   */
+  shouldFetchDetalhe?: (tseId: string) => boolean | Promise<boolean>;
+  /** Chamado para TODO `tse_id` visto na lista, inclusive os já conhecidos. */
+  onTseIdSeen?: (tseId: string) => void;
+  onAlert?: (alert: PesqEleAlert) => void;
+}
 
 export interface PesqEleClientDeps {
   http: HttpClient;
-  /** Relógio injetável para o cálculo da janela de 30 dias (determinismo/teste). */
-  now?: () => Date;
   baseUrl?: string;
+  now?: () => Date;
+  /** Recebe o corpo bruto de cada documento (R3: evidência de proveniência). */
+  onRawDocument?: (doc: PesqEleRawDocument) => void | Promise<void>;
 }
 
 interface Session {
   cookie: string;
   viewState: string;
+  /** Valores resolvidos por rótulo, reenviados em todo POST do formulário. */
+  eleicaoValue: string;
+  abrangenciaValue: string;
 }
 
-const formatDmy = (d: Date): string => {
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const yyyy = d.getUTCFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-};
+const encodeForm = (fields: Record<string, string>): string =>
+  Object.entries(fields)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
 
-/** Coleta os cookies de `set-cookie` numa string `name=value; name=value`. */
+/** Junta `set-cookie` num header `Cookie` (JSESSIONID, sticky, BIGipServer, TS…). */
 const mergeCookies = (existing: string, headers: Headers): string => {
   const jar = new Map<string, string>();
   for (const pair of existing.split(';')) {
-    const [k, ...rest] = pair.split('=');
-    if (k !== undefined && k.trim().length > 0 && rest.length > 0) {
-      jar.set(k.trim(), rest.join('=').trim());
-    }
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
   }
-  const setCookie = headers.getSetCookie?.() ?? [];
-  for (const raw of setCookie) {
+  for (const raw of headers.getSetCookie?.() ?? []) {
     const first = raw.split(';')[0];
     if (first === undefined) continue;
     const eq = first.indexOf('=');
@@ -86,134 +138,229 @@ const mergeCookies = (existing: string, headers: Headers): string => {
   return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 };
 
-const encodeForm = (fields: Record<string, string>): string =>
-  Object.entries(fields)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
-
 export class PesqEleClient {
   private readonly http: HttpClient;
-  private readonly now: () => Date;
   private readonly baseUrl: string;
+  private readonly now: () => Date;
+  private readonly onRawDocument: ((doc: PesqEleRawDocument) => void | Promise<void>) | undefined;
 
   constructor(deps: PesqEleClientDeps) {
     this.http = deps.http;
+    this.baseUrl = deps.baseUrl ?? PESQELE_BASE_URL;
     this.now = deps.now ?? (() => new Date());
-    this.baseUrl = deps.baseUrl ?? BASE_URL;
+    this.onRawDocument = deps.onRawDocument;
   }
 
   /**
-   * Percorre TODAS as páginas do resultado filtrado e devolve os registros crus.
-   * Sequencial: cada página é um POST que depende do ViewState da anterior.
-   * `onPage` é chamado por página, permitindo ao DiscoveryJob persistir em
-   * transação por página (falha de rede não corrompe estado).
+   * Percorre TODAS as páginas do filtro (eleição 2026 / BRASIL / últimos 30 dias)
+   * e emite UMA PÁGINA por vez, para o DiscoveryJob persistir em transação por
+   * página. Só entram no array os registros com detalhe buscado (inéditos); os
+   * já conhecidos são reportados por `onTseIdSeen`.
    */
-  async *discover(): AsyncGenerator<RawRegistration[], void, undefined> {
-    const session = await this.establishSession();
-    // A resposta do filtro JÁ é a primeira página de resultados — não fazemos
-    // um GET extra ao TSE só para relê-la (etiqueta, docs/04 §6).
-    const firstPageHtml = await this.applyFilters(session);
-    const firstPage = parseRegistrationPage(firstPageHtml);
-    yield firstPage.registrations;
+  async *discover(
+    options: DiscoverOptions = {},
+  ): AsyncGenerator<RawRegistration[], void, undefined> {
+    const session = await this.abrirSessao();
+    const tabela = await this.buscar(session);
 
-    for (let page = firstPage.currentPage + 1; page <= firstPage.totalPages; page++) {
-      const html = await this.gotoPage(session, page);
-      session.viewState = this.readViewState(html, session);
-      yield parseRegistrationPage(html).registrations;
-    }
-  }
-
-  /** GET inicial + submissão do aviso. Devolve cookie + ViewState prontos. */
-  private async establishSession(): Promise<Session> {
-    const res = await this.http.request({ url: `${this.baseUrl}${INDEX_PATH}`, method: 'GET' });
-    const cookie = mergeCookies('', res.headers);
-    const viewState = extractViewState(res.body);
-
-    // Se a landing tem o aviso, submete para liberar a busca.
-    if (res.body.includes(FIELD.avisoForm)) {
-      const accepted = await this.http.request({
-        url: `${this.baseUrl}${INDEX_PATH}`,
-        method: 'POST',
-        headers: { Cookie: cookie },
-        body: encodeForm({
-          [FIELD.avisoForm]: FIELD.avisoForm,
-          [FIELD.avisoSubmit]: '1',
-          [FIELD.avisoAccept]: FIELD.avisoAccept,
-          [FIELD.viewState]: viewState,
-        }),
+    if (tabela.paginador.totalRecords === 0) {
+      // Filtro válido + zero resultado NÃO é sucesso: ou a janela de 30 dias está
+      // realmente vazia, ou o filtro deixou de casar. Quem chama precisa saber.
+      options.onAlert?.({
+        kind: 'empty_search',
+        detail: `Busca com eleição "${ELEICAO_LABEL}" e abrangência "${ABRANGENCIA_LABEL}" devolveu 0 registros`,
       });
-      const cookie2 = mergeCookies(cookie, accepted.headers);
-      return {
-        cookie: cookie2,
-        viewState: this.readViewState(accepted.body, { cookie, viewState }),
-      };
+      return;
     }
-    return { cookie, viewState };
+
+    yield await this.comDetalhe(session, tabela.linhas, options);
+
+    const { totalRecords, rowsPerPage } = tabela.paginador;
+    const totalPaginas = Math.ceil(totalRecords / rowsPerPage);
+    for (let pagina = 1; pagina < totalPaginas; pagina++) {
+      const esperado = Math.min(rowsPerPage, totalRecords - pagina * rowsPerPage);
+      const linhas = await this.irParaPagina(session, pagina, rowsPerPage, esperado);
+      yield await this.comDetalhe(session, linhas, options);
+    }
+  }
+
+  /** Passo 1+2: sessão, ViewState inicial e valores de filtro resolvidos por rótulo. */
+  private async abrirSessao(): Promise<Session> {
+    const url = `${this.baseUrl}${LISTAR_30_DIAS_PATH}`;
+    const res = await this.http.request({ url, method: 'GET' });
+    await this.registrarBruto('lista', url, res.body);
+
+    return {
+      cookie: mergeCookies('', res.headers),
+      viewState: extractViewStateFromHtml(res.body),
+      eleicaoValue: resolveOptionValue(res.body, FIELD.eleicaoSelect, ELEICAO_LABEL),
+      abrangenciaValue: resolveOptionValue(res.body, FIELD.abrangenciaSelect, ABRANGENCIA_LABEL),
+    };
+  }
+
+  /** Campos do formulário reenviados em todo POST (o JSF re-decodifica o form). */
+  private camposFiltro(session: Session): Record<string, string> {
+    return {
+      [FIELD.form]: FIELD.form,
+      [FIELD.eleicaoSelect]: session.eleicaoValue,
+      [FIELD.abrangenciaSelect]: session.abrangenciaValue,
+      [FIELD.cidadesSelect]: '',
+      [FIELD.formSubmit]: '1',
+    };
+  }
+
+  /** Passo 3: POST do botão de busca. Devolve a tabela completa da página 1. */
+  private async buscar(session: Session): Promise<PesqEleTabelaResultado> {
+    const partial = await this.postAjax(session, 'busca', {
+      [AJAX.partial]: 'true',
+      [AJAX.source]: FIELD.botaoPesquisar,
+      [AJAX.execute]: FIELD.form,
+      [AJAX.render]: FIELD.form,
+      [FIELD.botaoPesquisar]: FIELD.botaoPesquisar,
+      ...this.camposFiltro(session),
+    });
+    return parseTabelaResultado(requireUpdate(partial, FIELD.form));
   }
 
   /**
-   * POST do filtro fixo (eleição 2026, BR, últimos 30 dias). Muta `session`
-   * (cookie/ViewState) e devolve o HTML da primeira página de resultados.
+   * Passo 4: paginação da DataTable. `first` é o índice global da primeira linha
+   * da página (base 0) e vai EXPLÍCITO na requisição — não dependemos do estado
+   * de página guardado no servidor.
    */
-  private async applyFilters(session: Session): Promise<string> {
-    const end = this.now();
-    const start = new Date(end.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const res = await this.postJsf(session, {
-      [FIELD.formSearch]: FIELD.formSearch,
-      [FIELD.election]: ELECTION_YEAR,
-      [FIELD.scope]: SCOPE_NATIONAL,
-      [FIELD.periodStart]: formatDmy(start),
-      [FIELD.periodEnd]: formatDmy(end),
-      [FIELD.searchButton]: FIELD.searchButton,
+  private async irParaPagina(
+    session: Session,
+    pagina: number,
+    rowsPerPage: number,
+    esperado: number,
+  ): Promise<PesqEleLinhaLista[]> {
+    const partial = await this.postAjax(session, 'paginacao', {
+      [AJAX.partial]: 'true',
+      [AJAX.source]: FIELD.tabela,
+      [AJAX.execute]: FIELD.tabela,
+      [AJAX.render]: FIELD.tabela,
+      [AJAX.behaviorEvent]: 'page',
+      [AJAX.partialEvent]: 'page',
+      [`${FIELD.tabela}_pagination`]: 'true',
+      [`${FIELD.tabela}_first`]: String(pagina * rowsPerPage),
+      [`${FIELD.tabela}_rows`]: String(rowsPerPage),
+      [`${FIELD.tabela}_skipChildren`]: 'true',
+      [`${FIELD.tabela}_encodeFeature`]: 'true',
+      ...this.camposFiltro(session),
+    });
+
+    // A resposta da paginação re-renderiza SÓ a DataTable (um fragmento de `<tr>`).
+    const linhas = parseLinhasLista(requireUpdate(partial, FIELD.tabela));
+    if (linhas.length !== esperado) {
+      // Contagem diferente da prometida pelo paginador significa que o conjunto
+      // mudou embaixo de nós (registro novo entrou no meio da coleta) e que os
+      // índices de linha já não valem. Abortar é o certo: o run seguinte
+      // recomeça e as páginas já persistidas continuam válidas (transação por
+      // página). Seguir adiante atribuiria detalhe ao registro errado.
+      throw new PesqEleClientError(
+        `Página ${pagina} voltou com ${linhas.length} linhas; o paginador prometia ${esperado}`,
+      );
+    }
+    return linhas;
+  }
+
+  /**
+   * Passo 5: para cada linha inédita, busca o detalhe e monta o registro. Linha
+   * já conhecida é apenas reportada (`onTseIdSeen`) — ver custo em Q-09.
+   */
+  private async comDetalhe(
+    session: Session,
+    linhas: readonly PesqEleLinhaLista[],
+    options: DiscoverOptions,
+  ): Promise<RawRegistration[]> {
+    const registros: RawRegistration[] = [];
+    for (const linha of linhas) {
+      options.onTseIdSeen?.(linha.tseId);
+      // Registro já conhecido não é rebuscado: o `tse_id` do PesqEle não muda e
+      // o detalhe custaria 2 requisições a 1 req/10s (Q-09). Não é alerta — é o
+      // regime permanente esperado.
+      const buscar = (await options.shouldFetchDetalhe?.(linha.tseId)) ?? true;
+      if (!buscar) continue;
+      const detalhe = await this.buscarDetalhe(session, linha);
+      registros.push(toRawRegistration(linha, detalhe));
+    }
+    return registros;
+  }
+
+  private async buscarDetalhe(session: Session, linha: PesqEleLinhaLista): Promise<PesqEleDetalhe> {
+    const acao = `${FIELD.tabela}:${linha.rowIndex}:detalhar`;
+    const partial = await this.postAjax(session, 'detalhe', {
+      [AJAX.partial]: 'true',
+      [AJAX.source]: acao,
+      // `@all` é o que o commandLink do PesqEle envia; com menos que isso o JSF
+      // não processa a linha e a navegação não acontece.
+      [AJAX.execute]: '@all',
+      [acao]: acao,
+      ...this.camposFiltro(session),
+    });
+
+    if (partial.redirectUrl === null) {
+      throw new PesqEleClientError(
+        `Ação detalhar de ${linha.tseId} não devolveu <redirect> (protocolo mudou?)`,
+      );
+    }
+
+    const url = new URL(partial.redirectUrl, this.baseUrl).toString();
+    if (!url.endsWith(DETALHAR_PATH)) {
+      throw new PesqEleClientError(`detalhar de ${linha.tseId} redirecionou para ${url}`);
+    }
+
+    const res = await this.http.request({
+      url,
+      method: 'GET',
+      headers: { Cookie: session.cookie },
     });
     session.cookie = mergeCookies(session.cookie, res.headers);
-    session.viewState = this.readViewState(res.body, session);
-    return res.body;
-  }
-
-  /** POST de paginação. */
-  private async gotoPage(session: Session, page: number): Promise<string> {
-    const res = await this.postJsf(session, {
-      [FIELD.formSearch]: FIELD.formSearch,
-      [FIELD.pageInput]: String(page),
-    });
-    return res.body;
+    await this.registrarBruto('detalhe', url, res.body);
+    return parseDetalhe(res.body);
   }
 
   /**
-   * POST JSF genérico com ViewState. Se a resposta indicar sessão expirada,
-   * reestabelece a sessão UMA vez e repete — sem loop.
+   * POST AJAX genérico: injeta o ViewState corrente, lê o NOVO da resposta (o
+   * `detalhar` não traz um; nesse caso o antigo continua válido, verificado ao
+   * vivo) e falha alto se a sessão tiver expirado — sem retry silencioso, porque
+   * repetir com a mesma sessão morta só produziria outra página vazia.
    */
-  private async postJsf(
+  private async postAjax(
     session: Session,
+    step: PesqEleRawDocument['step'],
     fields: Record<string, string>,
-    retriedAfterExpiry = false,
-  ): Promise<FetchResponse> {
+  ): Promise<PartialResponse> {
+    const url = `${this.baseUrl}${LISTAR_30_DIAS_PATH}`;
     const res = await this.http.request({
-      url: `${this.baseUrl}${INDEX_PATH}`,
+      url,
       method: 'POST',
-      headers: { Cookie: session.cookie },
+      headers: { ...AJAX_HEADERS, Cookie: session.cookie },
       body: encodeForm({ ...fields, [FIELD.viewState]: session.viewState }),
     });
+    session.cookie = mergeCookies(session.cookie, res.headers);
+    await this.registrarBruto(step, url, res.body);
 
-    if (isSessionExpired(res.body)) {
-      if (retriedAfterExpiry) {
-        throw new Error('Sessão do PesqEle expirou repetidamente; abortando sem loop');
-      }
-      const fresh = await this.establishSession();
-      session.cookie = fresh.cookie;
-      session.viewState = fresh.viewState;
-      return this.postJsf(session, fields, true);
+    const partial = parsePartialResponse(res.body);
+    if (isSessionExpired(partial)) {
+      throw new PesqEleClientError(
+        'Sessão do PesqEle expirou (ViewExpiredException) no meio da coleta; o próximo run recomeça',
+      );
     }
-    return res;
+    if (partial.errorName !== null) {
+      throw new PesqEleClientError(`PesqEle respondeu com erro JSF: ${partial.errorName}`);
+    }
+    // Nem toda parcial traz ViewState (o `detalhar` só devolve `<redirect>`).
+    if ([...partial.updates.keys()].some((id) => id.includes(FIELD.viewState))) {
+      session.viewState = extractViewStateFromPartial(partial);
+    }
+    return partial;
   }
 
-  private readViewState(html: string, previous: Session): string {
-    try {
-      return extractViewState(html);
-    } catch {
-      // Mantém o anterior se a resposta parcial não trouxer um novo (raro).
-      return previous.viewState;
-    }
+  private async registrarBruto(
+    step: PesqEleRawDocument['step'],
+    url: string,
+    body: string,
+  ): Promise<void> {
+    await this.onRawDocument?.({ step, url, body, fetchedAt: this.now().toISOString() });
   }
 }

@@ -7,8 +7,13 @@
 
 // === Versão do modelo =======================================================
 
-// docs/01 (cabeçalho): MODEL_VERSION = 1.0.0. Muda com R1 do CLAUDE.md.
-export const MODEL_VERSION = '1.0.0';
+// docs/01 (cabeçalho): MODEL_VERSION. Muda com R1 do CLAUDE.md — o incremento
+// exige justificativa ESCRITA ANTES de ver a nova saída.
+// 2.0.0 (docs/OPEN-QUESTIONS.md Q-10): branco/nulo e não-sabe viram séries
+// rastreadas e o modelo ganha estimativa de transferência entre estados. A
+// justificativa e as sete condições que a implementação deve respeitar estão na
+// Q-10, escrita antes desta linha existir.
+export const MODEL_VERSION = '2.0.0';
 
 // === Série latente / processo (docs/01 §2) ==================================
 
@@ -154,8 +159,32 @@ export const COLOR_SLOT_MAX = 8;
 export const TSE_ID_SEQUENCE_DIGITS = 5;
 
 // docs/03 §5: schemaVersion literal do contrato público.
-export const PUBLIC_DATA_SCHEMA_VERSION = '1';
+// Sobe para '2' junto do MODEL_VERSION 2.0.0 (Q-10): o data.json ganhou
+// `latent.electorate`, `transitions`, `polls[].blankNullPct`/`undecidedPct` e
+// `candidates[].photoPath`/`photoSourceUrl`. São adições, mas o schemaVersion
+// existe justamente para um consumidor externo saber que a forma mudou.
+export const PUBLIC_DATA_SCHEMA_VERSION = '2';
 
 // docs/03 §5 / docs/01 §7: histórico exibido cobre 1º e 2º turno.
 export const ROUND_FIRST = 1;
 export const ROUND_SECOND = 2;
+
+// === Modelo de transferência de votos (MODEL_VERSION 2.0.0, Q-10) ============
+
+// Peso do prior de PERMANÊNCIA na estimativa de transferência. Fluxo não é
+// identificável a partir de agregado (Q-10): com K estados há K² incógnitas por
+// passo e K equações marginais. O sistema só fecha com regularização, e a
+// regularização escolhida é a hipótese mais fraca defensável — "na ausência de
+// evidência, o eleitor permanece onde estava". Quanto maior, mais o resultado é
+// o prior e menos é o dado; publicamos o número no data.json (`transitions.prior`)
+// para que essa dependência fique visível, nunca implícita.
+export const TRANSITION_STICKINESS_PRIOR = 0.85;
+
+// Um fluxo cuja banda de 90% cruza zero é publicado como `notIdentifiable`
+// (Q-10 condição 3). Este é o piso, em p.p. do eleitorado, abaixo do qual nem
+// vale desenhar a seta — ruído de arredondamento das próprias pesquisas.
+export const TRANSITION_MIN_VISIBLE_PP = 0.5;
+
+// Passos mínimos de série latente para tentar estimar transferência. Com menos
+// que isto não há movimento a decompor e o resultado seria o prior puro.
+export const TRANSITION_MIN_STEPS = 3;

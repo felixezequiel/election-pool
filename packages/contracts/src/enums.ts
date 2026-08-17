@@ -119,6 +119,10 @@ export const JOB_NAME = {
   model: 'model',
   render: 'render',
   reparse: 'reparse',
+  // Fotos oficiais de candidatura no TSE. Entra aqui — e não só como CLI — para
+  // que o job apareça em `job_runs` e no /health como qualquer outro: um job que
+  // falha calado é a classe de bug que já custou uma task inteira neste projeto.
+  candidatePhotos: 'candidate_photos',
 } as const;
 
 export const jobNameSchema = z.enum([
@@ -127,5 +131,6 @@ export const jobNameSchema = z.enum([
   JOB_NAME.model,
   JOB_NAME.render,
   JOB_NAME.reparse,
+  JOB_NAME.candidatePhotos,
 ]);
 export type JobName = z.infer<typeof jobNameSchema>;

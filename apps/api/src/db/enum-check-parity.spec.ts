@@ -8,6 +8,7 @@ import {
   diagnosticKindSchema,
   jobRunStatusSchema,
 } from '@election-pool/contracts/enums';
+import { transitionStateKindSchema } from '@election-pool/contracts/model-io';
 import { makeTestDatabase } from './test-helpers.js';
 
 /**
@@ -93,5 +94,18 @@ describe('enums TS == CHECK das migrations (docs/03 §3)', () => {
 
   it('job_runs.status', async () => {
     expect(await fetchCheckValues('job_runs', 'status')).toEqual(jobRunStatusSchema.options);
+  });
+
+  /**
+   * `model_electorate_estimates.kind` guarda só os estados que NÃO são candidato
+   * (Q-10): cada candidato já tem sua linha em `model_estimates`. A expectativa é
+   * o enum do contrato MENOS 'candidate', derivada por exclusão — do mesmo jeito
+   * que a migration a deriva —, para que acrescentar um estado novo ao contrato
+   * apareça aqui sem ninguém precisar lembrar de editar a lista à mão.
+   */
+  it('model_electorate_estimates.kind', async () => {
+    expect(await fetchCheckValues('model_electorate_estimates', 'kind')).toEqual(
+      transitionStateKindSchema.options.filter((kind) => kind !== 'candidate'),
+    );
   });
 });

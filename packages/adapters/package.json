@@ -35,7 +35,13 @@
     "./pesqele/client": "./pesqele/client.ts",
     "./pesqele/parse": "./pesqele/parse.ts",
     "./pesqele/contractor-classifier": "./pesqele/contractor-classifier.ts",
-    "./pesqele/registration": "./pesqele/registration.ts"
+    "./pesqele/registration": "./pesqele/registration.ts",
+    "./tse-candidatos/client": "./tse-candidatos/client.ts",
+    "./tse-candidatos/api-schemas": "./tse-candidatos/api-schemas.ts",
+    "./tse-candidatos/matching": "./tse-candidatos/matching.ts",
+    "./tse-candidatos/image": "./tse-candidatos/image.ts",
+    "./tse-candidatos/constants": "./tse-candidatos/constants.ts",
+    "./tse-candidatos/binary-fetch": "./tse-candidatos/binary-fetch.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -45,7 +51,8 @@
   "dependencies": {
     "@election-pool/contracts": "workspace:*",
     "node-html-parser": "6.1.13",
-    "unpdf": "1.8.1"
+    "unpdf": "1.8.1",
+    "zod": "3.24.1"
   },
   "devDependencies": {
     "@types/node": "22.10.5",

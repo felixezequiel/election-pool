@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="Imagem de amostra">
+  <!--
+    Ativo SINTÉTICO de desenvolvimento, desenhado por nós. NÃO é foto de pessoa e
+    NÃO é imagem de terceiro (docs/08 §2: imagem de instituto ou veículo é obra
+    protegida e nunca é copiada nem embutida). Existe só para que a amostra
+    exercite o caminho "candidato COM foto" da UI. Em produção, este slot recebe a
+    foto oficial do registro de candidatura (TSE/DivulgaCandContas), servida por
+    nós a partir de `candidates[].photoPath`.
+  -->
+  <defs>
+    <linearGradient id="amostra-a-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2A3A52" />
+      <stop offset="100%" stop-color="#4F93D9" />
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" fill="url(#amostra-a-bg)" />
+  <g fill="none" stroke="#F3F5F8" stroke-opacity="0.5" stroke-width="3">
+    <circle cx="80" cy="66" r="26" />
+    <path d="M28 148c0-26 23-42 52-42s52 16 52 42" />
+  </g>
+  <text
+    x="80"
+    y="20"
+    text-anchor="middle"
+    font-family="'IBM Plex Mono', ui-monospace, monospace"
+    font-size="11"
+    letter-spacing="1.6"
+    fill="#F3F5F8"
+    fill-opacity="0.75">AMOSTRA</text>
+</svg>

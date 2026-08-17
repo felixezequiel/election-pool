@@ -34,6 +34,17 @@ const hasPolls = stripRows.length > 0;
       o contratante, o tamanho da amostra e as datas de campo — e um link para a fonte. Nunca
       reproduzimos o texto de terceiros; só o dado e o caminho até ele.
     </p>
+    {/*
+      Proveniência da foto (R6, T-17): as fotos vêm do registro de candidatura e
+      são servidas por nós. Repetir o link em cada uma das dezenas de miniaturas
+      viraria ruído, então o caminho até a origem de cada foto fica em /dados,
+      apontado aqui — a proveniência continua a um clique, sempre.
+    */}
+    <p class="body-muted polls-photo-note">
+      As miniaturas são fotos do registro de candidatura, servidas por nós; candidato sem
+      registro casado aparece como monograma. A origem de cada foto está em{' '}
+      <a href="/dados">Dados</a>.
+    </p>
 
     {
       hasPolls ? (
@@ -72,6 +83,11 @@ const hasPolls = stripRows.length > 0;
   .polls-lead {
     margin-top: calc(var(--rhythm) * 2);
     max-width: 62ch;
+  }
+  .polls-photo-note {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+    font-size: var(--fs-body-s);
   }
   .polls-strip {
     margin-top: calc(var(--rhythm) * 4);

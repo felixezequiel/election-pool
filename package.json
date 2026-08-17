@@ -21,6 +21,7 @@
     "ingest:harvest": "pnpm --filter @election-pool/api ingest:harvest",
     "ingest:reparse": "pnpm --filter @election-pool/api ingest:reparse",
     "ingest:approve": "pnpm --filter @election-pool/api ingest:approve",
+    "ingest:photos": "pnpm --filter @election-pool/api ingest:photos",
     "model:backtest": "pnpm --filter @election-pool/model model:backtest",
     "model:run": "pnpm --filter @election-pool/api model:run",
     "orchestrate": "pnpm --filter @election-pool/api orchestrate",

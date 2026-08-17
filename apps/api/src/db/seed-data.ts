@@ -79,6 +79,21 @@ export const institutes: readonly Institute[] = [
 ];
 
 export const instituteAliases: readonly Alias[] = [
+  // ── Razões sociais EXATAS do PesqEle ──────────────────────────────────────
+  // O TSE identifica o instituto pela razão social + nome fantasia, não pela
+  // marca. Sem estas linhas o DiscoveryJob traz o registro com `institute_id`
+  // nulo e alerta de cadastro manual — foi o que aconteceu na primeira colheita
+  // real (51 registros, 1 resolvido). Copiadas VERBATIM do que o PesqEle devolve,
+  // conferidas uma a uma: normalização de nome é manual, nunca fuzzy (CLAUDE.md).
+  // Instituto que ainda não rastreamos permanece SEM alias de propósito: cadastrar
+  // exigiria inventar `primaryMethod`, e chute em campo de referência é R4.
+  { alias: 'DATAFOLHA INSTITUTO DE PESQUISAS LTDA.', targetId: 'datafolha' },
+  { alias: 'QUAEST PESQUISAS, CONSULTORIA E PROJETOS LTDA.', targetId: 'quaest' },
+  { alias: 'ATLASINTEL TECNOLOGIA DE DADOS LTDA / ATLASINTEL', targetId: 'atlas' },
+  { alias: 'INTELIGENCIA EM PESQUISA E CONSULTORIA LTDA / IPEC', targetId: 'ipec' },
+  { alias: 'NEXUS PESQUISA E INTELIGENCIA DE DADOS LTDA / NEXUS', targetId: 'nexus' },
+
+  // ── Grafias de imprensa / uso corrente ────────────────────────────────────
   { alias: 'Genial/Quaest', targetId: 'quaest' },
   { alias: 'Quaest', targetId: 'quaest' },
   { alias: 'Datafolha', targetId: 'datafolha' },

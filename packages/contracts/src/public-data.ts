@@ -44,6 +44,17 @@ export const publicDataSchema = z.object({
       displayName: z.string(),
       party: z.string().nullable(),
       colorSlot: z.number(),
+      /**
+       * Caminho da foto OFICIAL do candidato, servida por nós (ex.:
+       * `/candidatos/lula.jpg`). A origem é o registro de candidatura no TSE
+       * (DivulgaCandContas) — registro público da autoridade eleitoral, mesma
+       * natureza do dado do PesqEle. NUNCA foto de imprensa: docs/08 §2 trata
+       * imagem de terceiro como obra protegida. `null` quando não há registro
+       * casado com segurança — a UI cai para monograma + cor (R4: sem chute).
+       */
+      photoPath: z.string().nullable(),
+      /** Link para o registro de candidatura que originou a foto (proveniência, R6). */
+      photoSourceUrl: z.string().nullable(),
     }),
   ),
 
@@ -64,6 +75,19 @@ export const publicDataSchema = z.object({
         series: z.array(latentDatedSchema),
       }),
     ),
+    /**
+     * Branco/nulo e não-sabe como SÉRIES RASTREADAS (MODEL_VERSION 2.0.0, Q-10),
+     * não como descarte. São estados do eleitorado com a mesma dignidade de um
+     * candidato: é deles que sai (e para eles que vai) a maior parte do movimento.
+     * Ponto sem a grandeza medida ⇒ `null`, nunca zero (R4: ausência não é zero).
+     */
+    electorate: z.array(
+      z.object({
+        date: z.string(),
+        blankNull: meanLoHiSchema.nullable(),
+        undecided: meanLoHiSchema.nullable(),
+      }),
+    ),
   }),
 
   // Pesquisas individuais — sempre com tse_id (R6).
@@ -77,6 +101,13 @@ export const publicDataSchema = z.object({
       fieldEnd: z.string(),
       sampleSize: z.number(),
       marginOfError: z.number().nullable(),
+      /**
+       * Branco/nulo e não-sabe DECLARADOS pela pesquisa (já persistidos em
+       * `poll_results`). `null` = o instituto não publicou a grandeza — que é
+       * diferente de publicar zero, e a UI precisa distinguir os dois (R4).
+       */
+      blankNullPct: z.number().nullable(),
+      undecidedPct: z.number().nullable(),
       firstRound: z.record(z.string(), z.number()).nullable(),
       runoffs: z.array(
         z.object({
@@ -99,6 +130,64 @@ export const publicDataSchema = z.object({
       estimable: z.boolean(),
     }),
   ),
+
+  /**
+   * Transferência de votos entre estados ao longo do tempo (MODEL_VERSION 2.0.0).
+   *
+   * LEIA A Q-10 ANTES DE CONSUMIR ISTO. Fluxo NÃO é identificável a partir de
+   * pesquisa agregada: há K² incógnitas por passo para K equações marginais. O
+   * que este campo carrega é uma estimativa SOB PRIOR EXPLÍCITO, não uma medida.
+   * Por isso o schema torna obrigatório publicar, junto de cada fluxo, a banda e
+   * o `notIdentifiable`; e junto da série, o prior que a produziu. Um consumidor
+   * que queira ignorar a incerteza tem de fazer isso deliberadamente.
+   *
+   * `null` quando não há passos suficientes para estimar (o normal no começo).
+   */
+  transitions: z
+    .object({
+      /** Estados do espaço: candidatos + branco/nulo + não-sabe. */
+      states: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.enum(['candidate', 'blank_null', 'undecided']),
+          displayName: z.string(),
+        }),
+      ),
+      steps: z.array(
+        z.object({
+          fromDate: z.string(),
+          toDate: z.string(),
+          /**
+           * Fluxos do passo, em pontos percentuais DO ELEITORADO (não da origem):
+           * somar todos os `from = X` devolve o tamanho de X em `fromDate`.
+           */
+          flows: z.array(
+            z.object({
+              from: z.string(),
+              to: z.string(),
+              pp: z.number(),
+              lo90: z.number(),
+              hi90: z.number(),
+              /**
+               * true quando a banda cruza zero: o fluxo não é distinguível de
+               * nada. Publicado assim de propósito (Q-10 condição 3) — a UI deve
+               * mostrar como indistinguível, jamais omitir para a seta ficar limpa.
+               */
+              notIdentifiable: z.boolean(),
+            }),
+          ),
+        }),
+      ),
+      /** De onde veio a ajuda que tornou o sistema solúvel. Publicado, não escondido. */
+      prior: z.object({
+        method: z.string(),
+        /** Peso do prior de permanência (diagonal). Ver constants.ts. */
+        stickiness: z.number(),
+        /** Nota NOSSA sobre a limitação, exibida junto do gráfico. */
+        note: z.string(),
+      }),
+    })
+    .nullable(),
 
   diagnostics: z.object({
     gaveta: z.array(

@@ -5,15 +5,27 @@
  * é comentário (docs/05 §4). SSR-completo: o SVG já aparece sem JS.
  */
 import LatentBandChart from '../charts/LatentBandChart.astro';
+import ElectorateSeriesChart from '../charts/ElectorateSeriesChart.astro';
 import Num from '../Num.astro';
 import type { ChartInputs } from '../../data/chart-inputs.js';
 
 interface Props {
   firstRound: ChartInputs['firstRound'];
+  /** Branco/nulo e não-sabe (MODEL_VERSION 2.0.0) — mesma seção, mesmo eixo. */
+  electorate: ChartInputs['electorate'];
 }
 
-const { firstRound } = Astro.props;
+const { firstRound, electorate } = Astro.props;
 const hasSeries = firstRound.series.length > 0;
+
+/**
+ * As grandezas do eleitorado entram na MESMA seção da série de candidatos, logo
+ * abaixo e no MESMO eixo do tempo (`xDomain` da série de 1º turno). Ficam juntas
+ * porque a leitura é conjunta — o que sai de um candidato costuma ir para o
+ * branco/nulo ou para o não-sabe —, mas em outro gráfico e com identidade visual
+ * neutra, porque não são candidatura e não disputam a mesma leitura.
+ */
+const hasElectorate = electorate.some((s) => s.points.some((p) => p.band !== null));
 ---
 
 <section class="section" aria-labelledby="latent-title">
@@ -40,6 +52,24 @@ const hasSeries = firstRound.series.length > 0;
             points={firstRound.points}
             pollMeta={firstRound.pollMeta}
           />
+
+          {hasElectorate && (
+            <div class="elec-block">
+              <h3 class="display-m elec-heading">Quem não está com ninguém.</h3>
+              <p class="body elec-lead">
+                Branco e nulo e não-sabe são estados do eleitorado com a mesma dignidade de um
+                candidato: é deles que sai, e para eles que vai, boa parte do movimento. Não são
+                candidatura, então não recebem cor do espectro — e onde a grandeza não foi
+                medida, a faixa é interrompida em vez de virar zero.
+              </p>
+              <ElectorateSeriesChart
+                id="electorate-first"
+                title="Branco e nulo e não-sabe — estimativa ao longo do tempo"
+                series={electorate}
+                xDomain={firstRound.xDomain}
+              />
+            </div>
+          )}
         </div>
       </div>
     ) : (
@@ -68,5 +98,14 @@ const hasSeries = firstRound.series.length > 0;
   .latent-empty {
     margin-top: calc(var(--rhythm) * 3);
     max-width: 60ch;
+  }
+  .elec-block {
+    margin-top: calc(var(--rhythm) * 6);
+    padding-top: calc(var(--rhythm) * 4);
+    border-top: 1px solid var(--border);
+  }
+  .elec-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 64ch;
   }
 </style>

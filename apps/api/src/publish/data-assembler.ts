@@ -1,5 +1,11 @@
 import { publicDataSchema, type PublicData } from '@election-pool/contracts/public-data';
-import { observationsSchema, type Observation } from '@election-pool/contracts/model-io';
+import {
+  observationsSchema,
+  electorateObservationsSchema,
+  type Observation,
+  type ElectorateObservation,
+  type LatentPoint,
+} from '@election-pool/contracts/model-io';
 import { RACES } from '@election-pool/contracts/races';
 import { RACE_STATUS, SCENARIO_KIND } from '@election-pool/contracts/enums';
 import {
@@ -12,6 +18,7 @@ import type { RegistrationRecord } from '@election-pool/model/diagnostics';
 import { generatedAtIso, nextUpdateAtIso } from './time.js';
 import type {
   ScenarioResultRow,
+  ElectorateRow,
   RegistrationRow,
   PollRow,
   CandidateRow,
@@ -45,6 +52,8 @@ export interface AssembleInput {
   raceId: string;
   race: RaceRow;
   scenarioResults: readonly ScenarioResultRow[];
+  /** Branco/nulo e não-sabe por cenário canônico (MODEL_VERSION 2.0.0, Q-10). */
+  electorate: readonly ElectorateRow[];
   registrations: readonly RegistrationRow[];
   polls: readonly PollRow[];
   candidates: readonly CandidateRow[];
@@ -73,13 +82,15 @@ const METHODOLOGY_NOTES: readonly string[] = [
   'Não distingue mudança real de opinião de mudança de metodologia do instituto',
   'Não detecta fraude; os indicadores da §6 têm explicações inocentes e são publicados como diagnóstico, não acusação',
   'Não pondera institutos por acurácia histórica na v1',
+  'Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado',
 ];
 
 export const assemblePublicData = (input: AssembleInput): AssembleResult => {
   const observations = buildObservations(input.scenarioResults);
   const referenceDate = referenceDateFor(input.scenarioResults, input.now);
+  const electorateObservations = buildElectorateObservations(input.electorate);
 
-  const model = runModel({ observations, referenceDate });
+  const model = runModel({ observations, referenceDate, electorateObservations });
 
   const gaveta = computeGavetaRates(toRegistrationRecords(input.registrations), referenceDate);
   const herding = computeHerding(observations);
@@ -98,6 +109,11 @@ export const assemblePublicData = (input: AssembleInput): AssembleResult => {
       displayName: c.displayName,
       party: c.party,
       colorSlot: c.colorSlot,
+      // Foto oficial do TSE (ou null, e a UI usa monograma). `photoSourceUrl` é o
+      // registro de candidatura que a originou — proveniência à vista, como o
+      // tse_id da pesquisa (R6). É LINK, nunca conteúdo de terceiro (R3).
+      photoPath: c.photoPath,
+      photoSourceUrl: c.photoSourceUrl,
     })),
 
     institutes: input.institutes.map((i) => ({
@@ -112,7 +128,41 @@ export const assemblePublicData = (input: AssembleInput): AssembleResult => {
         pair: r.pair,
         series: r.series.map(toPublicLatentPoint),
       })),
+      // Branco/nulo e não-sabe. `null` num ponto = sem medida ali; a UI
+      // interrompe a linha em vez de desenhar zero (R4).
+      electorate: model.latent.electorate.map((p) => ({
+        date: p.date,
+        blankNull: p.blankNull === null ? null : toPublicBand(p.blankNull),
+        undecided: p.undecided === null ? null : toPublicBand(p.undecided),
+      })),
     },
+
+    // Transferência de votos (Q-10). Passthrough do modelo, incluindo a banda e o
+    // veredito `notIdentifiable` de cada fluxo — o montador NÃO filtra fluxo
+    // indistinguível de zero. Esconder aqui seria publicar só as setas bonitas.
+    transitions:
+      model.transitions === null
+        ? null
+        : {
+            states: model.transitions.states.map((s) => ({
+              id: s.id,
+              kind: s.kind,
+              displayName: s.displayName,
+            })),
+            steps: model.transitions.steps.map((step) => ({
+              fromDate: step.fromDate,
+              toDate: step.toDate,
+              flows: step.flows.map((f) => ({
+                from: f.from,
+                to: f.to,
+                pp: f.pp,
+                lo90: f.lo90Pp,
+                hi90: f.hi90Pp,
+                notIdentifiable: f.notIdentifiable,
+              })),
+            })),
+            prior: model.transitions.prior,
+          },
 
     polls: buildPolls(input.polls, input.scenarioResults),
 
@@ -186,6 +236,28 @@ const buildObservations = (rows: readonly ScenarioResultRow[]): Observation[] =>
  * (`YYYY-MM-DD`). Aritmética de calendário em UTC (determinística; sem timezone
  * de runtime). Datas de campo são `date` puras no banco (sem hora).
  */
+/**
+ * Converte as linhas de branco/nulo e não-sabe em `ElectorateObservation[]`
+ * (fronteira Zod de entrada do modelo). Cenário cujas DUAS grandezas são `null`
+ * é descartado aqui: ele não carrega medida alguma, e mantê-lo só adicionaria uma
+ * observação vazia ao modelo. Um cenário com UMA das duas medidas é mantido — a
+ * outra segue `null` e o modelo trata como ausência, não como zero (R4).
+ */
+const buildElectorateObservations = (rows: readonly ElectorateRow[]): ElectorateObservation[] => {
+  const raw = rows
+    .filter((r) => r.blankNullPct !== null || r.undecidedPct !== null)
+    .map((r) => ({
+      tseId: r.tseId,
+      instituteId: r.instituteId,
+      scenarioKind: r.scenarioKind,
+      fieldMedianDate: medianFieldDate(r.fieldStart, r.fieldEnd),
+      sampleSize: r.sampleSize,
+      blankNullPct: r.blankNullPct,
+      undecidedPct: r.undecidedPct,
+    }));
+  return electorateObservationsSchema.parse(raw);
+};
+
 const medianFieldDate = (fieldStart: string, fieldEnd: string): string => {
   const startMs = Date.parse(`${fieldStart}T00:00:00Z`);
   const endMs = Date.parse(`${fieldEnd}T00:00:00Z`);
@@ -264,6 +336,10 @@ const buildPolls = (
       fieldEnd: p.fieldEnd,
       sampleSize: p.sampleSize,
       marginOfError: p.marginOfError,
+      // Passa direto: `null` significa "o instituto não publicou a grandeza" e
+      // precisa chegar assim ao público, para a UI distinguir de um zero medido.
+      blankNullPct: p.blankNullPct,
+      undecidedPct: p.undecidedPct,
       firstRound: Object.keys(firstRound).length > ZERO ? firstRound : null,
       runoffs,
       sourceUrl: p.sourceUrl,
@@ -290,6 +366,13 @@ interface ModelLatentPoint {
   date: string;
   byCandidate: Record<string, { meanPct: number; lo90Pct: number; hi90Pct: number }>;
 }
+
+/** Banda do modelo (…Pct) para a forma pública (mean/lo90/hi90). */
+const toPublicBand = (band: LatentPoint): { mean: number; lo90: number; hi90: number } => ({
+  mean: band.meanPct,
+  lo90: band.lo90Pct,
+  hi90: band.hi90Pct,
+});
 
 /** Converte um ponto latente do modelo (meanPct/lo90Pct/hi90Pct) ao público (mean/lo90/hi90). */
 const toPublicLatentPoint = (

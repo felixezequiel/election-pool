@@ -11,6 +11,7 @@
  * (colorSlot), com hachura por slot para não depender só da cor.
  */
 import Num from '../Num.astro';
+import CandidatePhoto from '../CandidatePhoto.astro';
 import HachuraDefs from './HachuraDefs.astro';
 import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
 import { hachuraFill } from './lib/hachura.js';
@@ -19,6 +20,8 @@ export interface PollStripValue {
   candidateId: string;
   candidateName: string;
   colorSlot: number;
+  /** Foto oficial servida por nós, ou null ⇒ monograma (MODEL_VERSION 2.0.0). */
+  photoPath: string | null;
   value: number;
 }
 
@@ -32,6 +35,12 @@ export interface PollStripRow {
   sourceUrl: string;
   /** Valores do cenário exibido (ex.: 1º turno), por candidato. */
   values: PollStripValue[];
+  /**
+   * Branco/nulo e não-sabe DECLARADOS pela pesquisa. `null` significa que o
+   * instituto não publicou a grandeza — a UI escreve "não publicado", nunca 0.
+   */
+  blankNullPct: number | null;
+  undecidedPct: number | null;
 }
 
 interface Props {
@@ -116,12 +125,51 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
           </svg>
           <ul class="strip-values" role="list">
             {row.values.map((v) => (
-              <li style={`--dot: var(--c${v.colorSlot})`}>
-                <span class="strip-dot" aria-hidden="true" />
+              <li>
+                {/* Foto decorativa: o nome vem logo ao lado, e repetir o nome no
+                    alt faria o leitor de tela lê-lo duas vezes. */}
+                <CandidatePhoto
+                  photoPath={v.photoPath}
+                  displayName={v.candidateName}
+                  colorSlot={v.colorSlot}
+                  size={22}
+                  class="strip-photo"
+                />
                 {v.candidateName} <Num>{formatPct(v.value)}</Num>%
               </li>
             ))}
           </ul>
+
+          {/*
+            Branco/nulo e não-sabe declarados. Quando o instituto não publicou a
+            grandeza, dizemos isso — um zero aqui seria uma afirmação que a
+            pesquisa não fez (R4).
+          */}
+          <p class="strip-electorate">
+            <span>
+              branco/nulo{' '}
+              {row.blankNullPct === null ? (
+                <span class="strip-nodata">não publicado</span>
+              ) : (
+                <>
+                  <Num>{formatPct(row.blankNullPct)}</Num>%
+                </>
+              )}
+            </span>
+            <span aria-hidden="true" class="strip-sep">
+              ·
+            </span>
+            <span>
+              não sabe{' '}
+              {row.undecidedPct === null ? (
+                <span class="strip-nodata">não publicado</span>
+              ) : (
+                <>
+                  <Num>{formatPct(row.undecidedPct)}</Num>%
+                </>
+              )}
+            </span>
+          </p>
         </li>
       ))
     }
@@ -139,6 +187,8 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
           <th scope="col">Campo</th>
           <th class="num" scope="col">n</th>
           <th scope="col">Valores</th>
+          <th class="num" scope="col">Branco/nulo</th>
+          <th class="num" scope="col">Não sabe</th>
         </tr>
       </thead>
       <tbody>
@@ -162,6 +212,24 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
                     {v.candidateName} <Num>{formatPct(v.value)}</Num>%
                   </>
                 ))}
+              </td>
+              <td class="num">
+                {row.blankNullPct === null ? (
+                  'não publicado'
+                ) : (
+                  <>
+                    <Num>{formatPct(row.blankNullPct)}</Num>%
+                  </>
+                )}
+              </td>
+              <td class="num">
+                {row.undecidedPct === null ? (
+                  'não publicado'
+                ) : (
+                  <>
+                    <Num>{formatPct(row.undecidedPct)}</Num>%
+                  </>
+                )}
               </td>
             </tr>
           ))
@@ -188,7 +256,8 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
     grid-template-areas:
       'head bar'
       'meta bar'
-      'values bar';
+      'values bar'
+      'elec bar';
     gap: 4px calc(var(--rhythm) * 3);
     align-items: center;
     padding: calc(var(--rhythm) * 1.5);
@@ -238,11 +307,29 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
     align-items: center;
     gap: 6px;
   }
-  .strip-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--dot);
+  /* A foto (ou o monograma) substitui o antigo ponto colorido: mesma função de
+     identidade, mais informação, mesmo espaço. */
+  .strip-photo {
+    margin-right: 2px;
+  }
+
+  /* Branco/nulo e não-sabe declarados pela pesquisa. */
+  .strip-electorate {
+    grid-area: elec;
+    margin-top: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 calc(var(--rhythm) * 1.5);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .strip-nodata {
+    font-style: italic;
+    font-family: var(--font-body);
+  }
+  .strip-sep {
+    color: var(--ink-3);
   }
   .strip-bar {
     grid-area: bar;
@@ -260,7 +347,8 @@ const desc = `Lista de ${rows.length} pesquisas com registro TSE, instituto, per
         'head'
         'meta'
         'bar'
-        'values';
+        'values'
+        'elec';
     }
     .strip-bar {
       max-width: 100%;

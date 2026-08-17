@@ -3,11 +3,9 @@
 > ARQUIVO GERADO por `pnpm --filter @election-pool/model model:backtest`.
 > NÃO editar à mão (docs/07 §4.4). Resultados reprovados também são gravados.
 
-- **Data do run:** 2026-08-14T20:26:33.452Z
-- **model_version:** 1.0.0
-- **git_sha:** UNAVAILABLE
-
-> `git_sha` indisponível no ambiente de execução (não é um repositório git); placeholder registrado conforme docs/07 §4.4 exige registrar mesmo assim.
+- **Data do run:** 2026-08-17T02:07:19.397Z
+- **model_version:** 2.0.0
+- **git_sha:** 83edfa4
 
 ## As quatro comparações (docs/07 §4.2)
 
@@ -21,7 +19,21 @@ Aprovação = o resultado da urna cai dentro do IC 90%.
 | 2º | r1-winner | 51.5% | [50.5; 52.5] | 2.01 | 50.9% | PASS |
 | 2º | r1-runner-up | 48.5% | [47.5; 49.5] | 2.01 | 49.1% | PASS |
 
-**Veredito geral: REPROVOU (2/4).**
+## Transferência 1º ⇒ 2º turno (Q-10 condição 6)
+
+As TAXAS saem só de pesquisa (composição latente de 1º turno no corte ⇒ composição de 2º turno no corte, pelo mesmo estimador que roda em produção). O ponto de checagem sai só da URNA, que o modelo nunca vê. Compara-se uma RAZÃO — a fração da massa liberada pelos eliminados que foi para o primeiro finalista — porque razão sobrevive à diferença de base entre intenção bruta e votos válidos.
+
+- Eliminados: cand-03, cand-04
+- Finalistas: cand-01, cand-02
+- Fluxo estimado dos eliminados: 4.28 p.p. para cand-01, 6.78 p.p. para cand-02
+
+| Grandeza | Modelo | Banda 90% | Urna | Veredito |
+|----------|--------|-----------|------|----------|
+| fração da massa liberada para cand-01 | 38.7% | [31.6; 46.2] | 29.8% | FAIL |
+
+Leitura honesta. O prior de permanência (stickiness 0.85) responde por parte deste número: transferência não é identificável a partir de agregado (Q-10), e a banda acima é aritmética de intervalo sobre as bandas dos fluxos, portanto MAIS LARGA que um bootstrap conjunto. Consequência: um FAIL aqui é sinal forte; um PASS é evidência fraca. A comparação ainda supõe que o bolo de votos válidos é o mesmo nos dois turnos e que não houve troca direta entre os finalistas — suposições que o dado agregado não pode verificar. Se reprovou, o veredito fica publicado como reprovado: o prior NÃO é ajustado para passar (R1).
+
+**Veredito geral: REPROVOU (2/4, transferência FAIL).**
 
 ## Leitura honesta (docs/07 §4.3)
 
@@ -35,3 +47,5 @@ O modelo v1 usa restrição de soma-zero (docs/01 §1.1) e **não tem mecanismo 
 ## Proveniência
 
 Fixture: `packages/model/__fixtures__/2022.json` — pesquisas presidenciais nacionais de 2022 reconstruídas do registro público (PesqEle + divulgações dos institutos), em intenção BRUTA. Nenhum valor foi ajustado para o backtest passar (CLAUDE.md R1). Corte do 1º turno: 2022-10-01. Corte do 2º turno: 2022-10-29. Nenhuma pesquisa com `field_end` posterior ao corte entra no run (sem vazamento).
+
+Limite conhecido desta fixture: ela NÃO traz branco/nulo nem não-sabe (as divulgações reconstruídas não os publicam em campo estruturado), então o backtest roda com `electorateObservations` vazio e **não exercita a série de eleitorado** nem os estados de branco/nulo e não-sabe dentro da transferência. Array vazio significa "ninguém declarou a grandeza" — não zero (R4).

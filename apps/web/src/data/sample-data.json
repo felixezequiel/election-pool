@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1",
+  "schemaVersion": "2",
   "generatedAt": "2026-08-14T15:00:00-03:00",
   "nextUpdateAt": "2026-08-14T17:00:00-03:00",
   "updateIntervalMinutes": 120,
-  "modelVersion": "1.0.0",
+  "modelVersion": "2.0.0",
   "gitSha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
   "race": {
     "id": "presidencia-2026",
@@ -14,25 +14,33 @@
       "id": "cand-a",
       "displayName": "Andrade",
       "party": "PXA",
-      "colorSlot": 1
+      "colorSlot": 1,
+      "photoPath": "/candidatos/amostra-andrade.svg",
+      "photoSourceUrl": "https://divulgacandcontas.tse.jus.br/"
     },
     {
       "id": "cand-b",
       "displayName": "Barros",
       "party": "PXB",
-      "colorSlot": 2
+      "colorSlot": 2,
+      "photoPath": "/candidatos/amostra-barros.svg",
+      "photoSourceUrl": "https://divulgacandcontas.tse.jus.br/"
     },
     {
       "id": "cand-c",
       "displayName": "Cardoso",
       "party": "PXC",
-      "colorSlot": 3
+      "colorSlot": 3,
+      "photoPath": null,
+      "photoSourceUrl": null
     },
     {
       "id": "demais",
       "displayName": "Demais",
       "party": null,
-      "colorSlot": 8
+      "colorSlot": 8,
+      "photoPath": null,
+      "photoSourceUrl": null
     }
   ],
   "institutes": [
@@ -58,24 +66,24 @@
         "date": "2026-05-16",
         "byCandidate": {
           "cand-a": {
-            "mean": 38,
-            "lo90": 34.8,
-            "hi90": 41.2
+            "mean": 34,
+            "lo90": 30.8,
+            "hi90": 37.2
           },
           "cand-b": {
-            "mean": 31,
-            "lo90": 28,
-            "hi90": 34
+            "mean": 27,
+            "lo90": 24,
+            "hi90": 30
           },
           "cand-c": {
-            "mean": 14,
-            "lo90": 11.6,
-            "hi90": 16.4
+            "mean": 12,
+            "lo90": 9.6,
+            "hi90": 14.4
           },
           "demais": {
-            "mean": 11,
-            "lo90": 9,
-            "hi90": 13
+            "mean": 9,
+            "lo90": 7,
+            "hi90": 11
           }
         }
       },
@@ -83,24 +91,24 @@
         "date": "2026-05-23",
         "byCandidate": {
           "cand-a": {
-            "mean": 38.3,
-            "lo90": 35.1,
-            "hi90": 41.4
+            "mean": 34.5,
+            "lo90": 31.4,
+            "hi90": 37.7
           },
           "cand-b": {
-            "mean": 30.9,
-            "lo90": 27.9,
-            "hi90": 33.8
+            "mean": 26.7,
+            "lo90": 23.7,
+            "hi90": 29.6
           },
           "cand-c": {
-            "mean": 14.1,
-            "lo90": 11.7,
-            "hi90": 16.5
+            "mean": 12.1,
+            "lo90": 9.7,
+            "hi90": 14.5
           },
           "demais": {
-            "mean": 11,
-            "lo90": 9,
-            "hi90": 13
+            "mean": 9,
+            "lo90": 7,
+            "hi90": 11
           }
         }
       },
@@ -108,24 +116,24 @@
         "date": "2026-05-30",
         "byCandidate": {
           "cand-a": {
-            "mean": 38.5,
-            "lo90": 35.4,
-            "hi90": 41.6
+            "mean": 35,
+            "lo90": 31.9,
+            "hi90": 38.1
           },
           "cand-b": {
-            "mean": 30.8,
-            "lo90": 27.8,
-            "hi90": 33.7
+            "mean": 26.3,
+            "lo90": 23.4,
+            "hi90": 29.2
           },
           "cand-c": {
-            "mean": 14.2,
-            "lo90": 11.8,
-            "hi90": 16.5
+            "mean": 12.2,
+            "lo90": 9.9,
+            "hi90": 14.5
           },
           "demais": {
-            "mean": 10.9,
-            "lo90": 8.9,
-            "hi90": 12.9
+            "mean": 8.9,
+            "lo90": 6.9,
+            "hi90": 10.9
           }
         }
       },
@@ -133,24 +141,24 @@
         "date": "2026-06-06",
         "byCandidate": {
           "cand-a": {
-            "mean": 38.8,
-            "lo90": 35.7,
-            "hi90": 41.8
+            "mean": 35.5,
+            "lo90": 32.5,
+            "hi90": 38.6
           },
           "cand-b": {
-            "mean": 30.6,
-            "lo90": 27.8,
-            "hi90": 33.5
+            "mean": 26,
+            "lo90": 23.1,
+            "hi90": 28.8
           },
           "cand-c": {
-            "mean": 14.2,
-            "lo90": 11.9,
-            "hi90": 16.6
+            "mean": 12.3,
+            "lo90": 10,
+            "hi90": 14.6
           },
           "demais": {
-            "mean": 10.9,
-            "lo90": 8.9,
-            "hi90": 12.9
+            "mean": 8.9,
+            "lo90": 6.9,
+            "hi90": 10.9
           }
         }
       },
@@ -158,24 +166,24 @@
         "date": "2026-06-13",
         "byCandidate": {
           "cand-a": {
-            "mean": 39,
-            "lo90": 36,
-            "hi90": 42
+            "mean": 36,
+            "lo90": 33,
+            "hi90": 39
           },
           "cand-b": {
-            "mean": 30.5,
-            "lo90": 27.7,
-            "hi90": 33.4
+            "mean": 25.6,
+            "lo90": 22.8,
+            "hi90": 28.4
           },
           "cand-c": {
-            "mean": 14.3,
-            "lo90": 12,
-            "hi90": 16.6
+            "mean": 12.4,
+            "lo90": 10.1,
+            "hi90": 14.7
           },
           "demais": {
-            "mean": 10.8,
-            "lo90": 8.8,
-            "hi90": 12.8
+            "mean": 8.8,
+            "lo90": 6.8,
+            "hi90": 10.8
           }
         }
       },
@@ -183,24 +191,24 @@
         "date": "2026-06-20",
         "byCandidate": {
           "cand-a": {
-            "mean": 39.3,
-            "lo90": 36.3,
-            "hi90": 42.2
+            "mean": 36.5,
+            "lo90": 33.6,
+            "hi90": 39.5
           },
           "cand-b": {
-            "mean": 30.4,
-            "lo90": 27.6,
-            "hi90": 33.2
+            "mean": 25.3,
+            "lo90": 22.5,
+            "hi90": 28.1
           },
           "cand-c": {
-            "mean": 14.4,
-            "lo90": 12.2,
-            "hi90": 16.7
+            "mean": 12.5,
+            "lo90": 10.3,
+            "hi90": 14.8
           },
           "demais": {
-            "mean": 10.8,
-            "lo90": 8.8,
-            "hi90": 12.8
+            "mean": 8.8,
+            "lo90": 6.8,
+            "hi90": 10.8
           }
         }
       },
@@ -208,24 +216,24 @@
         "date": "2026-06-27",
         "byCandidate": {
           "cand-a": {
-            "mean": 39.5,
-            "lo90": 36.6,
-            "hi90": 42.4
+            "mean": 37,
+            "lo90": 34.1,
+            "hi90": 39.9
           },
           "cand-b": {
-            "mean": 30.3,
-            "lo90": 27.5,
-            "hi90": 33
+            "mean": 24.9,
+            "lo90": 22.1,
+            "hi90": 27.7
           },
           "cand-c": {
-            "mean": 14.5,
-            "lo90": 12.3,
-            "hi90": 16.7
+            "mean": 12.6,
+            "lo90": 10.4,
+            "hi90": 14.8
           },
           "demais": {
-            "mean": 10.7,
-            "lo90": 8.7,
-            "hi90": 12.7
+            "mean": 8.7,
+            "lo90": 6.7,
+            "hi90": 10.7
           }
         }
       },
@@ -233,24 +241,24 @@
         "date": "2026-07-04",
         "byCandidate": {
           "cand-a": {
-            "mean": 39.8,
-            "lo90": 36.9,
-            "hi90": 42.6
+            "mean": 37.5,
+            "lo90": 34.7,
+            "hi90": 40.4
           },
           "cand-b": {
-            "mean": 30.2,
-            "lo90": 27.4,
-            "hi90": 32.9
+            "mean": 24.6,
+            "lo90": 21.8,
+            "hi90": 27.3
           },
           "cand-c": {
-            "mean": 14.6,
-            "lo90": 12.4,
-            "hi90": 16.8
+            "mean": 12.7,
+            "lo90": 10.5,
+            "hi90": 14.9
           },
           "demais": {
-            "mean": 10.7,
-            "lo90": 8.7,
-            "hi90": 12.7
+            "mean": 8.7,
+            "lo90": 6.7,
+            "hi90": 10.7
           }
         }
       },
@@ -258,24 +266,24 @@
         "date": "2026-07-11",
         "byCandidate": {
           "cand-a": {
-            "mean": 40,
-            "lo90": 37.2,
-            "hi90": 42.8
+            "mean": 38,
+            "lo90": 35.2,
+            "hi90": 40.8
           },
           "cand-b": {
-            "mean": 30,
-            "lo90": 27.4,
-            "hi90": 32.7
+            "mean": 24.2,
+            "lo90": 21.5,
+            "hi90": 26.9
           },
           "cand-c": {
-            "mean": 14.6,
-            "lo90": 12.5,
-            "hi90": 16.8
+            "mean": 12.8,
+            "lo90": 10.6,
+            "hi90": 15
           },
           "demais": {
-            "mean": 10.6,
-            "lo90": 8.6,
-            "hi90": 12.6
+            "mean": 8.6,
+            "lo90": 6.6,
+            "hi90": 10.6
           }
         }
       },
@@ -283,24 +291,24 @@
         "date": "2026-07-18",
         "byCandidate": {
           "cand-a": {
-            "mean": 40.3,
-            "lo90": 37.5,
-            "hi90": 43
+            "mean": 38.5,
+            "lo90": 35.8,
+            "hi90": 41.3
           },
           "cand-b": {
-            "mean": 29.9,
-            "lo90": 27.3,
-            "hi90": 32.6
+            "mean": 23.9,
+            "lo90": 21.2,
+            "hi90": 26.5
           },
           "cand-c": {
-            "mean": 14.7,
-            "lo90": 12.6,
-            "hi90": 16.9
+            "mean": 12.9,
+            "lo90": 10.8,
+            "hi90": 15
           },
           "demais": {
-            "mean": 10.6,
-            "lo90": 8.6,
-            "hi90": 12.6
+            "mean": 8.6,
+            "lo90": 6.6,
+            "hi90": 10.6
           }
         }
       },
@@ -308,24 +316,24 @@
         "date": "2026-07-25",
         "byCandidate": {
           "cand-a": {
-            "mean": 40.5,
-            "lo90": 37.8,
-            "hi90": 43.2
+            "mean": 39,
+            "lo90": 36.3,
+            "hi90": 41.7
           },
           "cand-b": {
-            "mean": 29.8,
-            "lo90": 27.2,
-            "hi90": 32.4
+            "mean": 23.5,
+            "lo90": 20.9,
+            "hi90": 26.1
           },
           "cand-c": {
-            "mean": 14.8,
-            "lo90": 12.7,
-            "hi90": 16.9
+            "mean": 13,
+            "lo90": 10.9,
+            "hi90": 15.1
           },
           "demais": {
-            "mean": 10.5,
-            "lo90": 8.5,
-            "hi90": 12.5
+            "mean": 8.5,
+            "lo90": 6.5,
+            "hi90": 10.5
           }
         }
       },
@@ -333,24 +341,24 @@
         "date": "2026-08-01",
         "byCandidate": {
           "cand-a": {
-            "mean": 40.8,
-            "lo90": 38.1,
-            "hi90": 43.4
+            "mean": 39.5,
+            "lo90": 36.9,
+            "hi90": 42.2
           },
           "cand-b": {
-            "mean": 29.7,
-            "lo90": 27.1,
-            "hi90": 32.2
+            "mean": 23.2,
+            "lo90": 20.6,
+            "hi90": 25.7
           },
           "cand-c": {
-            "mean": 14.9,
-            "lo90": 12.8,
-            "hi90": 17
+            "mean": 13.1,
+            "lo90": 11,
+            "hi90": 15.2
           },
           "demais": {
-            "mean": 10.5,
-            "lo90": 8.5,
-            "hi90": 12.5
+            "mean": 8.5,
+            "lo90": 6.5,
+            "hi90": 10.5
           }
         }
       },
@@ -358,24 +366,24 @@
         "date": "2026-08-08",
         "byCandidate": {
           "cand-a": {
-            "mean": 41,
-            "lo90": 38.4,
-            "hi90": 43.6
+            "mean": 40,
+            "lo90": 37.4,
+            "hi90": 42.6
           },
           "cand-b": {
-            "mean": 29.6,
-            "lo90": 27,
-            "hi90": 32.1
+            "mean": 22.8,
+            "lo90": 20.3,
+            "hi90": 25.3
           },
           "cand-c": {
-            "mean": 15,
-            "lo90": 12.9,
-            "hi90": 17
+            "mean": 13.2,
+            "lo90": 11.2,
+            "hi90": 15.2
           },
           "demais": {
-            "mean": 10.4,
-            "lo90": 8.4,
-            "hi90": 12.4
+            "mean": 8.4,
+            "lo90": 6.4,
+            "hi90": 10.4
           }
         }
       }
@@ -581,6 +589,161 @@
           }
         ]
       }
+    ],
+    "electorate": [
+      {
+        "date": "2026-05-16",
+        "blankNull": {
+          "mean": 8,
+          "lo90": 6.6,
+          "hi90": 9.4
+        },
+        "undecided": {
+          "mean": 10,
+          "lo90": 7.9,
+          "hi90": 12.1
+        }
+      },
+      {
+        "date": "2026-05-23",
+        "blankNull": {
+          "mean": 8.1,
+          "lo90": 6.7,
+          "hi90": 9.5
+        },
+        "undecided": {
+          "mean": 9.8,
+          "lo90": 7.7,
+          "hi90": 11.9
+        }
+      },
+      {
+        "date": "2026-05-30",
+        "blankNull": {
+          "mean": 8.1,
+          "lo90": 6.7,
+          "hi90": 9.5
+        },
+        "undecided": {
+          "mean": 9.5,
+          "lo90": 7.4,
+          "hi90": 11.6
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "blankNull": {
+          "mean": 8.2,
+          "lo90": 6.8,
+          "hi90": 9.6
+        },
+        "undecided": {
+          "mean": 9.3,
+          "lo90": 7.2,
+          "hi90": 11.4
+        }
+      },
+      {
+        "date": "2026-06-13",
+        "blankNull": {
+          "mean": 8.2,
+          "lo90": 6.8,
+          "hi90": 9.6
+        },
+        "undecided": null
+      },
+      {
+        "date": "2026-06-20",
+        "blankNull": {
+          "mean": 8.3,
+          "lo90": 6.9,
+          "hi90": 9.7
+        },
+        "undecided": {
+          "mean": 8.8,
+          "lo90": 6.7,
+          "hi90": 10.9
+        }
+      },
+      {
+        "date": "2026-06-27",
+        "blankNull": {
+          "mean": 8.3,
+          "lo90": 6.9,
+          "hi90": 9.7
+        },
+        "undecided": {
+          "mean": 8.5,
+          "lo90": 6.4,
+          "hi90": 10.6
+        }
+      },
+      {
+        "date": "2026-07-04",
+        "blankNull": {
+          "mean": 8.4,
+          "lo90": 7,
+          "hi90": 9.8
+        },
+        "undecided": {
+          "mean": 8.3,
+          "lo90": 6.2,
+          "hi90": 10.4
+        }
+      },
+      {
+        "date": "2026-07-11",
+        "blankNull": null,
+        "undecided": {
+          "mean": 8,
+          "lo90": 5.9,
+          "hi90": 10.1
+        }
+      },
+      {
+        "date": "2026-07-18",
+        "blankNull": {
+          "mean": 8.5,
+          "lo90": 7,
+          "hi90": 9.9
+        },
+        "undecided": {
+          "mean": 7.8,
+          "lo90": 5.7,
+          "hi90": 9.9
+        }
+      },
+      {
+        "date": "2026-07-25",
+        "blankNull": {
+          "mean": 8.5,
+          "lo90": 7.1,
+          "hi90": 9.9
+        },
+        "undecided": {
+          "mean": 7.5,
+          "lo90": 5.4,
+          "hi90": 9.6
+        }
+      },
+      {
+        "date": "2026-08-01",
+        "blankNull": null,
+        "undecided": null
+      },
+      {
+        "date": "2026-08-08",
+        "blankNull": {
+          "mean": 8.6,
+          "lo90": 7.2,
+          "hi90": 10
+        },
+        "undecided": {
+          "mean": 7,
+          "lo90": 4.9,
+          "hi90": 9.1
+        }
+      }
     ]
   },
   "polls": [
@@ -593,11 +756,13 @@
       "fieldEnd": "2026-05-22",
       "sampleSize": 1500,
       "marginOfError": 2,
+      "blankNullPct": 7.6,
+      "undecidedPct": 9.3,
       "firstRound": {
-        "cand-a": 37.1,
-        "cand-b": 30.4,
-        "cand-c": 14,
-        "demais": 11
+        "cand-a": 33.3,
+        "cand-b": 26.3,
+        "cand-c": 12.1,
+        "demais": 9
       },
       "runoffs": [
         {
@@ -619,11 +784,13 @@
       "fieldEnd": "2026-06-01",
       "sampleSize": 1800,
       "marginOfError": 2,
+      "blankNullPct": 8.1,
+      "undecidedPct": 9.5,
       "firstRound": {
-        "cand-a": 38.4,
-        "cand-b": 30.7,
-        "cand-c": 14.1,
-        "demais": 11
+        "cand-a": 35,
+        "cand-b": 26.3,
+        "cand-c": 12.2,
+        "demais": 8.9
       },
       "runoffs": [
         {
@@ -645,11 +812,13 @@
       "fieldEnd": "2026-06-11",
       "sampleSize": 2100,
       "marginOfError": 2,
+      "blankNullPct": null,
+      "undecidedPct": 9.7,
       "firstRound": {
-        "cand-a": 39.7,
-        "cand-b": 31,
-        "cand-c": 14.2,
-        "demais": 11
+        "cand-a": 36.7,
+        "cand-b": 26.3,
+        "cand-c": 12.3,
+        "demais": 8.8
       },
       "runoffs": [
         {
@@ -671,11 +840,13 @@
       "fieldEnd": "2026-06-21",
       "sampleSize": 2400,
       "marginOfError": 2,
+      "blankNullPct": 7.8,
+      "undecidedPct": 8.2,
       "firstRound": {
-        "cand-a": 38,
-        "cand-b": 29.8,
-        "cand-c": 14.3,
-        "demais": 11
+        "cand-a": 35.4,
+        "cand-b": 24.8,
+        "cand-c": 12.5,
+        "demais": 8.8
       },
       "runoffs": [
         {
@@ -697,11 +868,13 @@
       "fieldEnd": "2026-07-01",
       "sampleSize": 1500,
       "marginOfError": 2,
+      "blankNullPct": 8.3,
+      "undecidedPct": 8.4,
       "firstRound": {
-        "cand-a": 39.3,
-        "cand-b": 30.1,
-        "cand-c": 14.4,
-        "demais": 11
+        "cand-a": 37.1,
+        "cand-b": 24.8,
+        "cand-c": 12.6,
+        "demais": 8.7
       },
       "runoffs": [
         {
@@ -723,11 +896,13 @@
       "fieldEnd": "2026-07-11",
       "sampleSize": 1800,
       "marginOfError": 2,
+      "blankNullPct": 8.8,
+      "undecidedPct": null,
       "firstRound": {
-        "cand-a": 40.6,
-        "cand-b": 30.4,
-        "cand-c": 14.5,
-        "demais": 11
+        "cand-a": 38.9,
+        "cand-b": 24.8,
+        "cand-c": 12.8,
+        "demais": 8.6
       },
       "runoffs": [
         {
@@ -749,11 +924,13 @@
       "fieldEnd": "2026-07-21",
       "sampleSize": 2100,
       "marginOfError": 2,
+      "blankNullPct": 8.1,
+      "undecidedPct": 7.1,
       "firstRound": {
-        "cand-a": 38.9,
-        "cand-b": 29.2,
-        "cand-c": 14.6,
-        "demais": 11
+        "cand-a": 37.6,
+        "cand-b": 23.3,
+        "cand-c": 12.9,
+        "demais": 8.5
       },
       "runoffs": [
         {
@@ -775,11 +952,13 @@
       "fieldEnd": "2026-07-31",
       "sampleSize": 2400,
       "marginOfError": 2,
+      "blankNullPct": null,
+      "undecidedPct": null,
       "firstRound": {
-        "cand-a": 40.2,
-        "cand-b": 29.5,
-        "cand-c": 14.7,
-        "demais": 11
+        "cand-a": 39.3,
+        "cand-b": 23.3,
+        "cand-c": 13.1,
+        "demais": 8.5
       },
       "runoffs": [
         {
@@ -801,11 +980,13 @@
       "fieldEnd": "2026-08-10",
       "sampleSize": 1500,
       "marginOfError": 2,
+      "blankNullPct": 9,
+      "undecidedPct": 7.6,
       "firstRound": {
-        "cand-a": 41.5,
-        "cand-b": 29.8,
-        "cand-c": 14.8,
-        "demais": 11
+        "cand-a": 41,
+        "cand-b": 23.3,
+        "cand-c": 13.2,
+        "demais": 8.4
       },
       "runoffs": [
         {
@@ -875,6 +1056,377 @@
       "estimable": true
     }
   ],
+  "transitions": {
+    "states": [
+      {
+        "id": "cand-a",
+        "kind": "candidate",
+        "displayName": "Andrade"
+      },
+      {
+        "id": "cand-b",
+        "kind": "candidate",
+        "displayName": "Barros"
+      },
+      {
+        "id": "cand-c",
+        "kind": "candidate",
+        "displayName": "Cardoso"
+      },
+      {
+        "id": "demais",
+        "kind": "candidate",
+        "displayName": "Demais"
+      },
+      {
+        "id": "branco-nulo",
+        "kind": "blank_null",
+        "displayName": "Branco e nulo"
+      },
+      {
+        "id": "nao-sabe",
+        "kind": "undecided",
+        "displayName": "Não sabe"
+      }
+    ],
+    "steps": [
+      {
+        "fromDate": "2026-07-18",
+        "toDate": "2026-07-25",
+        "flows": [
+          {
+            "from": "nao-sabe",
+            "to": "cand-a",
+            "pp": 0.4,
+            "lo90": 0.12,
+            "hi90": 0.71,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "cand-c",
+            "pp": 0.15,
+            "lo90": -0.09,
+            "hi90": 0.4,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-a",
+            "pp": 0.1,
+            "lo90": -0.14,
+            "hi90": 0.35,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "branco-nulo",
+            "pp": 0.35,
+            "lo90": 0.08,
+            "hi90": 0.63,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "demais",
+            "pp": 0.05,
+            "lo90": -0.16,
+            "hi90": 0.27,
+            "notIdentifiable": true
+          },
+          {
+            "from": "demais",
+            "to": "cand-b",
+            "pp": 0.1,
+            "lo90": -0.12,
+            "hi90": 0.33,
+            "notIdentifiable": true
+          },
+          {
+            "from": "branco-nulo",
+            "to": "nao-sabe",
+            "pp": 0.3,
+            "lo90": 0.05,
+            "hi90": 0.56,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-a",
+            "to": "cand-a",
+            "pp": 38.5,
+            "lo90": 36.9,
+            "hi90": 40.1,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-b",
+            "pp": 23.4,
+            "lo90": 21.8,
+            "hi90": 25,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "cand-c",
+            "pp": 12.85,
+            "lo90": 11.25,
+            "hi90": 14.45,
+            "notIdentifiable": false
+          },
+          {
+            "from": "demais",
+            "to": "demais",
+            "pp": 8.45,
+            "lo90": 6.85,
+            "hi90": 10.05,
+            "notIdentifiable": false
+          },
+          {
+            "from": "branco-nulo",
+            "to": "branco-nulo",
+            "pp": 8.15,
+            "lo90": 6.55,
+            "hi90": 9.75,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "nao-sabe",
+            "pp": 7.2,
+            "lo90": 5.6,
+            "hi90": 8.8,
+            "notIdentifiable": false
+          }
+        ]
+      },
+      {
+        "fromDate": "2026-07-25",
+        "toDate": "2026-08-01",
+        "flows": [
+          {
+            "from": "nao-sabe",
+            "to": "cand-a",
+            "pp": 0.4,
+            "lo90": 0.12,
+            "hi90": 0.71,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "cand-c",
+            "pp": 0.15,
+            "lo90": -0.09,
+            "hi90": 0.4,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-a",
+            "pp": 0.1,
+            "lo90": -0.14,
+            "hi90": 0.35,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "branco-nulo",
+            "pp": 0.35,
+            "lo90": 0.08,
+            "hi90": 0.63,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "demais",
+            "pp": 0.05,
+            "lo90": -0.16,
+            "hi90": 0.27,
+            "notIdentifiable": true
+          },
+          {
+            "from": "demais",
+            "to": "cand-b",
+            "pp": 0.1,
+            "lo90": -0.12,
+            "hi90": 0.33,
+            "notIdentifiable": true
+          },
+          {
+            "from": "branco-nulo",
+            "to": "nao-sabe",
+            "pp": 0.3,
+            "lo90": 0.05,
+            "hi90": 0.56,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-a",
+            "to": "cand-a",
+            "pp": 39,
+            "lo90": 37.4,
+            "hi90": 40.6,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-b",
+            "pp": 23.05,
+            "lo90": 21.45,
+            "hi90": 24.65,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "cand-c",
+            "pp": 12.95,
+            "lo90": 11.35,
+            "hi90": 14.55,
+            "notIdentifiable": false
+          },
+          {
+            "from": "demais",
+            "to": "demais",
+            "pp": 8.4,
+            "lo90": 6.8,
+            "hi90": 10,
+            "notIdentifiable": false
+          },
+          {
+            "from": "branco-nulo",
+            "to": "branco-nulo",
+            "pp": 8.2,
+            "lo90": 6.6,
+            "hi90": 9.8,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "nao-sabe",
+            "pp": 6.95,
+            "lo90": 5.35,
+            "hi90": 8.55,
+            "notIdentifiable": false
+          }
+        ]
+      },
+      {
+        "fromDate": "2026-08-01",
+        "toDate": "2026-08-08",
+        "flows": [
+          {
+            "from": "nao-sabe",
+            "to": "cand-a",
+            "pp": 0.4,
+            "lo90": 0.12,
+            "hi90": 0.71,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "cand-c",
+            "pp": 0.15,
+            "lo90": -0.09,
+            "hi90": 0.4,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-a",
+            "pp": 0.1,
+            "lo90": -0.14,
+            "hi90": 0.35,
+            "notIdentifiable": true
+          },
+          {
+            "from": "cand-b",
+            "to": "branco-nulo",
+            "pp": 0.35,
+            "lo90": 0.08,
+            "hi90": 0.63,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "demais",
+            "pp": 0.05,
+            "lo90": -0.16,
+            "hi90": 0.27,
+            "notIdentifiable": true
+          },
+          {
+            "from": "demais",
+            "to": "cand-b",
+            "pp": 0.1,
+            "lo90": -0.12,
+            "hi90": 0.33,
+            "notIdentifiable": true
+          },
+          {
+            "from": "branco-nulo",
+            "to": "nao-sabe",
+            "pp": 0.3,
+            "lo90": 0.05,
+            "hi90": 0.56,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-a",
+            "to": "cand-a",
+            "pp": 39.5,
+            "lo90": 37.9,
+            "hi90": 41.1,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-b",
+            "to": "cand-b",
+            "pp": 22.7,
+            "lo90": 21.1,
+            "hi90": 24.3,
+            "notIdentifiable": false
+          },
+          {
+            "from": "cand-c",
+            "to": "cand-c",
+            "pp": 13.05,
+            "lo90": 11.45,
+            "hi90": 14.65,
+            "notIdentifiable": false
+          },
+          {
+            "from": "demais",
+            "to": "demais",
+            "pp": 8.35,
+            "lo90": 6.75,
+            "hi90": 9.95,
+            "notIdentifiable": false
+          },
+          {
+            "from": "branco-nulo",
+            "to": "branco-nulo",
+            "pp": 8.25,
+            "lo90": 6.65,
+            "hi90": 9.85,
+            "notIdentifiable": false
+          },
+          {
+            "from": "nao-sabe",
+            "to": "nao-sabe",
+            "pp": 6.7,
+            "lo90": 5.1,
+            "hi90": 8.3,
+            "notIdentifiable": false
+          }
+        ]
+      }
+    ],
+    "prior": {
+      "method": "permanencia_regularizada",
+      "stickiness": 0.85,
+      "note": "O ajuste ao dado desloca 7,0 de 91,0 p.p. de massa por passo: cerca de 92% do fluxo publicado vem do prior de permanência, não do dado."
+    }
+  },
   "diagnostics": {
     "gaveta": [
       {
@@ -966,6 +1518,7 @@
     "Não modela correlação entre candidatos além da restrição de soma",
     "Não distingue mudança real de opinião de mudança de metodologia do instituto",
     "Não detecta fraude; os indicadores da §6 têm explicações inocentes e são publicados como diagnóstico, não acusação",
-    "Não pondera institutos por acurácia histórica na v1"
+    "Não pondera institutos por acurácia histórica na v1",
+    "Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado (MODEL_VERSION 2.0.0, Q-10)"
   ]
 }

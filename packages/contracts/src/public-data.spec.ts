@@ -3,16 +3,31 @@ import { publicDataSchema, type PublicData } from './public-data.js';
 import { UPDATE_INTERVAL_MINUTES } from './constants.js';
 
 const validFixture: PublicData = {
-  schemaVersion: '1',
+  schemaVersion: '2',
   generatedAt: '2026-08-14T10:00:00-03:00',
   nextUpdateAt: '2026-08-14T12:00:00-03:00',
   updateIntervalMinutes: UPDATE_INTERVAL_MINUTES,
-  modelVersion: '1.0.0',
+  modelVersion: '2.0.0',
   gitSha: 'a1b2c3d4e5f6',
   race: { id: 'presidencia-2026', displayName: 'Presidência da República 2026' },
   candidates: [
-    { id: 'cand-a', displayName: 'Candidato A', party: 'PARTIDO-A', colorSlot: 1 },
-    { id: 'cand-b', displayName: 'Candidato B', party: null, colorSlot: 2 },
+    {
+      id: 'cand-a',
+      displayName: 'Candidato A',
+      party: 'PARTIDO-A',
+      colorSlot: 1,
+      photoPath: '/candidatos/cand-a.jpg',
+      photoSourceUrl: 'https://divulgacandcontas.tse.jus.br/candidatura/cand-a',
+    },
+    // Sem foto casada com segurança: photoPath null ⇒ a UI cai para monograma.
+    {
+      id: 'cand-b',
+      displayName: 'Candidato B',
+      party: null,
+      colorSlot: 2,
+      photoPath: null,
+      photoSourceUrl: null,
+    },
   ],
   institutes: [{ id: 'inst-x', displayName: 'Instituto X', method: 'presencial' }],
   latent: {
@@ -39,6 +54,14 @@ const validFixture: PublicData = {
         ],
       },
     ],
+    // Branco/nulo e não-sabe como séries rastreadas (Q-10).
+    electorate: [
+      {
+        date: '2026-08-13',
+        blankNull: { mean: 8.0, lo90: 6.4, hi90: 9.6 },
+        undecided: { mean: 19.4, lo90: 17.1, hi90: 21.7 },
+      },
+    ],
   },
   polls: [
     {
@@ -50,6 +73,8 @@ const validFixture: PublicData = {
       fieldEnd: '2026-08-12',
       sampleSize: 2000,
       marginOfError: 2.0,
+      blankNullPct: 7.0,
+      undecidedPct: 21.0,
       firstRound: { 'cand-a': 41.0, 'cand-b': 31.0 },
       runoffs: [{ pair: ['cand-a', 'cand-b'], values: { 'cand-a': 53.0, 'cand-b': 47.0 } }],
       sourceUrl: 'https://example.org/pesquisa',
@@ -66,6 +91,35 @@ const validFixture: PublicData = {
       estimable: true,
     },
   ],
+  transitions: {
+    states: [
+      { id: 'cand-a', kind: 'candidate', displayName: 'Candidato A' },
+      { id: 'cand-b', kind: 'candidate', displayName: 'Candidato B' },
+      { id: 'undecided', kind: 'undecided', displayName: 'Não sabe' },
+    ],
+    steps: [
+      {
+        fromDate: '2026-08-06',
+        toDate: '2026-08-13',
+        flows: [
+          {
+            from: 'undecided',
+            to: 'cand-a',
+            pp: 1.2,
+            lo90: -0.3,
+            hi90: 2.7,
+            notIdentifiable: true,
+          },
+          { from: 'cand-b', to: 'cand-a', pp: 0.9, lo90: 0.2, hi90: 1.6, notIdentifiable: false },
+        ],
+      },
+    ],
+    prior: {
+      method: 'mínimos quadrados restritos com prior de permanência',
+      stickiness: 0.85,
+      note: 'Fluxo inferido de dado agregado, não medido.',
+    },
+  },
   diagnostics: {
     gaveta: [
       {
@@ -108,8 +162,34 @@ describe('PublicData', () => {
   });
 
   it('rejects a wrong schemaVersion', () => {
-    const broken = { ...validFixture, schemaVersion: '2' };
+    const broken = { ...validFixture, schemaVersion: '1' };
     expect(publicDataSchema.safeParse(broken).success).toBe(false);
+  });
+
+  // Q-10: a banda e o veredito de identificabilidade são OBRIGATÓRIOS. Um fluxo
+  // publicado sem eles seria um número de aparência precisa sem a incerteza que o
+  // qualifica — exatamente o que a Q-10 proíbe.
+  it('rejects a transition flow without its band', () => {
+    const broken = structuredClone(validFixture) as Record<string, unknown>;
+    const t = broken['transitions'] as Record<string, unknown>;
+    const steps = t['steps'] as Array<Record<string, unknown>>;
+    const flows = steps[0]?.['flows'] as Array<Record<string, unknown>>;
+    delete flows[0]?.['lo90'];
+    expect(publicDataSchema.safeParse(broken).success).toBe(false);
+  });
+
+  it('accepts transitions: null (sem passos suficientes para estimar)', () => {
+    const noTransitions = { ...validFixture, transitions: null };
+    expect(publicDataSchema.safeParse(noTransitions).success).toBe(true);
+  });
+
+  // R4: ausência de medida é null, nunca zero — e o contrato precisa aceitar isso.
+  it('accepts null blankNull/undecided in an electorate point', () => {
+    const data = structuredClone(validFixture) as Record<string, unknown>;
+    const latent = data['latent'] as Record<string, unknown>;
+    const electorate = latent['electorate'] as Array<Record<string, unknown>>;
+    electorate[0] = { date: '2026-08-13', blankNull: null, undecided: null };
+    expect(publicDataSchema.safeParse(data).success).toBe(true);
   });
 
   it('requires nextUpdateAt and updateIntervalMinutes', () => {

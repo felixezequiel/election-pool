@@ -1,0 +1,398 @@
+---
+/**
+ * <TransitionPanel> — painel de transferência de um passo (MODEL_VERSION 2.0.0,
+ * docs/OPEN-QUESTIONS Q-10).
+ *
+ * Não é um Sankey. A medição do run de 2022 mostrou que o ajuste ao dado desloca
+ * ~7 p.p. de ~91 p.p. de massa por passo: a maior parte do número publicado vem
+ * do prior de permanência. Seta grossa entre dois nós comunicaria trajetória
+ * medida, que é justamente o que não existe aqui. Então o painel usa a linguagem
+ * que o site já reserva para estimativa incerta: uma FAIXA por relação, na escala
+ * real, com o zero marcado e enfatizado.
+ *
+ * Três regras de honestidade materializadas no desenho:
+ *  1. A faixa é o desenho — a média é uma marca fina em cima dela, não o
+ *     protagonista (docs/05 §1.1).
+ *  2. Fluxo com `notIdentifiable` NÃO é escondido (Q-10 condição 3): ele aparece
+ *     na mesma lista, com a faixa atravessando visivelmente o zero (ou rente a
+ *     ele) e um rótulo dizendo isso em palavras.
+ *  3. Fluxo SEM o rótulo não é desenhado como "confiável". O contraste entre os
+ *     dois grupos é deliberadamente pequeno, porque a diferença real é pequena:
+ *     `notIdentifiable` só captura ruído amostral (banda cruzando zero ou ponto
+ *     abaixo do piso de visibilidade) e não mede o quanto do valor veio do prior.
+ *     No run de 2022, 34 de 272 fluxos ficaram marcados — o que não torna os
+ *     outros 238 medidos. Tratar a ausência do selo como aval seria mentir com CSS.
+ *
+ * SSR-completo e estático: nenhuma interação é necessária para ler o painel.
+ */
+import Num from '../Num.astro';
+import HachuraDefs from './HachuraDefs.astro';
+import { formatNumber, formatDayMonth, isoDateOnly } from './lib/format.js';
+import { hachuraFill } from './lib/hachura.js';
+import {
+  buildTransitionPlot,
+  type TransitionFlowInput,
+  type TransitionStateMeta,
+} from './lib/transition-geometry.js';
+import './lib/charts.css';
+
+interface Props {
+  states: TransitionStateMeta[];
+  flows: TransitionFlowInput[];
+  /** Datas do passo (ISO, parte de data). */
+  fromDate: string;
+  toDate: string;
+  /** id único (namespace dos padrões SVG). */
+  id: string;
+  class?: string | undefined;
+}
+
+const { states, flows, fromDate, toDate, id, class: className } = Astro.props;
+
+const geo = buildTransitionPlot(states, flows);
+const slots = [...new Set(geo.rows.map((r) => r.hachuraSlot))];
+/**
+ * `notIdentifiable` (T-18) = a faixa cruza zero OU o ponto está abaixo do piso de
+ * visibilidade em p.p. Os dois casos querem dizer a mesma coisa para o leitor —
+ * o dado não distingue isto de nada —, então o rótulo fala disso, e não do
+ * critério aritmético.
+ */
+const indistinguishable = geo.rows.filter((r) => r.notIdentifiable).length;
+
+const title = `Transferência estimada entre ${formatDayMonth(fromDate)} e ${formatDayMonth(toDate)}`;
+
+/** Prosa do <desc> (docs/05 §7) — a limitação entra também na leitura em voz alta. */
+const rowSentences = geo.rows.map(
+  (r) =>
+    `${r.fromName} para ${r.toName}: ${formatNumber(r.pp, 2)} pontos, faixa de 90% de ${formatNumber(
+      r.lo90,
+      2,
+    )} a ${formatNumber(r.hi90, 2)}${r.notIdentifiable ? ', não distinguível de zero' : ''}`,
+);
+const desc = `Estimativa de modelo sob prior, não medida. Movimento entre estados do eleitorado de ${formatDayMonth(
+  fromDate,
+)} a ${formatDayMonth(toDate)}, em pontos percentuais do eleitorado, cada relação com sua faixa de 90% em escala real e o zero marcado. ${rowSentences.join(
+  '; ',
+)}. ${
+  indistinguishable > 0
+    ? `${String(indistinguishable)} de ${String(
+        geo.rows.length,
+      )} relações não são distinguíveis de zero.`
+    : 'Nenhuma relação ficou marcada como não distinguível de zero neste passo.'
+} Ser distinguível de zero não significa ser confiável: o rótulo descreve o ruído amostral, não o quanto do valor veio do prior — e a maior parte vem do prior.`;
+
+function stateColor(colorSlot: number | null): string {
+  return colorSlot === null ? 'var(--ink-2)' : `var(--c${String(colorSlot)})`;
+}
+---
+
+<figure class:list={['chart transition-panel', className]}>
+  <figcaption class="label transition-caption">
+    <span>Passo</span>
+    <time datetime={isoDateOnly(fromDate)}><Num>{formatDayMonth(fromDate)}</Num></time>
+    <span aria-hidden="true">→</span>
+    <time datetime={isoDateOnly(toDate)}><Num>{formatDayMonth(toDate)}</Num></time>
+  </figcaption>
+
+  <div class="chart-plot">
+    <svg
+      viewBox={`0 0 ${geo.width} ${geo.height}`}
+      role="img"
+      aria-labelledby={`${id}-title ${id}-desc`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <title id={`${id}-title`}>{title}</title>
+      <desc id={`${id}-desc`}>{desc}</desc>
+
+      <defs>
+        <HachuraDefs idPrefix={id} slots={slots} />
+      </defs>
+
+      {/* Substrato: grade de valor e o eixo do zero, que é a referência do painel. */}
+      <g class="axes" aria-hidden="true">
+        {
+          geo.xTicks.map((t) => (
+            <g>
+              <line class="axis-tick" x1={t.pos} y1={16} x2={t.pos} y2={geo.height - 28} />
+              <text class="axis-label" x={t.pos} y={geo.height - 12} text-anchor="middle">
+                {t.label}
+              </text>
+            </g>
+          ))
+        }
+        <line class="zero-line" x1={geo.xZero} y1={12} x2={geo.xZero} y2={geo.height - 28}></line>
+        <text class="axis-label zero-label" x={geo.xZero} y={8} text-anchor="middle">zero</text>
+      </g>
+
+      {/* Uma faixa por relação. Mesmo peso visual para todas: o selo de "não
+          distinguível de zero" é um sinal A MAIS, nunca um aval para as demais. */}
+      <g class="flow-rows">
+        {
+          geo.rows.map((r) => (
+            <g
+              class:list={['flow-row', r.notIdentifiable && 'not-identifiable']}
+              style={`color: ${stateColor(r.colorSlot)}`}
+            >
+              <text class="row-label" x={geo.labelWidth - 14} y={r.y + 4} text-anchor="end">
+                {r.fromName} → {r.toName}
+              </text>
+              <rect
+                class="flow-band"
+                x={Math.min(r.xLo, r.xHi)}
+                y={r.y - 8}
+                width={Math.max(1, Math.abs(r.xHi - r.xLo))}
+                height={16}
+                rx={3}
+              />
+              <rect
+                class="flow-band-hachura"
+                x={Math.min(r.xLo, r.xHi)}
+                y={r.y - 8}
+                width={Math.max(1, Math.abs(r.xHi - r.xLo))}
+                height={16}
+                rx={3}
+                fill={hachuraFill(id, r.hachuraSlot)}
+              />
+              <line class="flow-mean" x1={r.xMean} y1={r.y - 11} x2={r.xMean} y2={r.y + 11} />
+            </g>
+          ))
+        }
+      </g>
+    </svg>
+  </div>
+
+  {/* Números do passo, VISÍVEIS (não em <details>): média, faixa inteira e o que
+      o selo significa — e o que ele não significa. */}
+  <ul class="flow-list">
+    {
+      geo.rows.map((r) => (
+        <li class:list={['flow-item', r.notIdentifiable && 'not-identifiable']}>
+          <span class="flow-route">
+            <span class="flow-chip" style={`color: ${stateColor(r.colorSlot)}`} aria-hidden="true" />
+            {r.fromName} <span class="flow-arrow" aria-hidden="true">→</span>
+            <span class="sr-only">para</span> {r.toName}
+          </span>
+          <span class="flow-value">
+            <Num>{formatNumber(r.pp, 2)}</Num> p.p.
+          </span>
+          <span class="flow-band-text">
+            faixa de <Num>90</Num>%: <Num>{formatNumber(r.lo90, 2)}</Num> a{' '}
+            <Num>{formatNumber(r.hi90, 2)}</Num> p.p.
+          </span>
+          <span class="flow-tag">
+            {r.notIdentifiable ? 'não distinguível de zero' : 'distinguível de zero'}
+          </span>
+        </li>
+      ))
+    }
+  </ul>
+
+  <p class="flow-caveat body-muted">
+    O selo separa só o que o ruído amostral distingue de zero. Ele <strong>não</strong> mede o
+    quanto de cada número veio do prior — e a maior parte vem. Relação marcada como distinguível
+    de zero não é relação medida.
+  </p>
+
+  {/* Permanência: fora do plot porque, em escala comum, dezenas de p.p. achatam
+      décimos de p.p. e o painel deixaria de mostrar o que existe para mostrar. */}
+  <div class="stay-block">
+    <p class="label">O que não se moveu</p>
+    <p class="body-muted stay-note">
+      Estes são os valores mais dominados pelo prior de permanência: é exatamente a suposição
+      "sem evidência, o eleitor fica onde estava" aparecendo como número.
+    </p>
+    <ul class="stay-list">
+      {
+        geo.stays.map((s) => (
+          <li class="stay-item">
+            <span class="stay-name">
+              <span class="flow-chip" style={`color: ${stateColor(s.colorSlot)}`} aria-hidden="true" />
+              {s.displayName}
+            </span>
+            <span class="stay-value">
+              permaneceu <Num>{formatNumber(s.pp, 2)}</Num> p.p.
+            </span>
+            <span class="stay-band">
+              faixa de <Num>90</Num>%: <Num>{formatNumber(s.lo90, 2)}</Num> a{' '}
+              <Num>{formatNumber(s.hi90, 2)}</Num>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</figure>
+
+<style>
+  .transition-panel {
+    margin-block: calc(var(--rhythm) * 2);
+  }
+  .transition-caption {
+    display: flex;
+    align-items: baseline;
+    gap: var(--rhythm);
+  }
+  .chart-plot {
+    position: relative;
+    margin-top: calc(var(--rhythm) * 2);
+    /* Rótulo de rota + faixa não cabem em 375px sem virar sopa: o painel rola no
+       próprio eixo e a lista abaixo repete tudo em texto. */
+    overflow-x: auto;
+  }
+  .chart-plot > svg {
+    min-width: 640px;
+  }
+
+  /* A FAIXA é o desenho (docs/05 §1.1); a média é uma marca fina sobre ela. */
+  .flow-band {
+    fill: currentColor;
+    fill-opacity: 0.3;
+  }
+  .flow-band-hachura {
+    fill-opacity: 0.4;
+    pointer-events: none;
+  }
+  .flow-mean {
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.9;
+  }
+  /*
+   * Cruza zero: contorno tracejado e média em traço aberto. É um sinal A MAIS —
+   * as outras faixas continuam com o mesmo preenchimento, porque não são mais
+   * confiáveis, apenas mais estreitas que a distância até o zero.
+   */
+  .flow-row.not-identifiable .flow-band {
+    stroke: currentColor;
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    fill-opacity: 0.18;
+  }
+  .flow-row.not-identifiable .flow-mean {
+    opacity: 0.55;
+    stroke-dasharray: 3 3;
+  }
+  .zero-label {
+    fill: var(--ink-3);
+    letter-spacing: 0.09em;
+  }
+
+  /* ── Lista de números ───────────────────────────────────────────────── */
+  .flow-list {
+    list-style: none;
+    padding: 0;
+    margin: calc(var(--rhythm) * 3) 0 0;
+    display: grid;
+    gap: 0;
+  }
+  .flow-item {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.4fr) auto minmax(220px, 1fr) auto;
+    align-items: baseline;
+    gap: var(--gutter);
+    padding-block: calc(var(--rhythm) * 1.25);
+    border-top: 1px solid var(--border);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+  }
+  .flow-item:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+  .flow-chip {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: currentColor;
+    opacity: 0.7;
+    margin-right: 8px;
+  }
+  .flow-arrow {
+    color: var(--ink-3);
+    padding-inline: 0.2ch;
+  }
+  .flow-value,
+  .stay-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+  .flow-band-text,
+  .stay-band {
+    color: var(--ink-2);
+    font-size: var(--fs-label);
+    font-family: var(--font-mono);
+  }
+  .flow-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .flow-item.not-identifiable .flow-tag {
+    color: var(--accent);
+  }
+  .flow-caveat {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 68ch;
+    font-size: var(--fs-body-s);
+  }
+
+  /* ── Permanência ────────────────────────────────────────────────────── */
+  .stay-block {
+    margin-top: calc(var(--rhythm) * 4);
+    padding-top: calc(var(--rhythm) * 3);
+    border-top: 1px solid var(--border);
+  }
+  .stay-note {
+    margin-top: var(--rhythm);
+    max-width: 64ch;
+    font-size: var(--fs-body-s);
+  }
+  .stay-list {
+    list-style: none;
+    padding: 0;
+    margin: calc(var(--rhythm) * 2) 0 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 0.5);
+  }
+  .stay-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--rhythm) calc(var(--rhythm) * 2);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink-2);
+  }
+  .stay-name {
+    min-width: 16ch;
+    color: var(--ink);
+  }
+
+  @media (max-width: 768px) {
+    .flow-item {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'route value'
+        'band band'
+        'tag tag';
+      gap: 4px var(--gutter);
+    }
+    .flow-route {
+      grid-area: route;
+    }
+    .flow-value {
+      grid-area: value;
+    }
+    .flow-band-text {
+      grid-area: band;
+    }
+    .flow-tag {
+      grid-area: tag;
+    }
+  }
+</style>

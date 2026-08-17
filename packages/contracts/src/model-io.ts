@@ -28,6 +28,75 @@ export type Observation = z.infer<typeof observationSchema>;
 export const observationsSchema = z.array(observationSchema);
 export type Observations = z.infer<typeof observationsSchema>;
 
+/**
+ * Branco/nulo e não-sabe declarados por uma pesquisa (MODEL_VERSION 2.0.0, Q-10).
+ * Vêm SEPARADOS de `Observation` de propósito: não são por candidato, são do
+ * cenário inteiro. `null` significa "o instituto não publicou a grandeza" — que
+ * NÃO é zero (R4). O modelo trata `null` como ausência de medida, não como 0.
+ */
+export const electorateObservationSchema = z.object({
+  tseId: z.string(),
+  instituteId: z.string(),
+  scenarioKind: scenarioKindSchema,
+  fieldMedianDate: isoDateSchema,
+  sampleSize: z.number().int().positive(),
+  blankNullPct: pctSchema.nullable(),
+  undecidedPct: pctSchema.nullable(),
+});
+export type ElectorateObservation = z.infer<typeof electorateObservationSchema>;
+export const electorateObservationsSchema = z.array(electorateObservationSchema);
+
+// --- Transferência de votos (MODEL_VERSION 2.0.0, Q-10) ---------------------
+// LEIA A Q-10: fluxo NÃO é identificável a partir de agregado. O schema obriga a
+// carregar a banda e o veredito de identificabilidade junto de cada número, para
+// que seja impossível consumir a média sem ver a incerteza que ela esconde.
+
+/**
+ * Estados do espaço de transferência. Objeto nomeado + schema derivado dele, no
+ * mesmo padrão de `enums.ts`: o valor gravado no banco e o rótulo usado no código
+ * saem da MESMA fonte, e o CHECK da migration é gerado a partir daqui.
+ */
+export const TRANSITION_STATE_KIND = {
+  candidate: 'candidate',
+  blankNull: 'blank_null',
+  undecided: 'undecided',
+} as const;
+
+export const transitionStateKindSchema = z.enum([
+  TRANSITION_STATE_KIND.candidate,
+  TRANSITION_STATE_KIND.blankNull,
+  TRANSITION_STATE_KIND.undecided,
+]);
+export type TransitionStateKind = z.infer<typeof transitionStateKindSchema>;
+
+export const transitionFlowSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  /** Fluxo em p.p. DO ELEITORADO (não da origem). */
+  pp: z.number(),
+  lo90Pp: z.number(),
+  hi90Pp: z.number(),
+  /** Banda cruza zero ⇒ indistinguível de nada. Publicado, nunca omitido. */
+  notIdentifiable: z.boolean(),
+});
+export type TransitionFlow = z.infer<typeof transitionFlowSchema>;
+
+export const transitionStepSchema = z.object({
+  fromDate: isoDateSchema,
+  toDate: isoDateSchema,
+  flows: z.array(transitionFlowSchema),
+});
+export type TransitionStep = z.infer<typeof transitionStepSchema>;
+
+export const transitionsSchema = z.object({
+  states: z.array(
+    z.object({ id: z.string(), kind: transitionStateKindSchema, displayName: z.string() }),
+  ),
+  steps: z.array(transitionStepSchema),
+  prior: z.object({ method: z.string(), stickiness: z.number(), note: z.string() }),
+});
+export type Transitions = z.infer<typeof transitionsSchema>;
+
 // --- Saída: ModelOutput -----------------------------------------------------
 // Ponto da série latente μ_t com banda de credibilidade 90% (docs/01 §2, §4).
 export const latentPointSchema = z.object({
@@ -49,9 +118,22 @@ export const latentRunoffSeriesSchema = z.object({
 });
 export type LatentRunoffSeries = z.infer<typeof latentRunoffSeriesSchema>;
 
+/**
+ * Ponto da série de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10). São
+ * estados rastreados com a mesma dignidade de um candidato. `null` = sem medida
+ * suficiente naquele ponto; nunca 0 (R4).
+ */
+export const latentElectoratePointSchema = z.object({
+  date: isoDateSchema,
+  blankNull: latentPointSchema.nullable(),
+  undecided: latentPointSchema.nullable(),
+});
+export type LatentElectoratePoint = z.infer<typeof latentElectoratePointSchema>;
+
 export const latentSeriesSchema = z.object({
   firstRound: z.array(latentDatedPointSchema),
   runoffs: z.array(latentRunoffSeriesSchema),
+  electorate: z.array(latentElectoratePointSchema),
 });
 export type LatentSeries = z.infer<typeof latentSeriesSchema>;
 
@@ -94,6 +176,8 @@ export const modelOutputSchema = z.object({
   latent: latentSeriesSchema,
   houseEffects: z.array(houseEffectSchema),
   diagnostics: z.array(diagnosticSchema),
+  /** null quando não há passos suficientes para estimar (TRANSITION_MIN_STEPS). */
+  transitions: transitionsSchema.nullable(),
   gates: modelGatesSchema,
 });
 export type ModelOutput = z.infer<typeof modelOutputSchema>;

@@ -11,6 +11,7 @@ import type {
   CandidateRow,
   InstituteRow,
   RaceRow,
+  ElectorateRow,
 } from './read-model.js';
 
 /**
@@ -26,8 +27,24 @@ const NOW = new Date('2026-08-14T15:00:00-03:00');
 const pct = (n: number): ScenarioResultRow['valuePct'] => pctSchema.parse(n);
 
 const candidates: CandidateRow[] = [
-  { id: 'lula', displayName: 'Luiz Inácio Lula da Silva', party: 'PT', colorSlot: 1 },
-  { id: 'tarcisio', displayName: 'Tarcísio de Freitas', party: 'Republicanos', colorSlot: 2 },
+  // Um com foto oficial do TSE e outro sem: o montador precisa repassar os dois
+  // casos, e `null` é o estado normal de quem não tem candidatura registrada.
+  {
+    id: 'lula',
+    displayName: 'Luiz Inácio Lula da Silva',
+    party: 'PT',
+    colorSlot: 1,
+    photoPath: '/candidatos/lula.jpg',
+    photoSourceUrl: 'https://divulgacandcontas.tse.jus.br/candidatura/lula',
+  },
+  {
+    id: 'tarcisio',
+    displayName: 'Tarcísio de Freitas',
+    party: 'Republicanos',
+    colorSlot: 2,
+    photoPath: null,
+    photoSourceUrl: null,
+  },
 ];
 
 const institutes: InstituteRow[] = [
@@ -113,19 +130,41 @@ const densePolls = (): PollRow[] =>
     fieldEnd: FIELD_DATES[i]!,
     sampleSize: 2000,
     marginOfError: 2,
+    // Uma das pesquisas NÃO declara as grandezas (null), para o teste cobrir a
+    // distinção entre "não publicou" e "publicou zero" (R4).
+    blankNullPct: i === 0 ? null : 7,
+    undecidedPct: i === 0 ? null : 18,
     sourceUrl: 'https://www.tse.jus.br/',
+  }));
+
+/**
+ * Branco/nulo e não-sabe por cenário canônico. Um dos cenários vem sem nenhuma
+ * das duas grandezas — o montador deve descartá-lo da entrada do modelo em vez de
+ * mandar uma observação vazia.
+ */
+const denseElectorate = (): ElectorateRow[] =>
+  TSE.map((tseId, i) => ({
+    tseId,
+    instituteId: INSTS[i]!,
+    scenarioKind: 't1_estimulado' as const,
+    fieldStart: FIELD_DATES[i]!,
+    fieldEnd: FIELD_DATES[i]!,
+    sampleSize: 2000,
+    blankNullPct: i === 0 ? null : pct(7),
+    undecidedPct: i === 0 ? null : pct(18),
   }));
 
 const denseInput = () => ({
   raceId: RACE.id,
   race: RACE,
   scenarioResults: denseScenarioResults(),
+  electorate: denseElectorate(),
   registrations: denseRegistrations(),
   polls: densePolls(),
   candidates,
   institutes,
   now: NOW,
-  modelVersion: '1.0.0',
+  modelVersion: '2.0.0',
   gitSha: 'abc1234',
 });
 
@@ -137,7 +176,7 @@ describe('assemblePublicData', () => {
     expect(() => publicDataSchema.parse(data)).not.toThrow();
     expect(gatesPassed).toBe(true);
 
-    expect(data.schemaVersion).toBe('1');
+    expect(data.schemaVersion).toBe('2');
     expect(data.race.id).toBe('presidencia-2026');
     expect(data.updateIntervalMinutes).toBe(120);
     expect(data.generatedAt).toMatch(/-03:00$/);
@@ -169,7 +208,10 @@ describe('assemblePublicData', () => {
   it('methodologyNotes are the docs/01 §10 verbatim list (our text)', () => {
     const { data } = assemblePublicData(denseInput());
     expect(data.methodologyNotes).toEqual([...__test.METHODOLOGY_NOTES]);
-    expect(data.methodologyNotes.length).toBe(6);
+    // 7 desde a MODEL_VERSION 2.0.0: a lista ganhou a limitação de transferência
+    // de voto (docs/01 §10 / Q-10). A contagem é asserção deliberada — uma nota
+    // que suma daqui some da UI, e a lista é publicada NA ÍNTEGRA por exigência.
+    expect(data.methodologyNotes.length).toBe(7);
   });
 
   it('polls carry firstRound and runoff values from the scenarios', () => {
@@ -247,9 +289,12 @@ describe('assemblePublicData', () => {
           fieldEnd: oneDate,
           sampleSize: 2000,
           marginOfError: 2,
+          blankNullPct: null,
+          undecidedPct: null,
           sourceUrl: 'https://www.tse.jus.br/',
         },
       ],
+      electorate: [],
     });
     // O data.json ainda é schema-válido, mas os gates de modelo reprovam (M-1).
     expect(() => publicDataSchema.parse(data)).not.toThrow();

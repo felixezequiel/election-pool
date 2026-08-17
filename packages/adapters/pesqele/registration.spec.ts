@@ -1,62 +1,276 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseRegistrationPage, PesqEleParseError, __test } from './registration.js';
+import {
+  parseLinhasLista,
+  parsePaginador,
+  parseTabelaResultado,
+  parseDetalhe,
+  toRawRegistration,
+  PesqEleParseError,
+  __test,
+} from './registration.js';
+import { parsePartialResponse, requireUpdate } from './partial-response.js';
+import { FIELD } from './constants.js';
 
+/**
+ * Todas as fixtures são CAPTURAS REAIS do PesqEle (2026-08-16) — ver
+ * `__fixtures__/README.md`. Os casos de borda são MUTAÇÕES dessas capturas
+ * (apagar uma célula, tirar uma coluna), nunca HTML inventado: fixture sintética
+ * de fonte externa não prova integração nenhuma (Q-09).
+ */
 const fixture = (name: string): string =>
   readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url)), 'utf8');
 
-describe('parseRegistrationPage — list + detail from a representative response', () => {
-  it('parses page 1 with two registrations and the paginator', () => {
-    const page = parseRegistrationPage(fixture('results-page-1.html'));
-    expect(page.currentPage).toBe(1);
-    expect(page.totalPages).toBe(2);
-    expect(page.registrations).toHaveLength(2);
+const tabelaDaBusca = (): string =>
+  requireUpdate(parsePartialResponse(fixture('02-busca-partial-response.xml')), FIELD.form);
 
-    const first = page.registrations[0]!;
-    expect(first.tseId).toBe('BR-06591/2026');
-    expect(first.instituteName).toBe('Instituto Fixture de Pesquisas');
-    expect(first.contractorName).toBe('TV Fixture Comunicações Ltda');
-    expect(first.contractorCnpj).toBe('12.345.678/0001-90');
-    expect(first.registeredAt).toBe('2026-08-10T14:30:00-03:00');
-    expect(first.fieldStart).toBe('2026-08-05');
-    expect(first.fieldEnd).toBe('2026-08-08');
-    expect(first.sampleSize).toBe(2000);
-    expect(first.marginOfError).toBe(2.2);
-    expect(first.confidenceLevel).toBe(95);
-    expect(first.costBrl).toBe(150000);
+describe('lista — parse posicional das 6 colunas reais', () => {
+  it('extrai as 10 linhas da página 1 com o tse_id certo', () => {
+    const { linhas, paginador } = parseTabelaResultado(tabelaDaBusca());
 
-    const second = page.registrations[1]!;
-    expect(second.tseId).toBe('BR-06592/2026');
-    // Optional fields absent in the source stay null — never coerced to 0.
-    expect(second.contractorCnpj).toBeNull();
-    expect(second.costBrl).toBeNull();
+    expect(linhas).toHaveLength(10);
+    expect(paginador).toEqual({ totalRecords: 50, rowsPerPage: 10, page: 0 });
+    expect(linhas.map((l) => l.tseId)).toEqual([
+      'BR-06783/2026',
+      'BR-08765/2026',
+      'BR-08448/2026',
+      'BR-05672/2026',
+      'BR-07185/2026',
+      'BR-02094/2026',
+      'BR-04006/2026',
+      'BR-04396/2026',
+      'BR-00109/2026',
+      'BR-04496/2026',
+    ]);
   });
 
-  it('parses the last page', () => {
-    const page = parseRegistrationPage(fixture('results-page-2.html'));
-    expect(page.currentPage).toBe(2);
-    expect(page.totalPages).toBe(2);
-    expect(page.registrations[0]!.tseId).toBe('BR-06593/2026');
+  it('extrai os 6 campos da primeira linha (incluindo o data-ri do detalhar)', () => {
+    const [primeira] = parseTabelaResultado(tabelaDaBusca()).linhas;
+
+    expect(primeira).toEqual({
+      rowIndex: 0,
+      tseId: 'BR-06783/2026',
+      instituteName:
+        'INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS',
+      raceLabel: 'Presidente',
+      registeredAt: '2026-08-16T00:00:00-03:00',
+      abrangenciaLabel: 'BRASIL',
+    });
   });
 
-  it('throws when a required field is missing (fail loud, R4)', () => {
-    const broken =
-      '<table><tr data-row="registration"><td data-field="institute" data-value="X"></td></tr></table>';
-    expect(() => parseRegistrationPage(broken)).toThrow(PesqEleParseError);
+  it('lê o fragmento só-de-linhas da paginação, com data-ri global', () => {
+    const partial = parsePartialResponse(fixture('03-paginacao-pagina2-partial-response.xml'));
+    const linhas = parseLinhasLista(requireUpdate(partial, FIELD.tabela));
+
+    expect(linhas).toHaveLength(10);
+    expect(linhas[0]?.rowIndex).toBe(10); // índice GLOBAL, não o da página
+    expect(linhas[0]?.tseId).toBe('BR-09479/2026');
+    expect(linhas[9]?.rowIndex).toBe(19);
+  });
+
+  it('busca vazia: paginador com totalRecords = 0 e nenhuma linha', () => {
+    const partial = parsePartialResponse(fixture('07-busca-vazia-partial-response.xml'));
+    const tabela = parseTabelaResultado(requireUpdate(partial, FIELD.form));
+
+    expect(tabela.paginador.totalRecords).toBe(0);
+    expect(tabela.linhas).toHaveLength(0);
   });
 });
 
-describe('date helpers', () => {
-  it('converts DD/MM/AAAA to ISO date', () => {
+describe('lista — falha alta (R4)', () => {
+  it('LANÇA quando um campo obrigatório da linha está vazio (não vira 0 nem string vazia)', () => {
+    // Mutação da captura real: a célula de abrangência da linha 0 fica vazia.
+    const mutado = tabelaDaBusca().replace(
+      '<td role="gridcell">BRASIL</td>',
+      '<td role="gridcell"></td>',
+    );
+
+    expect(() => parseLinhasLista(mutado)).toThrow(PesqEleParseError);
+    expect(() => parseLinhasLista(mutado)).toThrow(/abrang/i);
+  });
+
+  it('LANÇA quando a empresa contratada está vazia', () => {
+    const mutado = tabelaDaBusca().replace(
+      '<td role="gridcell">INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS</td>',
+      '<td role="gridcell">   </td>',
+    );
+
+    expect(() => parseLinhasLista(mutado)).toThrow(/empresa contratada/);
+  });
+
+  it('LANÇA quando a tabela ganha/perde coluna (o parse é posicional)', () => {
+    const mutado = tabelaDaBusca().replace(
+      '<td role="gridcell">BR-06783/2026</td>',
+      '<td role="gridcell">BR-06783/2026</td><td role="gridcell">coluna nova</td>',
+    );
+
+    expect(() => parseLinhasLista(mutado)).toThrow(/colunas; esperado 6/);
+  });
+
+  it('LANÇA quando o tse_id não tem o formato canônico', () => {
+    const mutado = tabelaDaBusca().replace('BR-06783/2026', 'BR-6783/2026');
+
+    expect(() => parseLinhasLista(mutado)).toThrow(/tse_id inválido/);
+  });
+
+  it('LANÇA quando o config do paginador some (não assume 1 página)', () => {
+    const mutado = tabelaDaBusca().replace('rows:10,rowCount:50,page:0', 'paginator:false');
+
+    expect(() => parsePaginador(mutado)).toThrow(/paginador/i);
+  });
+
+  it('LANÇA quando o número de linhas não bate com o paginador', () => {
+    const mutado = tabelaDaBusca().replace('rowCount:50', 'rowCount:3');
+
+    expect(() => parseTabelaResultado(mutado)).toThrow(/o paginador diz/);
+  });
+});
+
+describe('detalhe — parse por rótulo da tela real', () => {
+  const detalhe = () => parseDetalhe(fixture('05-detalhe-BR-06783-2026.html'));
+
+  it('extrai entrevistados, datas de campo, CNPJ, contratante e valor', () => {
+    const d = detalhe();
+
+    expect(d.tseId).toBe('BR-06783/2026');
+    expect(d.sampleSize).toBe(1200);
+    expect(d.fieldStart).toBe('2026-08-17');
+    expect(d.fieldEnd).toBe('2026-08-21');
+    expect(d.instituteCnpj).toBe('09409427000112');
+    expect(d.instituteName).toBe(
+      'INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS',
+    );
+    expect(d.costBrl).toBe(148800);
+    expect(d.eleicaoLabel).toBe('Eleições Gerais 2026');
+    expect(d.raceLabel).toBe('Presidente');
+    expect(d.registeredAt).toBe('2026-08-16T00:00:00-03:00');
+    expect(d.contratantes).toEqual([
+      {
+        name: 'ALVES QUATRO ASSESSORIA DE COMUNICACAO LTDA / ALVES QUATRO',
+        cpfCnpj: '11523951000161',
+      },
+    ]);
+  });
+
+  it('NÃO extrai margem de erro nem nível de confiança da prosa (R3): ambos null', () => {
+    const linha = parseTabelaResultado(tabelaDaBusca()).linhas[0]!;
+    const raw = toRawRegistration(linha, detalhe());
+
+    expect(raw.marginOfError).toBeNull();
+    expect(raw.confidenceLevel).toBeNull();
+  });
+
+  it('monta o RawRegistration juntando lista e detalhe', () => {
+    const linha = parseTabelaResultado(tabelaDaBusca()).linhas[0]!;
+    const raw = toRawRegistration(linha, detalhe());
+
+    expect(raw).toEqual({
+      tseId: 'BR-06783/2026',
+      instituteName:
+        'INSTITUTO OPNUS DE PESQUISA, CONSULTORIA E INTELIGENCIA DE DADOS LTDA / INSTITUTO OPNUS',
+      contractorName: 'ALVES QUATRO ASSESSORIA DE COMUNICACAO LTDA / ALVES QUATRO',
+      contractorCnpj: '11523951000161',
+      raceLabel: 'Presidente',
+      registeredAt: '2026-08-16T00:00:00-03:00',
+      fieldStart: '2026-08-17',
+      fieldEnd: '2026-08-21',
+      sampleSize: 1200,
+      marginOfError: null,
+      confidenceLevel: null,
+      costBrl: 148800,
+    });
+  });
+
+  it('lê os DOIS contratantes de um registro com contratação conjunta', () => {
+    const d = parseDetalhe(fixture('06-detalhe-multi-contratante-BR-07185-2026.html'));
+
+    expect(d.tseId).toBe('BR-07185/2026');
+    expect(d.sampleSize).toBe(1610);
+    expect(d.contratantes).toEqual([
+      { name: 'EMPRESA FOLHA DA MANHA S.A.', cpfCnpj: '60579703000148' },
+      {
+        name: 'GLOBO COMUNICACAO E PARTICIPACOES S/A / TV/REDE/GLOBO.COM/CANAIS GLOBO/GLOBOPLAY/ELETROMIDIA',
+        cpfCnpj: '27865757000102',
+      },
+    ]);
+  });
+
+  it('com mais de um contratante, o CNPJ fica null (não chuta o primeiro)', () => {
+    const d = parseDetalhe(fixture('06-detalhe-multi-contratante-BR-07185-2026.html'));
+    const linha = parseTabelaResultado(tabelaDaBusca()).linhas.find((l) => l.tseId === d.tseId)!;
+    const raw = toRawRegistration(linha, d);
+
+    expect(raw.contractorCnpj).toBeNull();
+    expect(raw.contractorName).toBe(
+      'EMPRESA FOLHA DA MANHA S.A. + GLOBO COMUNICACAO E PARTICIPACOES S/A / TV/REDE/GLOBO.COM/CANAIS GLOBO/GLOBOPLAY/ELETROMIDIA',
+    );
+  });
+
+  it('não guarda a "Origem do Recurso" (texto livre do contratante, R3)', () => {
+    const d = parseDetalhe(fixture('05-detalhe-BR-06783-2026.html'));
+
+    for (const c of d.contratantes) {
+      expect(c.name).not.toMatch(/Origem do Recurso/i);
+      expect(c.name).not.toMatch(/Recursos pr/i);
+    }
+  });
+});
+
+describe('detalhe — falha alta (R4)', () => {
+  it('LANÇA quando o rótulo de entrevistados some', () => {
+    const mutado = fixture('05-detalhe-BR-06783-2026.html').replace(
+      'Entrevistados:',
+      'Numero de pessoas:',
+    );
+
+    expect(() => parseDetalhe(mutado)).toThrow(/Entrevistados/);
+  });
+
+  it('LANÇA quando entrevistados vem vazio (nunca vira 0)', () => {
+    const mutado = fixture('05-detalhe-BR-06783-2026.html').replace(
+      '<span id="form:lblEntrevistados">1200</span>',
+      '<span id="form:lblEntrevistados"></span>',
+    );
+
+    expect(() => parseDetalhe(mutado)).toThrow(PesqEleParseError);
+  });
+
+  it('LANÇA quando não há contratante identificável (nunca vira string vazia)', () => {
+    const mutado = fixture('05-detalhe-BR-06783-2026.html').replace(
+      'CPF/CNPJ: 11523951000161 - ALVES QUATRO ASSESSORIA DE COMUNICACAO LTDA / ALVES QUATRO',
+      '',
+    );
+
+    expect(() => parseDetalhe(mutado)).toThrow(/contratante/i);
+  });
+
+  it('LANÇA quando o detalhe é de outro registro (identidade, docs/04 §4.1)', () => {
+    const linha = parseTabelaResultado(tabelaDaBusca()).linhas[0]!;
+    const outro = parseDetalhe(fixture('06-detalhe-multi-contratante-BR-07185-2026.html'));
+
+    expect(() => toRawRegistration(linha, outro)).toThrow(/fora de sincronia/);
+  });
+});
+
+describe('helpers de data e valor', () => {
+  it('converte DD/MM/AAAA para AAAA-MM-DD', () => {
     expect(__test.toIsoDate('05/08/2026')).toBe('2026-08-05');
   });
 
-  it('rejects malformed dates (never invents)', () => {
+  it('rejeita data malformada (nunca inventa)', () => {
     expect(() => __test.toIsoDate('2026-08-05')).toThrow(PesqEleParseError);
   });
 
-  it('converts DD/MM/AAAA HH:mm to ISO datetime -03:00', () => {
-    expect(__test.toIsoDateTime('10/08/2026 14:30')).toBe('2026-08-10T14:30:00-03:00');
+  it('data de registro vira meia-noite de São Paulo, com offset explícito', () => {
+    expect(__test.toIsoDateTime('16/08/2026')).toBe('2026-08-16T00:00:00-03:00');
+  });
+
+  it('lê o valor em reais com NBSP e separador de milhar pt-BR', () => {
+    expect(__test.parseValorBrl('R$ 148.800,00')).toBe(148800);
+  });
+
+  it('valor ausente é null (o campo existe e está vazio), não 0', () => {
+    expect(__test.parseValorBrl('  ')).toBeNull();
   });
 });

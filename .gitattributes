@@ -1,0 +1,19 @@
+# Fim de linha normalizado (LF) na árvore de trabalho, em qualquer sistema.
+#
+# Sem isto, um clone em Windows com `core.autocrlf=true` (o padrão do Git for
+# Windows) grava CRLF em TODOS os arquivos. O Prettier roda com `endOfLine: lf`
+# por padrão e reprova o repositório inteiro — 208 arquivos "fora de estilo" sem
+# uma única linha de código diferente. Pior: o `COPY . .` do infra/Dockerfile leva
+# esse CRLF para dentro da imagem, então o `pnpm verify` do container falha pelo
+# mesmo motivo.
+#
+# `text=auto eol=lf` faz o Git normalizar na entrada e ENTREGAR LF na saída,
+# independentemente do `core.autocrlf` de quem clonou.
+* text=auto eol=lf
+
+# Binários: nunca normalizar (corromperia o arquivo).
+*.woff2 binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.dump binary

@@ -394,7 +394,9 @@ describe('structural separation (T-08 aceite)', () => {
         );
       }
     }
-    return { observations, referenceDate: '2026-06-10' };
+    // Sem branco/nulo nem não-sabe nesta fixture: array vazio significa "nenhuma
+    // pesquisa declarou a grandeza" (Q-10), não zero.
+    return { observations, referenceDate: '2026-06-10', electorateObservations: [] };
   }
 
   it('runModel populates ModelOutput.diagnostics without leaking into latent/houseEffects', () => {
@@ -417,8 +419,13 @@ describe('structural separation (T-08 aceite)', () => {
       'herding',
       'windowEnd',
     ]) {
-      expect(latentJson.includes(leak), `latent leaked '${leak}'`).toBe(false);
-      expect(heJson.includes(leak), `houseEffects leaked '${leak}'`).toBe(false);
+      // Procura o TOKEN JSON entre aspas (chave `"rate":` ou valor `"gaveta"`), não
+      // o substring cru: desde o MODEL_VERSION 2.0.0 o latente tem a série
+      // `electorate`, que contém 'rate' por acidente de ortografia e faria o teste
+      // acusar vazamento onde não há.
+      const token = `"${leak}"`;
+      expect(latentJson.includes(token), `latent leaked '${leak}'`).toBe(false);
+      expect(heJson.includes(token), `houseEffects leaked '${leak}'`).toBe(false);
     }
 
     // E cada diagnóstico segue o shape narrow do contrato (kind/subjectId/value/n).

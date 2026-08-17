@@ -29,6 +29,13 @@ export interface LatentSeries {
   candidateId: string;
   displayName: string;
   colorSlot: number;
+  /**
+   * Foto oficial do candidato servida por nós (MODEL_VERSION 2.0.0), ou null
+   * quando não há registro casado — nesse caso a UI usa monograma. Fica junto de
+   * `displayName` e `colorSlot` porque é a mesma coisa que eles: identidade da
+   * entidade, não geometria. Nada aqui usa o campo para desenhar.
+   */
+  photoPath?: string | null;
   samples: LatentSample[];
 }
 

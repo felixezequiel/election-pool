@@ -21,7 +21,7 @@
  * multivariada futura (docs/OPEN-QUESTIONS Q-03) e para as garantias de simetria.
  */
 
-import type { Observation } from '@election-pool/contracts/model-io';
+import type { ElectorateObservation, Observation } from '@election-pool/contracts/model-io';
 import {
   SIGMA_PROCESS,
   DEFF,
@@ -330,6 +330,196 @@ function smoothCandidate(
   }
 
   return { mean: smMean, variance: smVar };
+}
+
+// --- Séries de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10) -----------
+//
+// Branco/nulo e não-sabe deixam de ser descarte e viram ESTADOS de primeira
+// classe (Q-10 condição 1). A matemática é EXATAMENTE a mesma dos candidatos —
+// mesma variância amostral (§4.2), mesma ponderação por recência (§4.4), mesma
+// banda de 90% (§2/§4): as duas séries passam pelo MESMO `smoothCandidate`.
+//
+// A diferença é a AUSÊNCIA de medida. `blankNullPct`/`undecidedPct` são
+// anuláveis no contrato porque muitos institutos simplesmente não publicam a
+// grandeza — e `null` NÃO é zero (R4). Uma observação com valor `null` não vira
+// observação nenhuma; um nó do grid sem nenhuma medida na vizinhança sai
+// `measured: false`, e o chamador publica `null`, nunca 0.
+
+/**
+ * Ids das séries de eleitorado. São os mesmos tokens de
+ * `transitionStateKindSchema` (contracts/model-io) para que o estimador de
+ * transferência e a série latente falem do mesmo estado sem tradução.
+ */
+export const ELECTORATE_SERIES = {
+  blankNull: 'blank_null',
+  undecided: 'undecided',
+} as const;
+export type ElectorateSeriesId = (typeof ELECTORATE_SERIES)[keyof typeof ELECTORATE_SERIES];
+
+const ELECTORATE_SERIES_IDS: readonly ElectorateSeriesId[] = [
+  ELECTORATE_SERIES.blankNull,
+  ELECTORATE_SERIES.undecided,
+];
+
+export interface ElectorateSmoothedPoint {
+  date: string;
+  seriesId: ElectorateSeriesId;
+  mean: number;
+  lo90: number;
+  hi90: number;
+  variance: number;
+  /**
+   * `false` ⇒ nenhuma pesquisa mediu esta grandeza dentro de ACTIVE_WINDOW_DAYS
+   * deste nó. O número existiria (o suavizador sempre devolve algo), mas seria
+   * prior puro. Quem publica DEVE emitir `null` (R4), nunca o número nem 0.
+   */
+  measured: boolean;
+}
+
+export interface ElectorateKalmanResult {
+  modelVersion: string;
+  referenceDate: string;
+  dates: string[];
+  /** Ordenado por (date, seriesId) — determinismo de serialização (docs/01 §9). */
+  points: ElectorateSmoothedPoint[];
+}
+
+export interface ElectorateKalmanOptions {
+  referenceDate?: string;
+  /**
+   * Início do grid. Serve para alinhar a série de eleitorado ao grid da série de
+   * candidatos: sem isso, as duas começariam em datas diferentes e a UI teria de
+   * casar eixos na mão. Nunca ENCURTA o grid — o início efetivo é o menor entre
+   * este e a primeira medida de eleitorado.
+   */
+  gridStartDate?: string;
+}
+
+/**
+ * Suaviza as séries de branco/nulo e não-sabe com o MESMO filtro dos candidatos.
+ * Determinística e sem I/O, como o resto do módulo.
+ */
+export function runElectorateKalman(
+  observations: readonly ElectorateObservation[],
+  options: ElectorateKalmanOptions = {},
+): ElectorateKalmanResult {
+  const sorted = [...observations].sort(compareElectorateObservations);
+
+  const hasGridStart = options.gridStartDate !== undefined && options.gridStartDate !== '';
+  const hasRef = options.referenceDate !== undefined && options.referenceDate !== '';
+
+  if (sorted.length === ZERO || !hasRef) {
+    return {
+      modelVersion: MODEL_VERSION,
+      referenceDate: hasRef ? dayNumberToIso(isoToDayNumber(options.referenceDate ?? '')) : '',
+      dates: [],
+      points: [],
+    };
+  }
+
+  const refDay = isoToDayNumber(options.referenceDate ?? '');
+  const obsDays = sorted.map((o) => isoToDayNumber(o.fieldMedianDate));
+  let minDay = obsDays.reduce((a, b) => (b < a ? b : a), obsDays[ZERO] ?? refDay);
+  if (hasGridStart) {
+    const startDay = isoToDayNumber(options.gridStartDate ?? '');
+    if (startDay < minDay) minDay = startDay;
+  }
+  const gridEnd = refDay >= minDay ? refDay : minDay;
+  const nDays = gridEnd - minDay + ONE;
+
+  const dates: string[] = [];
+  for (let i = ZERO; i < nDays; i++) dates.push(dayNumberToIso(minDay + i));
+
+  // Índice dia -> observações do dia, com a série no lugar do candidato. Um valor
+  // `null` NÃO gera entrada: ausência de medida não é medida de zero (R4).
+  const obsByDay: DayObs[][] = [];
+  for (let i = ZERO; i < nDays; i++) obsByDay.push([]);
+  // Dias (índice no grid) em que cada série foi efetivamente medida.
+  const measuredDays = new Map<ElectorateSeriesId, number[]>();
+  for (const id of ELECTORATE_SERIES_IDS) measuredDays.set(id, []);
+
+  for (let k = ZERO; k < sorted.length; k++) {
+    const o = sorted[k];
+    if (!o) continue;
+    const absDay = obsDays[k] ?? minDay;
+    const day = absDay - minDay;
+    if (day < ZERO || day >= nDays) continue;
+    const deltaDays = gridEnd - absDay;
+    if (deltaDays > ACTIVE_WINDOW_DAYS) continue; // mesma janela ativa dos candidatos (§4.4)
+    const bucket = obsByDay[day];
+    if (!bucket) continue;
+    const pairs: readonly (readonly [ElectorateSeriesId, number | null])[] = [
+      [ELECTORATE_SERIES.blankNull, o.blankNullPct],
+      [ELECTORATE_SERIES.undecided, o.undecidedPct],
+    ];
+    for (const [seriesId, value] of pairs) {
+      if (value === null) continue; // o instituto não publicou a grandeza
+      bucket.push({
+        candidateId: seriesId,
+        instituteId: o.instituteId,
+        valuePct: value,
+        sampleSize: o.sampleSize,
+        deltaDays,
+      });
+      measuredDays.get(seriesId)?.push(day);
+    }
+  }
+
+  const points: ElectorateSmoothedPoint[] = [];
+  for (const seriesId of ELECTORATE_SERIES_IDS) {
+    const days = measuredDays.get(seriesId) ?? [];
+    if (days.length === ZERO) continue; // série inexistente ⇒ nenhum ponto (nunca zeros)
+    const series = smoothCandidate(seriesId, nDays, obsByDay);
+    for (let i = ZERO; i < nDays; i++) {
+      const mean = series.mean[i] ?? ZERO;
+      const variance = series.variance[i] ?? ZERO;
+      const sd = Math.sqrt(variance > ZERO ? variance : ZERO);
+      const half = CI_Z_90 * sd;
+      points.push({
+        date: dates[i] ?? '',
+        seriesId,
+        mean: clamp(mean, PCT_MIN, PCT_MAX),
+        lo90: clamp(mean - half, PCT_MIN, PCT_MAX),
+        hi90: clamp(mean + half, PCT_MIN, PCT_MAX),
+        variance,
+        measured: hasMeasurementNear(days, i),
+      });
+    }
+  }
+
+  points.sort((a, b) =>
+    a.date < b.date
+      ? -ONE
+      : a.date > b.date
+        ? ONE
+        : a.seriesId < b.seriesId
+          ? -ONE
+          : a.seriesId > b.seriesId
+            ? ONE
+            : ZERO,
+  );
+
+  return { modelVersion: MODEL_VERSION, referenceDate: dayNumberToIso(gridEnd), dates, points };
+}
+
+/** Existe medida a no máximo ACTIVE_WINDOW_DAYS deste nó (para trás ou para frente)? */
+function hasMeasurementNear(measuredDayIndexes: readonly number[], dayIndex: number): boolean {
+  for (const d of measuredDayIndexes) {
+    if (Math.abs(d - dayIndex) <= ACTIVE_WINDOW_DAYS) return true;
+  }
+  return false;
+}
+
+function compareElectorateObservations(a: ElectorateObservation, b: ElectorateObservation): number {
+  if (a.fieldMedianDate < b.fieldMedianDate) return -ONE;
+  if (a.fieldMedianDate > b.fieldMedianDate) return ONE;
+  if (a.instituteId < b.instituteId) return -ONE;
+  if (a.instituteId > b.instituteId) return ONE;
+  if (a.tseId < b.tseId) return -ONE;
+  if (a.tseId > b.tseId) return ONE;
+  if (a.scenarioKind < b.scenarioKind) return -ONE;
+  if (a.scenarioKind > b.scenarioKind) return ONE;
+  return ZERO;
 }
 
 function firstObservedValue(candidateId: string, obsByDay: DayObs[][]): number | undefined {

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { MODEL_VERSION, DATA_JSON_MAX_AGE_SECONDS } from '@election-pool/contracts/constants';
 import type { PublicData } from '@election-pool/contracts/public-data';
 import type { Database } from '../db/pool.js';
@@ -46,6 +47,12 @@ export interface RenderResult {
   data: PublicData | null;
   /** Caminho do dist publicado, quando published=true. */
   distPath: string | null;
+  /**
+   * true quando o que foi publicado é o PLACEHOLDER (estado vazio explicado),
+   * não uma estimativa. Vai para as métricas do job — quem lê o log precisa
+   * distinguir "site no ar com número" de "site no ar dizendo que não há número".
+   */
+  placeholder: boolean;
 }
 
 export interface RenderDeps {
@@ -65,6 +72,19 @@ export interface RenderDeps {
    * o orquestrador sobrescreve).
    */
   suspectAdapterOverThreshold?: boolean;
+  /**
+   * Publicação de PLACEHOLDER: quando ainda NÃO existe `dist/` no ar e o ÚNICO
+   * gate reprovado é o do modelo (§6.1), publica mesmo assim. O artefato é o
+   * mesmo `data.json` honesto (sem série latente, porque não há), e a UI troca as
+   * seções de dado pelo estado vazio explicado — em vez de o visitante receber um
+   * 404 do nginx e não saber se o site quebrou ou se ainda não há pesquisa.
+   *
+   * O que isto NÃO faz: não substitui site bom por placeholder (exige `dist`
+   * inexistente), não ignora build sujo, data.json inválido, adapter suspeito nem
+   * frescor — todos esses continuam abortando. É estritamente o caso "primeira
+   * publicação, ainda sem cobertura".
+   */
+  allowPlaceholderPublish?: boolean;
 }
 
 export class RenderJob {
@@ -76,6 +96,7 @@ export class RenderJob {
   private readonly gitSha: string;
   private readonly runBuild: AstroBuildDeps['runBuild'];
   private readonly suspectAdapterOverThreshold: boolean;
+  private readonly allowPlaceholderPublish: boolean;
 
   constructor(deps: RenderDeps) {
     this.db = deps.db;
@@ -86,6 +107,7 @@ export class RenderJob {
     this.gitSha = deps.gitSha ?? resolveGitSha(deps.webDir);
     this.runBuild = deps.runBuild;
     this.suspectAdapterOverThreshold = deps.suspectAdapterOverThreshold ?? false;
+    this.allowPlaceholderPublish = deps.allowPlaceholderPublish ?? false;
   }
 
   async run(): Promise<RenderResult> {
@@ -104,18 +126,21 @@ export class RenderJob {
     let data: PublicData;
     let gatesPassed: boolean;
     try {
-      const [scenarioResults, registrations, polls, candidates, institutes] = await Promise.all([
-        read.listCanonicalScenarioResults(this.raceId),
-        read.listRegistrations(this.raceId),
-        read.listPolls(this.raceId),
-        read.listCandidates(this.raceId),
-        read.listInstitutes(this.raceId),
-      ]);
+      const [scenarioResults, electorate, registrations, polls, candidates, institutes] =
+        await Promise.all([
+          read.listCanonicalScenarioResults(this.raceId),
+          read.listCanonicalElectorate(this.raceId),
+          read.listRegistrations(this.raceId),
+          read.listPolls(this.raceId),
+          read.listCandidates(this.raceId),
+          read.listInstitutes(this.raceId),
+        ]);
 
       const assembled = assemblePublicData({
         raceId: this.raceId,
         race,
         scenarioResults,
+        electorate,
         registrations,
         polls,
         candidates,
@@ -169,11 +194,26 @@ export class RenderJob {
     });
     const gateResults = verdict.results;
 
+    let placeholder = false;
     if (!verdict.passed) {
-      const failed = gateResults.filter((r) => !r.ok).map((r) => `${r.name}: ${r.detail}`);
+      const failedResults = gateResults.filter((r) => !r.ok);
+      const failed = failedResults.map((r) => `${r.name}: ${r.detail}`);
       const detail = failed.join(' | ');
-      alerts.push({ kind: 'gates_failed', detail: `${detail} :: astro=${astroOutput.trim()}` });
-      return this.aborted(`gate(s) reprovado(s): ${detail}`, alerts, gateResults, data);
+
+      // Exceção estrita e única: primeira publicação (sem `dist/`) cujo ÚNICO gate
+      // reprovado é o do modelo. Publica o estado vazio explicado em vez de deixar
+      // o nginx devolvendo 404. Qualquer outro gate reprovado ⇒ aborta como sempre.
+      placeholder =
+        this.allowPlaceholderPublish &&
+        failedResults.every((r) => r.name === 'model_gates_passed') &&
+        !existsSync(this.paths.dist);
+
+      if (!placeholder) {
+        alerts.push({ kind: 'gates_failed', detail: `${detail} :: astro=${astroOutput.trim()}` });
+        return this.aborted(`gate(s) reprovado(s): ${detail}`, alerts, gateResults, data);
+      }
+      // O alerta continua sendo emitido: publicar placeholder NÃO é normalidade.
+      alerts.push({ kind: 'gates_failed', detail: `placeholder publicado :: ${detail}` });
     }
 
     // 5. Swap atômico (docs/02 §3.4). Snapshot do build ANTERIOR nomeado pelo
@@ -194,6 +234,7 @@ export class RenderJob {
       gateResults,
       data,
       distPath: this.paths.dist,
+      placeholder,
     };
   }
 
@@ -203,7 +244,15 @@ export class RenderJob {
     gateResults: { name: string; ok: boolean; detail: string }[],
     data: PublicData | null,
   ): RenderResult {
-    return { published: false, abortReason: reason, alerts, gateResults, data, distPath: null };
+    return {
+      published: false,
+      abortReason: reason,
+      alerts,
+      gateResults,
+      data,
+      distPath: null,
+      placeholder: false,
+    };
   }
 }
 

@@ -10,6 +10,7 @@
     "./house-effects": "./house-effects.ts",
     "./calendar": "./calendar.ts",
     "./diagnostics": "./diagnostics.ts",
+    "./transitions": "./transitions.ts",
     "./backtest": "./backtest.ts"
   },
   "scripts": {

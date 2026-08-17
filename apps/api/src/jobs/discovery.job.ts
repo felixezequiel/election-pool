@@ -54,8 +54,13 @@ const RACE_LABEL_PREFIX: ReadonlyArray<{ prefix: string; raceId: string }> = [
 ];
 
 export interface DiscoveryAlert {
-  kind: 'unknown_institute' | 'unmapped_race';
-  tseId: string;
+  /**
+   * `empty_search`: a busca no PesqEle voltou VAZIA com filtro válido. É alerta,
+   * não sucesso — foi o silêncio nesse caso que escondeu o bug de T-05 por uma
+   * task inteira (docs/OPEN-QUESTIONS.md Q-09). Não tem `tse_id` associado.
+   */
+  kind: 'unknown_institute' | 'unmapped_race' | 'empty_search';
+  tseId: string | null;
   detail: string;
 }
 
@@ -111,15 +116,35 @@ export class DiscoveryJob {
     const seenTseIds = new Set<string>();
     let upserted = 0;
 
-    for await (const rawPage of this.pesqEle.discover()) {
+    // O detalhe do PesqEle custa 2 requisições por registro e o rate limit é de
+    // 1 req/10s (docs/04 §6). Como o registro é imutável depois de publicado, o
+    // detalhe só é buscado para `tse_id` INÉDITO — decisão (a) da Q-09. O que já
+    // está no banco continua contando como "visto" (não expira) via `onTseIdSeen`.
+    const pages = this.pesqEle.discover({
+      shouldFetchDetalhe: (tseId) => this.isUnknown(tseId),
+      onTseIdSeen: (tseId) => seenTseIds.add(tseId),
+      onAlert: (alert) => alerts.push({ kind: 'empty_search', tseId: null, detail: alert.detail }),
+    });
+
+    for await (const rawPage of pages) {
       // Transação por página: falha de rede na página seguinte não desfaz esta.
       await this.persistPage(rawPage, runAt, seenTseIds, alerts);
       upserted += rawPage.length;
     }
 
+    const revived = await this.reviveSeen(seenTseIds);
     const expired = await this.markAbsentAsExpired(seenTseIds, runAt);
 
+    if (revived > 0) {
+      console.warn(`[discovery] ${revived} registro(s) reapareceram na origem`);
+    }
     return { seen: seenTseIds.size, upserted, expired, alerts };
+  }
+
+  /** `true` se o `tse_id` ainda não existe no banco (⇒ vale pagar o detalhe). */
+  private async isUnknown(tseId: string): Promise<boolean> {
+    const existing = await new PollRegistrationsRepository(this.db).findByTseId(tseId);
+    return existing === null;
   }
 
   private async persistPage(
@@ -199,6 +224,25 @@ export class DiscoveryJob {
       sourceExpiredAt: null,
       disclosureStatus: existing?.disclosureStatus ?? DISCLOSURE_STATUS.pending,
     });
+  }
+
+  /**
+   * "Revive" (zera `source_expired_at`) o registro que reapareceu na origem. Isso
+   * antes acontecia de graça no upsert, mas o detalhe de um `tse_id` já conhecido
+   * não é mais rebuscado (Q-09 (a)), então não há upsert para ele. Só toca linhas
+   * que estão marcadas como expiradas — nunca reescreve dado de pesquisa (R5).
+   */
+  private async reviveSeen(seenTseIds: Set<string>): Promise<number> {
+    if (seenTseIds.size === 0) return 0;
+    const rows = await this.db.query<{ tse_id: string }>(
+      `UPDATE poll_registrations
+          SET source_expired_at = NULL
+        WHERE source_expired_at IS NOT NULL
+          AND tse_id = ANY($1::text[])
+      RETURNING tse_id`,
+      [[...seenTseIds]],
+    );
+    return rows.length;
   }
 
   /**

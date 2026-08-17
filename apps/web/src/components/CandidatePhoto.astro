@@ -1,0 +1,129 @@
+---
+/**
+ * <CandidatePhoto> — identidade visual do candidato (MODEL_VERSION 2.0.0).
+ *
+ * Regras que governam este componente:
+ *
+ *  - A foto é SEMPRE local (`candidates[].photoPath`, servida por nós a partir do
+ *    registro de candidatura do TSE). Nunca CDN, nunca URL remota, nunca imagem de
+ *    imprensa: docs/08 §2 trata imagem de terceiro como obra protegida, que não
+ *    copiamos nem embutimos. Este componente não aceita URL absoluta — se chegar
+ *    uma, ele LANÇA (R4: falha alta, nunca silenciosa), porque servir imagem de
+ *    fora seria o tipo de erro que ninguém percebe olhando a página.
+ *  - `photoPath: null` NÃO é buraco: cai para um monograma (iniciais) sobre a cor
+ *    do `colorSlot` da entidade. O fallback é um estado de primeira classe, não
+ *    degradação — a maior parte dos candidatos vai ficar nele.
+ *  - A imagem é DECORATIVA quando o nome já está ao lado (`alt=""`, padrão): o
+ *    leitor de tela não deve ouvir o nome duas vezes. Quem usar a foto sem nome
+ *    adjacente passa `alt` explícito.
+ *  - Cor segue a entidade (docs/05 §2.1 regra 2) e nunca é o único diferenciador:
+ *    o monograma carrega as iniciais, que são o diferenciador textual.
+ */
+interface Props {
+  /** Caminho LOCAL da foto (ex.: '/candidatos/fulano.jpg'), ou null. */
+  photoPath: string | null;
+  /** Nome exibido — origem das iniciais do monograma. */
+  displayName: string;
+  /** Slot de cor da entidade (1..8), base do monograma. */
+  colorSlot: number;
+  /** Aresta do quadrado, em px. Padrão: 40. */
+  size?: number;
+  /**
+   * Texto alternativo. Padrão `''` (decorativa — o nome está ao lado). Só passe
+   * texto quando a foto aparecer SEM o nome do candidato por perto.
+   */
+  alt?: string;
+  class?: string | undefined;
+}
+
+const { photoPath, displayName, colorSlot, size = 40, alt = '', class: className } = Astro.props;
+
+if (photoPath !== null && /^[a-z][a-z0-9+.-]*:|^\/\//i.test(photoPath)) {
+  throw new Error(
+    `CandidatePhoto: photoPath deve ser um caminho local servido por nós, recebido "${photoPath}" (docs/08 §2)`,
+  );
+}
+
+/**
+ * Iniciais: primeira letra do primeiro e do último termo do nome exibido, no
+ * máximo duas. Nomes de uma palavra ('Andrade') viram uma letra só — melhor que
+ * inventar. Ignora partículas ('de', 'da', 'dos'), que não identificam ninguém.
+ */
+const PARTICLES = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+const MAX_INITIALS = 2;
+const parts = displayName
+  .split(/\s+/)
+  .filter((p) => p.length > 0 && !PARTICLES.has(p.toLowerCase()));
+const picked = parts.length > MAX_INITIALS ? [parts[0], parts[parts.length - 1]] : parts;
+const initials = picked
+  .map((p) => (p ?? '').charAt(0).toUpperCase())
+  .join('')
+  .slice(0, MAX_INITIALS);
+
+const style = `--photo-size: ${String(size)}px; --photo-color: var(--c${String(colorSlot)})`;
+---
+
+{
+  photoPath ? (
+    <img
+      class:list={['cand-photo', className]}
+      src={photoPath}
+      alt={alt}
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      style={style}
+    />
+  ) : (
+    <span
+      class:list={['cand-photo cand-monogram', className]}
+      style={style}
+      {...alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': 'true' }}
+    >
+      {initials}
+    </span>
+  )
+}
+
+<style>
+  /*
+   * Um só box para os dois estados: trocar foto por monograma não muda o layout
+   * (CLS ~ 0, docs/06 §7). O quadrado com raio grande evita o clichê do avatar
+   * redondo de rede social sem virar retrato 3x4.
+   */
+  .cand-photo {
+    inline-size: var(--photo-size);
+    block-size: var(--photo-size);
+    flex: 0 0 auto;
+    border-radius: calc(var(--photo-size) * 0.28);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    object-fit: cover;
+  }
+
+  /*
+   * Monograma: a cor da entidade em degradê suave, com a inicial em mono. Não é
+   * "sem foto" — é a identidade reduzida ao que sabemos com segurança.
+   */
+  .cand-monogram {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--photo-color) 34%, transparent),
+        color-mix(in srgb, var(--photo-color) 12%, transparent)
+      ),
+      var(--surface-2);
+    border-color: color-mix(in srgb, var(--photo-color) 45%, transparent);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: calc(var(--photo-size) * 0.36);
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    user-select: none;
+  }
+</style>

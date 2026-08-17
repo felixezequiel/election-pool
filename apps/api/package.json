@@ -17,6 +17,7 @@
     "ingest:harvest": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/harvest.entry.ts",
     "ingest:reparse": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/reparse.entry.ts",
     "ingest:approve": "dotenv -e ../../infra/.env -- node --import tsx src/ingestion/approve.entry.ts",
+    "ingest:photos": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/candidate-photos.entry.ts",
     "model:run": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/model.entry.ts",
     "orchestrate": "dotenv -e ../../infra/.env -- node --import tsx src/main.ts",
     "render": "dotenv -e ../../infra/.env -- node --import tsx src/jobs/render.entry.ts",

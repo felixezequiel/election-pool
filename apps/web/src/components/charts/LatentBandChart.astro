@@ -19,6 +19,7 @@
  * Cor segue a entidade (colorSlot), nunca a posição (docs/05 §2.1 regra 2).
  */
 import AnimatedNum from '../AnimatedNum.astro';
+import CandidatePhoto from '../CandidatePhoto.astro';
 import Num from '../Num.astro';
 import UncertaintyRule from './UncertaintyRule.astro';
 import HachuraDefs from './HachuraDefs.astro';
@@ -259,9 +260,16 @@ const clientSeries = series.map((s) => ({
         series.map((s) => {
           const l = latest.get(s.candidateId);
           return (
-            <li class="readout-item" style={`--dot: var(--c${s.colorSlot})`}>
+            <li class="readout-item">
               <span class="readout-name">
-                <span class="readout-dot" aria-hidden="true" />
+                {/* Identidade do candidato: foto quando existe, monograma quando
+                    não. Decorativa (alt=""), porque o nome vem logo em seguida. */}
+                <CandidatePhoto
+                  photoPath={s.photoPath ?? null}
+                  displayName={s.displayName}
+                  colorSlot={s.colorSlot}
+                  size={26}
+                />
                 {s.displayName}
               </span>
               <span class="readout-value">
@@ -398,13 +406,6 @@ const clientSeries = series.map((s) => ({
     font-family: var(--font-body);
     font-size: var(--fs-body-s);
     color: var(--ink);
-  }
-  .readout-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--dot);
-    flex: 0 0 auto;
   }
   .readout-value {
     font-family: var(--font-mono);

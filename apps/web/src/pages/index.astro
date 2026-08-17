@@ -12,14 +12,32 @@ import RunoffSection from '../components/sections/RunoffSection.astro';
 import HouseEffectSection from '../components/sections/HouseEffectSection.astro';
 import DiagnosticsSection from '../components/sections/DiagnosticsSection.astro';
 import PollsSection from '../components/sections/PollsSection.astro';
+import TransitionSection from '../components/sections/TransitionSection.astro';
 import ModelLimitsSection from '../components/sections/ModelLimitsSection.astro';
 import OtherRacesCta from '../components/sections/OtherRacesCta.astro';
 import SiteFooter from '../components/sections/SiteFooter.astro';
+import NoDataNotice from '../components/sections/NoDataNotice.astro';
 
+import {
+  MODEL_MIN_POLLS,
+  MODEL_MIN_DISTINCT_INSTITUTES,
+  ACTIVE_WINDOW_DAYS,
+  TRANSITION_MIN_STEPS,
+} from '@election-pool/contracts/constants';
 import { data } from '../data/load.js';
 import { buildChartInputs } from '../data/chart-inputs.js';
 
 const charts = buildChartInputs(data);
+
+/**
+ * Sem série latente não há o que plotar: o modelo não atingiu a cobertura mínima
+ * (M-1) ou ainda não há pesquisa colhida. Em vez de eixos vazios — que fazem o
+ * site parecer quebrado — a página troca o miolo pelo estado vazio explicado
+ * (NoDataNotice), mantendo header, limites do modelo, outras disputas e rodapé.
+ * O critério é o próprio dado: nenhuma série de 1º turno.
+ */
+const hasEstimate = charts.firstRound.series.length > 0;
+const instituteCount = new Set(data.polls.map((p) => p.instituteId)).size;
 
 // ── Eyebrow (docs/06 §4): "PRESIDÊNCIA · 2026 · ATUALIZADO EM DD/MM ÀS HHh" ──
 const eyebrowDate = new Intl.DateTimeFormat('pt-BR', {
@@ -42,11 +60,16 @@ const heroCandidates: SeriesLatest[] = charts.firstRound.series
   .filter((s) => s.colorSlot !== 8)
   .map((s) => {
     const last = s.samples[s.samples.length - 1];
+    const meta = charts.candidates.get(s.candidateId);
     return last
       ? {
           candidateId: s.candidateId,
           displayName: s.displayName,
           colorSlot: s.colorSlot,
+          // Identidade do candidato (MODEL_VERSION 2.0.0): foto oficial servida
+          // por nós, ou null ⇒ monograma. A proveniência acompanha a foto.
+          photoPath: meta?.photoPath ?? null,
+          photoSourceUrl: meta?.photoSourceUrl ?? null,
           mean: last.mean,
           lo90: last.lo90,
           hi90: last.hi90,
@@ -86,12 +109,31 @@ const lastPollFieldEnd =
   />
 
   <main id="main">
-    <HeroThesis eyebrow={eyebrow} readings={heroReadings} domain={heroDomain} />
-    <LatentSeriesSection firstRound={charts.firstRound} />
-    <RunoffSection runoffs={charts.runoffs} />
-    <HouseEffectSection houseRows={charts.houseRows} />
-    <DiagnosticsSection diagnostics={data.diagnostics} subjectNames={subjectNames} />
-    <PollsSection stripRows={charts.stripRows} lastPollFieldEnd={lastPollFieldEnd} />
+    {
+      hasEstimate ? (
+        <>
+          <HeroThesis eyebrow={eyebrow} readings={heroReadings} domain={heroDomain} />
+          <LatentSeriesSection firstRound={charts.firstRound} electorate={charts.electorate} />
+          <RunoffSection runoffs={charts.runoffs} />
+          {/* Transferência vem DEPOIS da série latente e ANTES dos house effects:
+              é leitura derivada da série, e a Q-10 (condição 7) exige que ela
+              nunca realimente o número principal — a ordem reforça isso. */}
+          <TransitionSection transitions={charts.transitions} minSteps={TRANSITION_MIN_STEPS} />
+          <HouseEffectSection houseRows={charts.houseRows} />
+          <DiagnosticsSection diagnostics={data.diagnostics} subjectNames={subjectNames} />
+          <PollsSection stripRows={charts.stripRows} lastPollFieldEnd={lastPollFieldEnd} />
+        </>
+      ) : (
+        <NoDataNotice
+          pollCount={data.polls.length}
+          instituteCount={instituteCount}
+          minPolls={MODEL_MIN_POLLS}
+          minInstitutes={MODEL_MIN_DISTINCT_INSTITUTES}
+          windowDays={ACTIVE_WINDOW_DAYS}
+          nextUpdateAt={data.nextUpdateAt}
+        />
+      )
+    }
     <ModelLimitsSection notes={data.methodologyNotes} />
     <OtherRacesCta otherRaces={data.otherRaces} />
   </main>

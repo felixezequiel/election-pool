@@ -12,6 +12,7 @@ import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/sections/SiteHeader.astro';
 import SiteFooter from '../components/sections/SiteFooter.astro';
 import PollStrip from '../components/charts/PollStrip.astro';
+import CandidatePhoto from '../components/CandidatePhoto.astro';
 import Num from '../components/Num.astro';
 import { data } from '../data/load.js';
 import { buildChartInputs } from '../data/chart-inputs.js';
@@ -45,6 +46,48 @@ const hasHistorical = data.historicalError.length > 0;
           Código e dado são públicos: quem discordar do método pode rodar o próprio sobre o mesmo
           conjunto.
         </p>
+      </div>
+    </section>
+
+    {/*
+      Candidatos e proveniência da foto (MODEL_VERSION 2.0.0). A foto é sempre
+      servida por nós a partir do registro de candidatura; imagem de imprensa é
+      obra protegida e nunca entra (docs/08 §2). Quando não há registro casado
+      com segurança, o lugar mostra monograma e diz que não há foto — em vez de
+      exibir um rosto que talvez não seja daquela pessoa.
+    */}
+    <section class="section" aria-labelledby="dados-cand-title">
+      <div class="container">
+        <h2 id="dados-cand-title" class="display-l">Candidatos e proveniência da foto</h2>
+        <p class="body dados-cand-lead">
+          Cada foto vem do registro de candidatura na Justiça Eleitoral e é servida por nós, do
+          nosso domínio. Nunca embutimos imagem de instituto, de veículo ou de campanha.
+        </p>
+        <ul class="cand-list">
+          {data.candidates.map((c) => (
+            <li class="cand-item">
+              <CandidatePhoto
+                photoPath={c.photoPath}
+                displayName={c.displayName}
+                colorSlot={c.colorSlot}
+                size={44}
+              />
+              <span class="cand-name">
+                {c.displayName}
+                {c.party && <span class="cand-party">{c.party}</span>}
+              </span>
+              <span class="cand-source">
+                {c.photoSourceUrl ? (
+                  <a href={c.photoSourceUrl} rel="nofollow noopener" target="_blank">
+                    registro de candidatura
+                  </a>
+                ) : (
+                  <span class="cand-nophoto">sem foto casada — monograma</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
 
@@ -137,10 +180,69 @@ const hasHistorical = data.historicalError.length > 0;
   .dados-strip {
     margin-top: calc(var(--rhythm) * 3);
   }
+  .dados-cand-lead,
   .dados-hist-lead,
   .dados-raw-lead {
     margin-top: calc(var(--rhythm) * 2);
     max-width: 64ch;
+  }
+  .cand-list {
+    margin-top: calc(var(--rhythm) * 3);
+    max-width: 62ch;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0;
+  }
+  .cand-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--gutter);
+    padding-block: calc(var(--rhythm) * 1.5);
+    border-top: 1px solid var(--border);
+  }
+  .cand-item:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+  .cand-name {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+  }
+  .cand-party {
+    margin-left: calc(var(--rhythm) * 1.5);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .cand-source {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-align: right;
+  }
+  .cand-nophoto {
+    color: var(--ink-3);
+  }
+  /* Em 375px a linha de três colunas espreme o nome contra o link: empilha o
+     link sob o nome, mantendo a foto como âncora à esquerda. */
+  @media (max-width: 640px) {
+    .cand-item {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        'photo name'
+        'photo source';
+      row-gap: 4px;
+    }
+    .cand-item > :global(.cand-photo) {
+      grid-area: photo;
+    }
+    .cand-name {
+      grid-area: name;
+    }
+    .cand-source {
+      grid-area: source;
+      text-align: left;
+    }
   }
   .dados-table-wrap {
     margin-top: calc(var(--rhythm) * 3);

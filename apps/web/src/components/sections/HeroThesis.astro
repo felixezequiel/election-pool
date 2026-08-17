@@ -12,6 +12,7 @@
  * previsão.
  */
 import AnimatedNum from '../AnimatedNum.astro';
+import CandidatePhoto from '../CandidatePhoto.astro';
 import Num from '../Num.astro';
 import UncertaintyRule from '../charts/UncertaintyRule.astro';
 import { formatPct } from '../charts/lib/format.js';
@@ -20,6 +21,10 @@ export interface HeroReading {
   candidateId: string;
   displayName: string;
   colorSlot: number;
+  /** Foto oficial servida por nós, ou null ⇒ monograma (MODEL_VERSION 2.0.0). */
+  photoPath: string | null;
+  /** Registro de candidatura que originou a foto (proveniência, R6). */
+  photoSourceUrl: string | null;
   mean: number;
   lo90: number;
   hi90: number;
@@ -54,7 +59,17 @@ const { eyebrow, readings, domain } = Astro.props;
       {
         readings.map((r) => (
           <article class="hero-reading card" style={`--reading-color: var(--c${r.colorSlot})`}>
-            <p class="label hero-reading-name">{r.displayName} — apoio estimado</p>
+            <div class="hero-reading-head">
+              {/* Foto DECORATIVA (alt=""): o nome está imediatamente ao lado, e
+                  duplicar a leitura só atrapalha quem usa leitor de tela. */}
+              <CandidatePhoto
+                photoPath={r.photoPath}
+                displayName={r.displayName}
+                colorSlot={r.colorSlot}
+                size={48}
+              />
+              <p class="label hero-reading-name">{r.displayName} — apoio estimado</p>
+            </div>
             <p class="data-xl hero-reading-value">
               <AnimatedNum value={r.mean} decimals={1} suffix="%" label={`${r.displayName}, apoio estimado`} />
             </p>
@@ -69,6 +84,15 @@ const { eyebrow, readings, domain } = Astro.props;
             <p class="body-muted hero-reading-range">
               Intervalo de <Num>90</Num>% entre <Num>{formatPct(r.lo90)}</Num>% e <Num>{formatPct(r.hi90)}</Num>%.
             </p>
+            {/* Proveniência da foto: link para o registro de candidatura, nunca
+                a imagem de terceiro (docs/08 §2). Só aparece quando existe. */}
+            {r.photoSourceUrl && (
+              <p class="hero-reading-source">
+                <a href={r.photoSourceUrl} rel="nofollow noopener" target="_blank">
+                  Registro de candidatura
+                </a>
+              </p>
+            )}
           </article>
         ))
       }
@@ -98,6 +122,16 @@ const { eyebrow, readings, domain } = Astro.props;
   }
   .hero-reading {
     border-top: 2px solid var(--reading-color);
+  }
+  .hero-reading-head {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--rhythm) * 1.5);
+  }
+  .hero-reading-source {
+    margin-top: calc(var(--rhythm) * 1.5);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
   }
   .hero-reading-value {
     margin-top: calc(var(--rhythm) * 1);

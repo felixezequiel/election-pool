@@ -1,3 +1,4 @@
+import { isEntrypoint } from '../is-entrypoint.js';
 import { configurePgTypes } from './types.js';
 import { createPool, createDatabase } from './pool.js';
 import type { Database } from './pool.js';
@@ -67,10 +68,15 @@ const main = async (): Promise<void> => {
   }
 };
 
-main().catch((error: unknown) => {
-  // Falha alta, nunca silenciosa (R4).
-  console.error('seed failed:', error);
-  process.exit(1);
-});
+// Só executa a CLI quando este arquivo é o entrypoint. Sem isto, `import { seed }`
+// (o boot do orquestrador com `SEED_REFERENCE_ON_BOOT=true`) dispararia o seeder
+// de linha de comando como efeito colateral do import.
+if (isEntrypoint(import.meta.url)) {
+  main().catch((error: unknown) => {
+    // Falha alta, nunca silenciosa (R4).
+    console.error('seed failed:', error);
+    process.exit(1);
+  });
+}
 
 export { seed };

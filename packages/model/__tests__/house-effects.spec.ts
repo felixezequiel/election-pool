@@ -383,7 +383,9 @@ describe('runModel — output validates against modelOutputSchema', () => {
         }),
       );
     }
-    return { observations, referenceDate: isoDay(30) };
+    // Sem branco/nulo nem não-sabe nesta fixture: array vazio significa "nenhuma
+    // pesquisa declarou a grandeza" (Q-10), não zero.
+    return { observations, referenceDate: isoDay(30), electorateObservations: [] };
   }
 
   it('produces a ModelOutput that parses cleanly', () => {

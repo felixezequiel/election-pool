@@ -457,3 +457,404 @@ passam, independente do M-7, que só o ModelJob avalia).
 
 **Atenção:** OPEN-QUESTIONS Q-08 (EXDEV, informativo/resolvido). Nada mais pendente —
 esta é a última task.
+
+## Stack local de um comando, fallback de UI e o furo do PesqEle · 2026-08-16
+
+**Objetivo:** `docker compose up` na raiz sobe tudo, depois de copiar o `.env`.
+Feito e verificado de um start LIMPO (stack derrubada + volume de publicação
+apagado): migrations → seed de referência → discovery → harvest → model → render
+→ nginx servindo. Site em `:8080`, `/data.json` em `:8080/data.json`, `/health`
+em `:8081`.
+
+**Postgres compartilhado.** A máquina já tinha um `finance-insights-db` (postgres
+17, 508 MB de dado REAL) ocupando a 5432. Em vez de um segundo servidor, o compose
+agora define UM Postgres de desenvolvimento — container `dev-postgres`, rede
+`dev-shared`, volume `dev_pgdata`, porta 5432 — com a lista de bancos em
+`POSTGRES_DATABASES` do `.env`, garantida a cada `up` por um one-shot idempotente
+(`postgres-init`); acrescentar um projeto é acrescentar um nome. Migração feita com
+dump direcionado (`pg_dump -Fc`) + restore e CONFERÊNCIA de contagem linha a linha
+(ledger_transaction 200000, transaction_read 200000, connections 2, system_events
+113, ledger_merchant 242 — idênticos antes e depois). O container e o volume
+ANTIGOS não foram removidos: `finance-insights` guarda o serviço `db` atrás do
+profile `standalone` como caminho de volta. O `.env` daquele projeto não precisou
+mudar (mesma porta, mesmas credenciais, mesmo banco); só ganhou comentário.
+
+**Publicação em volume nomeado, não bind mount.** O swap de T-13 troca um SYMLINK;
+bind mount de diretório do Windows não serve. `api` (rw) e `nginx` (ro)
+compartilham `election_pool_publish`.
+
+**Boot configurável** (`main.ts`, tudo `false` por padrão ⇒ produção intocada):
+`SEED_REFERENCE_ON_BOOT` (o seed é bloqueante — sem referência o pipeline roda em
+vazio em silêncio), `RUN_JOBS_ON_BOOT` (uma passagem imediata pelo MESMO caminho de
+lock/job_runs do cron, em vez de esperar até 2h), `RENDER_ON_BOOT`,
+`PUBLISH_PLACEHOLDER_WHEN_EMPTY`. `db/seed.ts` ganhou o guarda `isEntrypoint()` —
+sem ele, `import { seed }` disparava a CLI como efeito colateral.
+
+**Fallback de UI (pedido do Felix).** Sem cobertura o nginx devolvia 404 puro: não
+dava para distinguir "quebrou" de "ainda não há pesquisa". Agora
+`NoDataNotice.astro` troca as seções de dado por um estado vazio EXPLICADO —
+mesmo header, mesma tipografia, mesmo rodapé com proveniência — com checklist do
+que falta ("0 de 3 pesquisas", "0 de 2 institutos", das constantes reais) e a hora
+da próxima tentativa. Do lado do render, `allowPlaceholderPublish` é uma exceção
+ESTRITA: só quando NÃO existe `dist/` e o ÚNICO gate reprovado é o do modelo.
+Nunca substitui site bom por placeholder, não afrouxa build/data.json/frescor/
+adapter suspeito, e ainda emite alerta. `RenderResult.placeholder` distingue nos
+logs "site com número" de "site dizendo que não há número".
+
+**Bug de navegação achado e corrigido.** O astro gera `metodologia/index.html`, o
+nginx emitia 301 ABSOLUTO para acrescentar a barra e montava a URL com a porta em
+que ELE escuta (80), não a porta de entrada (8080): a home abria e o primeiro
+clique caía em `http://localhost/metodologia/`, no vazio. `absolute_redirect off`
+no `infra/nginx/election-pool.conf`. Mesma armadilha atrás de qualquer proxy.
+Varredura de todas as rotas/assets depois do fix: 9 recursos, todos 200.
+
+**CRLF quebrava o `pnpm verify`.** O repo não tinha `.gitattributes`; com
+`core.autocrlf=true` (padrão do Git for Windows) o checkout gravou CRLF em 276
+arquivos e o Prettier reprovou 208 deles — zero diferença de código. Pior: o
+`COPY . .` levava o CRLF para a imagem. Adicionado `.gitattributes` com
+`* text=auto eol=lf` e a árvore convertida (`git diff` confirma: só os 6 arquivos
+realmente editados mudaram de conteúdo). Também adicionado `.dockerignore` — o
+contexto de build levava `.git` e `node_modules` do host.
+
+**`pnpm verify` VERDE dentro do container** (exit 0): lint + prettier limpos,
+typecheck 0 erros, 330 testes (contracts 24, adapters 116, model 64, api 126),
+astro build completo.
+
+**O QUE O PRÓXIMO AGENTE PRECISA SABER — não há dado de pesquisa no sistema.**
+O DiscoveryJob roda contra o TSE real e termina `seen=0`, sem erro. O PesqEle real
+TEM o dado (50 registros presidenciais de 2026 nos últimos 30 dias: Datafolha,
+Opnus, Perfil, Verita…). O cliente de T-05 foi escrito contra uma estrutura
+SUPOSTA do site e erra tudo: URL, formulário, nomes de campo, protocolo (é AJAX
+PrimeFaces) e o parser casa `data-field`/`data-row` que **não existem no PesqEle**
+— são invenção das próprias fixtures, e por isso os testes ficaram verdes o tempo
+todo. Diagnóstico completo em **Q-09**; protocolo real capturado e reescrita
+especificada em **tasks/T-15-pesqele-real.md**. Enquanto T-15 não roda, o site
+publica honestamente o estado vazio.
+
+**Lição que vale registrar:** fixture sintética de fonte externa não é evidência de
+integração. T-05 pedia "fixture de HTML REAL do PesqEle" no aceite e isso não foi
+cumprido — o custo apareceu só quando alguém apontou o pipeline para o site de
+verdade, uma task inteira depois.
+
+---
+
+## T-18 — Transferência de votos e séries de branco/nulo e não-sabe · 2026-08-16
+
+**Entregue:** MODEL_VERSION 2.0.0 implementado dentro de `packages/model`, segundo
+a decisão e as sete condições da Q-10. (1) Branco/nulo e não-sabe viraram estados
+rastreados: `runElectorateKalman` (em `kalman.ts`) roda as duas séries pelo MESMO
+suavizador dos candidatos — mesma variância amostral (§4.2), mesma recência (§4.4),
+mesma banda de 90% — e um nó sem medida dentro da janela ativa sai `null`, nunca 0
+(R4); grandeza que nenhum instituto publicou não vira série alguma. (2)
+`packages/model/transitions.ts`: estimador puro e determinístico que resolve, entre
+dois nós da série latente, o polítopo de transporte (`F ≥ 0`, linhas somam a massa
+de origem, colunas reproduzem as marginais de t+1) escolhendo o ponto mais próximo
+em divergência KL do prior de permanência `TRANSITION_STICKINESS_PRIOR` — que é o
+ponto fixo do IPF/RAS. Banda por bootstrap com PRNG semeado (semente fixa + índice
+do passo), `pp ± z₉₀·sd`. (3) `ModelInput.electorateObservations` é OBRIGATÓRIO
+(combinado com o agente do backend): esquecer de passar quebra no typecheck em vez
+de produzir série vazia em silêncio. (4) Backtest de transferência 1º ⇒ 2º turno,
+gravado em `docs/BACKTEST-RESULTS.md`. 99 testes verdes, typecheck limpo, eslint e
+prettier limpos.
+
+**Decisões:** *Nós = datas de medição dentro da janela ativa*, não o grid diário —
+entre duas medições o suavizador não recebeu informação nova e um "fluxo" ali seria
+interpolação vendida como movimento. *As duas composições são postas na mesma massa
+total* (a média das duas) para o polítopo existir; a variação do resíduo não
+rastreado fica diluída nos fluxos entre rastreados, e isso está declarado no código.
+*A matriz sai completa*, incluindo a diagonal (permanência): esconder a permanência
+tornaria impossível conferir que as linhas fecham. *`notIdentifiable` = banda cruza
+zero OU ponto abaixo de `TRANSITION_MIN_VISIBLE_PP`*, publicado sempre, nunca
+omitido. *A banda cobre a incerteza do DADO, não a do prior* — inflá-la com um
+segundo prior arbitrário empilharia suposição sobre suposição; em vez disso a
+dependência do prior é QUANTIFICADA e publicada em `transitions.prior.note`.
+Constantes de implementação (teto e tolerância do IPF, nº de réplicas do bootstrap,
+semente, constantes de mistura do PRNG) ficaram como `const` nomeadas no módulo, com
+comentário, seguindo o precedente de `house-effects.ts`/`backtest.ts` — nenhuma delas
+é parâmetro de modelo, e `contracts` não foi tocado.
+
+**Backtest de transferência: REPROVOU.** O modelo estima que 38,7% da massa liberada
+pelos eliminados foi para o primeiro finalista, banda 90% [31,6; 46,2]; a urna
+implica 29,8%. Fora da banda ⇒ FAIL, e o veredito geral do backtest passou a
+`REPROVOU (2/4, transferência FAIL)`. **Nada foi ajustado para passar (R1).** O
+diagnóstico é o previsto pela Q-10: o prior de permanência espalha a massa liberada
+de forma quase simétrica entre os destinos, enquanto a realidade de 2022 foi
+fortemente assimétrica; a estimativa cai a meio caminho entre o prior (50/50) e o
+que as marginais sozinhas diriam.
+
+**Atenção para o próximo — dois pontos que merecem virar adendo da Q-10 (decisão do
+Felix, não fiz por estar fora do meu escopo de arquivos).** Primeiro: no run do 1º
+turno de 2022 a nota publicada mede que o ajuste ao dado desloca **7,00 p.p. de
+91,00 p.p. de massa por passo — 8%**. Ou seja, ~92% do número publicado é o prior.
+Isso está publicado (condição 2), mas é o tamanho real da ressalva. Segundo, e mais
+incômodo: como as bandas latentes são estreitas (o problema já registrado na Q-07),
+fluxos cruzados de ~2 p.p. que são quase inteiramente prior saem com banda
+inteiramente acima de zero e portanto **sem** o rótulo `notIdentifiable` — o rótulo
+protege contra ruído amostral, não contra a suposição. Só 34 de 272 fluxos do run de
+2022 foram marcados. A condição 4 (UI rotulando o painel inteiro como estimativa de
+modelo sob suposição) deixa de ser cosmética e passa a ser a principal defesa do
+leitor. Para quem for religar o backend: `ModelInput` agora exige
+`electorateObservations`; a fixture de 2022 não tem branco/nulo nem não-sabe, então
+o backtest roda com array vazio e **não exercita** a série de eleitorado — quando
+houver dado real dessas grandezas, vale refazer o backtest incluindo-as.
+
+---
+
+## T-17 — fotos oficiais dos candidatos (TSE DivulgaCandContas) — `done`
+
+Entreguei a ingestão das fotos oficiais. A decisão de produto (exibir foto) só
+cabe em `docs/08` §2 por uma porta: o registro público de candidatura do TSE, que
+é ato da autoridade eleitoral, não obra de terceiro — e que ainda traz um campo
+`fotoUrlPublicavel` por candidatura, do qual dependemos. Nada vem de imprensa,
+agência, rede social ou banco de imagens; o adapter não conhece outra URL.
+
+**A API real desmentiu três suposições, e isso importa para quem mexer nela.**
+(a) A listagem de candidaturas devolve `fotoUrl: null` e `fotoUrlPublicavel:
+false` para as 13 candidaturas presidenciais — quem parar na listagem conclui que
+ninguém tem foto; os valores verdadeiros só existem no endpoint de DETALHE, um GET
+por candidatura. (b) O download da imagem vem com `Content-Type: image/png` e
+`Content-Disposition: ....jpg` para bytes que são JPEG — três fontes, duas
+erradas, então o formato é decidido pelos bytes. (c) O endpoint da imagem não
+manda `ETag` nem `Last-Modified`, só `Cache-Control: max-age=240`, então
+conditional GET não resolve e a detecção de troca é por `sha256`. As rotas não são
+documentadas: saíram do bundle Angular do próprio Divulga. Tudo está capturado em
+`packages/adapters/tse-candidatos/__fixtures__/` com o README explicando como
+recapturar.
+
+**Rodou de verdade contra o TSE, duas vezes.** Primeira: `casados=3 novas=3
+downloads=3`. Segunda: `casados=3 novas=0 atualizadas=0 inalteradas=3 downloads=0`,
+com mtime e md5 dos arquivos idênticos. As três fotos estão em
+`apps/web/public/candidatos/` (`lula.jpg` 6621 B, `flavio-bolsonaro.jpg` 6394 B,
+`zema.jpg` 4944 B, todas JPEG 161x225) e o `sha256` do disco bate com o do banco.
+Testes: 41 no adapter (`packages/adapters/tse-candidatos`) e 15 de integração
+(`apps/api/src/jobs/candidate-photos.job.integration.spec.ts`), todos verdes;
+migration `1700000000010` aplica, reverte e reaplica.
+
+**O QUE O PRÓXIMO AGENTE PRECISA SABER.** O casamento é determinístico e
+conservador (nunca fuzzy): casam **lula**, **flavio-bolsonaro** e **zema**.
+`tarcisio`, `ratinho-junior`, `ciro-gomes` e `simone-tebet` ficam com `photo_path
+= NULL` porque **não têm candidatura registrada no TSE** — não é bug de alias nem
+falta de dado nosso, é o registro eleitoral real de 2026. Quem for ligar a foto no
+`data.json` e na UI: leia `candidates.photo_path` e `candidates.photo_source_url`,
+trate `NULL` como o caso NORMAL e caia para monograma + cor; o `photo_source_url`
+é obrigatório na tela junto da foto (proveniência, R6). O CHECK
+`candidates_photo_all_or_nothing` garante que nunca existe meia foto, então não
+precisa de defesa contra `photo_path` sem `photo_source_url`.
+
+Duas coisas ficaram travadas pelo congelamento de `packages/contracts`, e são
+decisão de quem tem essa caneta: `JobName` não tem `candidate-photos`, então este
+job **não aparece no `job_runs` nem no `/health`** (só loga em stdout); e as
+constantes numéricas novas moram em
+`packages/adapters/tse-candidatos/constants.ts` em vez de `contracts/constants.ts`,
+cada uma com a origem comentada. Fora do meu escopo declarado eu toquei só
+`packages/adapters/package.json`, de forma aditiva: `zod` não era dependência do
+pacote (sem ela não há Zod na fronteira HTTP) e faltavam as entradas de `exports`
+dos módulos novos. Detalhes e a decisão sobre `autorizacao_revogada` — o job
+alerta alto mas NÃO apaga foto sozinho — estão em `tasks/T-17-fotos-tse.md`.
+
+---
+
+## T-19 — UI da MODEL_VERSION 2.0.0 (fotos, eleitorado, transferência) · 2026-08-16
+
+**Entregue, só em `apps/web/**`:** (1) `CandidatePhoto.astro` — foto local quando
+`candidates[].photoPath` existe, monograma sobre a cor do `colorSlot` quando é
+`null` (o caso NORMAL, como T-17 avisou); a foto é decorativa (`alt=""`) onde o
+nome está ao lado, e o componente LANÇA se receber URL absoluta, porque servir
+imagem de fora seria o erro que ninguém percebe olhando a página (docs/08 §2).
+Aparece no herói, no readout da série latente, na lista de pesquisas e em `/dados`,
+que ganhou o bloco "Candidatos e proveniência da foto" com o link do registro de
+candidatura de cada um. (2) `ElectorateSeriesChart` + `electorate-geometry.ts` —
+branco/nulo e não-sabe no MESMO eixo do tempo da série de candidatos (mesmo
+`xDomain`, mesmas margens laterais) e em gráfico separado, com identidade neutra:
+grafite e tinta secundária, hachura própria, traço tracejado. Não recebem cor do
+espectro porque não são candidatura, e porque o não-sabe costuma ser maior que o
+terceiro colocado — colorido como candidato, distorceria a leitura da disputa.
+(3) `TransitionPanel` + `TransitionSection`. (4) `polls[].blankNullPct` e
+`undecidedPct` na tira de pesquisas, com "não publicado" quando o instituto não
+divulgou a grandeza. (5) `gen-sample-data.mjs` regenerado para o schema `'2'`
+(nomes fictícios mantidos), com buracos na série do eleitorado e fluxos
+`notIdentifiable` na transferência. **Typecheck 0 erros / 0 avisos (44 arquivos),
+build limpo sem warning (3 páginas), `lint-num` limpo (31 `.astro`).**
+
+**`null` da série do eleitorado.** Um ponto sem medida quebra a série em SEGMENTOS
+contíguos: cada trecho tem seu próprio path e o vão simplesmente não tem traço.
+Não há interpolação por cima do buraco (afirmaria caminho medido) nem zero
+desenhado (afirmaria "ninguém está indeciso", que é outra coisa). O vão ainda ganha
+duas marcas explícitas: uma linha vertical pontilhada e uma "linha de cobertura" no
+topo do gráfico, com marca cheia para data medida e vazada para data sem medida —
+sem isso o buraco pareceria fim de série. Trecho de um ponto só (acontece na
+amostra em 08/08, depois do buraco de 01/08) vira barra vertical da banda + ponto,
+para não sumir por falta de vizinho.
+
+**O painel de transferência foi REESCRITO no meio da task, e vale registrar por
+quê.** A primeira versão era um Sankey desenhado à mão com `d3-shape`: nós dos dois
+lados, fitas curvas, permanência como fita reta. Estava pronto e funcionando quando
+chegou a medição de T-18 — o ajuste ao dado desloca 7,00 de 91,00 p.p. de massa por
+passo, ou seja **~92% do número publicado é o prior de permanência**. Fita grossa e
+limpa entre dois nós comunica trajetória medida; era desenho bonito sustentando
+afirmação que o dado não faz. Joguei fora e troquei pela linguagem que o site já
+reserva para estimativa incerta (o dot plot de house effect, docs/05 §5): **uma
+FAIXA por relação origem→destino, em escala real, com o zero marcado e
+enfatizado**. Assim a incerteza é o desenho inteiro, a média é uma marca fina em
+cima dela, e "não distinguível de zero" virou coisa que se VÊ (a faixa atravessa a
+linha do zero — na amostra, 4 das 7 relações) em vez de selo em que se acredita.
+Nada é escondido: todos os fluxos cruzados do passo entram no painel, os de
+permanência saem numa lista à parte (em escala comum, dezenas de p.p. achatariam
+décimos de p.p.), e a tabela traz todos os passos.
+
+**O rótulo `notIdentifiable` NÃO é tratado como sinal de confiança**, e isso é
+explícito na tela. T-18 mediu que só 34 de 272 fluxos de 2022 ficaram marcados e
+que o rótulo captura ruído amostral, não a dependência do prior. Então: o contraste
+visual entre marcados e não marcados é pequeno de propósito (o marcado ganha
+contorno tracejado, o não marcado NÃO ganha ar de sólido), o texto do selo diz
+"distinguível de zero"/"não distinguível de zero" — nunca "confiável" —, e há frase
+fixa dizendo que relação sem selo não é relação medida. O aviso de "estimativa de
+modelo, não medida" saiu de parágrafo de corpo para bloco com régua de acento,
+tipo de display e posição ANTES do painel, com o peso do prior e a
+`transitions.prior.note` (onde a participação medida do prior é publicada) exibida
+em tipo grande. Q-10 condição 4 deixou de ser cosmética.
+
+**O QUE O PRÓXIMO PRECISA SABER.** (a) `apps/web/public/candidatos/` tem dois donos
+agora: T-17 escreveu as fotos reais ali e, ao fazer isso, apagou as duas imagens de
+amostra que eu tinha criado; recriei como `amostra-andrade.svg` e
+`amostra-barros.svg` — desenhos abstratos NOSSOS, sem rosto de pessoa, porque a
+amostra não pode conter presidenciável real. Se aquele diretório for sincronizado
+por job, ele precisa preservar arquivos que não vieram do TSE, ou a amostra quebra
+de novo. (b) `src/data/sample-data.json` foi regenerado pelo script; para rodá-lo é
+preciso loader de TS (`node ../../node_modules/.pnpm/tsx@4.19.2/.../cli.mjs
+scripts/gen-sample-data.mjs`), porque `@election-pool/contracts` exporta `.ts`.
+(c) **Nenhum breakpoint foi verificado com olho humano** — não há browser nesta
+sessão; conferi só o CSS e a marcação gerada. (d) O painel desenha todos os fluxos
+cruzados do passo: com K estados são até K²−K faixas, e não impus teto porque
+cortar por magnitude esconderia justamente os `notIdentifiable`. Detalhes e
+pendências em `tasks/T-19-ui-v2.md`.
+
+---
+
+## T-15 — PesqEle real (reescrita do cliente/parser)  ·  2026-08-16
+
+**Entregue: o DiscoveryJob traz dado de verdade.** Rodado contra o
+`pesqele-divulgacao.tse.jus.br` ao vivo: `seen=50 upserted=50 expired=1 alerts=50`
+(~17 min, primeira coleta com detalhe de todos). Segunda execução logo em seguida:
+`seen=50 upserted=0 expired=0 alerts=0` em **51 segundos**, com `first_seen_at`
+intocado — idempotência preservada e o regime permanente barato que a Q-09 pedia.
+No banco: 51 linhas em `poll_registrations` (50 novas + 1 de teste antiga, que foi
+marcada `source_expired_at`), 50 com `cost_brl`, **0 com `margin_of_error` e 0 com
+`confidence_level`** (é o esperado: esses dois não existem em campo estruturado no
+PesqEle e R3 proíbe extraí-los da prosa).
+
+**O que mudou.** `pesqele/client.ts` e `pesqele/registration.ts` reescritos do zero
+contra o protocolo real (Q-09/T-15): sessão em `/app/pesquisa/listar30dias.xhtml`
+(NÃO `/index.xhtml`), busca por AJAX PrimeFaces com `<partial-response>`, paginação
+de DataTable (`_pagination`/`_first`/`_rows`) e detalhe via
+`detalhar` ⇒ `<redirect>` ⇒ `GET detalhar.xhtml`. Módulos novos:
+`constants.ts` (URLs, ids de campo JSF e rótulos, cada um com a origem no
+comentário), `partial-response.ts` (leitura do XML parcial), `select-options.ts`
+(resolução do filtro por RÓTULO) e `viewstate.ts` reescrito (lê o ViewState do HTML
+E do `<update>`). O `81` da eleição **não é hardcoded**: sai do `<option>` com o
+rótulo "Eleições Gerais 2026" e rótulo ausente LANÇA.
+
+**Fixtures: as sintéticas foram DELETADAS.** No lugar entraram 7 capturas REAIS de
+2026-08-16 (lista, busca, paginação, redirect do detalhar, dois detalhes — um com
+contratante único e um com dois — e uma busca vazia), com README dizendo data,
+origem e como recapturar. Nos dois detalhes, a prosa metodológica do instituto foi
+redigida (R3 / docs/08 §2.1 — o repo é público); todo o resto é byte-a-byte a
+resposta do servidor, e nenhum dos blocos redigidos é lido pelo parser. **A ordem
+foi capturar primeiro, escrever o parser depois** — o inverso do que produziu o bug.
+
+**Decisões.** (1) Detalhe só para `tse_id` inédito — opção (a) da Q-09, é o que faz
+a diferença entre 17 min e 51 s por ciclo. (2) `discover()` ganhou um argumento de
+opções (`shouldFetchDetalhe`, `onTseIdSeen`, `onAlert`) e **continua emitindo
+`RawRegistration[]`**, de propósito: o fake do `discovery.job.integration.spec.ts`
+segue válido e os 8 testes dele passam sem tocar em nada de apps/api além do próprio
+job. (3) Registro já conhecido não é reemitido, então o "revive" de
+`source_expired_at` virou um UPDATE explícito no job (antes vinha de graça no
+upsert). (4) Com dois contratantes, `contractor_name` junta os nomes com ' + ' e
+`contractor_cnpj` fica `null` — com dois CNPJs não existe "o" CNPJ e chutar o
+primeiro seria inventar; a lista estruturada continua em `PesqEleDetalhe.contratantes`.
+(5) Busca válida com zero resultado emite alerta `empty_search` (novo `kind` em
+`DiscoveryAlert`, cujo `tseId` passou a ser `string | null`) — foi o silêncio nesse
+caso que escondeu o bug de T-05 por uma task inteira.
+
+**Atenção para o próximo — três coisas.** Primeira, e mais urgente: os 50 alertas do
+primeiro run são TODOS `unknown_institute`. O PesqEle publica a razão social
+completa ("DATAFOLHA INSTITUTO DE PESQUISAS LTDA.", "QUAEST PESQUISAS, CONSULTORIA E
+PROJETOS LTDA.", "NEXUS PESQUISA E INTELIGENCIA DE DADOS LTDA / NEXUS") e a tabela de
+aliases só conhece os nomes curtos, então **os 50 registros estão com
+`institute_id = null`** — sem isso não há house effect por instituto. Isso é
+curadoria de dado de referência (seed/`institute_aliases`), não parser, e por isso
+não foi feito aqui: o adapter grava o nome cru e alerta, nunca faz fuzzy match.
+Segunda: existe um smoke test AO VIVO em `pesqele/client.live.spec.ts`, opt-in por
+`PESQELE_LIVE=1`, fora do `pnpm verify` (4 requisições, ~31 s). Rode-o quando
+suspeitar que o TSE mudou a tela — fixture nenhuma detecta isso. Terceira, uma
+fragilidade que ficou registrada e não é minha para consertar: o PesqEle declara
+`ISO-8859-1` e o `HttpClient` decodifica com `Response.text()` (sempre UTF-8). Hoje
+não há perda porque o TSE emite todo dado como entidade numérica (`&#231;`) — só dois
+comentários HTML saem com `U+FFFD` —, mas no dia em que vier acento em byte cru o
+dado chega corrompido. O conserto seria decodificar pelo charset do `Content-Type` em
+`packages/adapters/http-client.ts`, que está fora do escopo desta task.
+
+## Integração da MODEL_VERSION 2.0.0 e primeira colheita real · 2026-08-16
+
+**Contratos (feitos SOZINHO, antes de abrir os agentes — são bloqueantes).**
+`MODEL_VERSION` → 2.0.0 e `PUBLIC_DATA_SCHEMA_VERSION` → '2', com a justificativa
+escrita ANTES em Q-10 (R1). `public-data.ts` ganhou `candidates[].photoPath`/
+`photoSourceUrl`, `latent.electorate`, `polls[].blankNullPct`/`undecidedPct` e
+`transitions`. `model-io.ts` ganhou `ElectorateObservation`, `TRANSITION_STATE_KIND`
+e os tipos de fluxo. O schema de transferência OBRIGA banda + `notIdentifiable` em
+cada fluxo: é impossível consumir a média sem ver a incerteza.
+
+**Persistência/histórico (pedido do Felix).** Descoberta boa: nada no sistema
+apaga nada, então o histórico da eleição já vinha sendo acumulado a cada 2h desde
+o primeiro run. Faltava lugar para o dado novo e poder consultar por TEMPO — as PKs
+começam por `run_id`, boas para "o último run" e ruins para "a evolução deste
+candidato". Migration `1700000000009`: tabelas `model_electorate_estimates` (não
+cabe em `model_estimates`, que tem FK para `candidates`, e branco/nulo não é
+candidato) e `model_transitions` (com banda e `not_identifiable` colados ao
+número), mais índices de histórico. Aplica e reverte.
+
+**Religação do backend (minha).** `read-model` ganhou `listCanonicalElectorate` +
+branco/nulo por pesquisa + colunas de foto; `data-assembler` repassa tudo;
+`ModelJob` persiste eleitorado e transferências; `RenderJob` alimenta o montador.
+Job de fotos entrou no orquestrador com cron diário e `JOB_NAME.candidatePhotos` —
+antes era só CLI, ou seja, fora de `job_runs` e do /health.
+
+**DOIS BUGS MEUS, um deles grave.** (1) O guarda `isEntrypoint()` que eu tinha
+adicionado ao `seed.ts` comparava `import.meta.url` com `argv[1]`: no Windows é
+`/` contra `\`, então `pnpm db:seed` virou NO-OP SILENCIOSO — saía com código 0 sem
+inserir linha nenhuma, e só o Linux do container escondia. Extraído para
+`apps/api/src/is-entrypoint.ts`, que compara caminhos canônicos; `main.ts` tinha o
+mesmo defeito de origem e foi corrigido junto. (2) Ao ligar as fotos no read-model
+adicionei as colunas à query e ao tipo mas esqueci de mapeá-las no `parse` —
+`undefined` em vez de `null` derrubou 5 testes de integração do render.
+
+**Aliases de instituto.** O PesqEle publica razão social; nossa tabela só tinha
+nome curto, e por isso os 50 registros da primeira colheita vieram com
+`institute_id` nulo. Cadastrei as grafias EXATAS (Datafolha, Quaest, AtlasIntel,
+Ipec, Nexus), conferidas uma a uma. Instituto que não rastreamos segue SEM alias de
+propósito: cadastrar exigiria inventar `primaryMethod`, e chute em referência é R4.
+
+**Fixtures capturadas entraram no `.prettierignore`.** Reformatar HTML capturado do
+TSE recria, em outra forma, exatamente o problema da Q-09: a fixture deixa de ser o
+que a fonte devolve.
+
+**`pnpm verify` VERDE no container (exit 0): 464 testes** — contracts 27,
+adapters 196 (+1 skip), model 99, api 142.
+
+**E2E do zero (`docker compose down` + volume de publicação apagado + `up`):**
+migrations → seed → fotos (3 baixadas) → discovery (**50 registros REAIS do TSE**,
+37 alertas de instituto sem cadastro) → harvest (29 considerados, 1 tentado, 28
+`no_adapter`, 1 `parse_error`) → model (0 observações, M-1 reprova) → render
+(placeholder publicado). Site servido, todas as rotas 200.
+
+**O V6 provou seu valor em dado real:** o único harvest tentado buscou a página do
+Nexus, NÃO encontrou o `tse_id` do registro e RECUSOU — em vez de atribuir números
+de outra rodada. É o guardião do pior bug do sistema funcionando fora de teste.
+
+**O QUE O PRÓXIMO AGENTE PRECISA SABER.** O gargalo mudou de lugar. Descobrir
+registro funciona; COLHER resultado não. Só existem adapters para nexus e CNT/MDA,
+e dos 14 registros com instituto resolvido apenas 3 são Nexus. Datafolha,
+AtlasIntel, Quaest e Ipec estão no banco como registro e ninguém sabe buscar os
+números deles. Sem adapter novo, `poll_scenarios` fica em 0, o M-1 reprova e o site
+segue no estado vazio — agora dizendo "0 de 3" com 51 pesquisas no radar. Esta é a
+próxima task, e ela é de ingestão, não de modelo.

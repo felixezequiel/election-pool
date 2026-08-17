@@ -35,10 +35,17 @@ import {
   observationSchema,
   type Observation,
   type ModelOutput,
+  type TransitionFlow,
 } from '@election-pool/contracts/model-io';
 import { SCENARIO_KIND } from '@election-pool/contracts/enums';
-import { MODEL_VERSION, PCT_MAX, PCT_MIN } from '@election-pool/contracts/constants';
+import {
+  MODEL_VERSION,
+  PCT_MAX,
+  PCT_MIN,
+  TRANSITION_STICKINESS_PRIOR,
+} from '@election-pool/contracts/constants';
 import { runModel } from './index.js';
+import { estimateSingleStep, type LatentBandInput } from './transitions.js';
 
 const ZERO = 0;
 const ONE = 1;
@@ -257,6 +264,58 @@ export interface BacktestResult {
   comparisons: Comparison[];
   allPassed: boolean;
   narrowBandPass: boolean;
+  /** Q-10 condição 6. `null` = não avaliável com esta fixture (nunca "passou"). */
+  transition: TransitionCheck | null;
+}
+
+// --- Checagem de transferência 1º ⇒ 2º turno (Q-10 condição 6) ---------------
+
+/**
+ * O ÚNICO ponto de checagem real que existe para transferência: a urna.
+ *
+ * A ideia. As TAXAS de transferência saem só de PESQUISA — a composição latente
+ * do 1º turno no corte e a do 2º turno no corte, passadas ao mesmo estimador que
+ * roda em produção. O ponto de comparação sai só da URNA, que o modelo nunca vê:
+ * entre os dois turnos, a massa dos candidatos eliminados foi redistribuída, e o
+ * resultado oficial diz em que proporção cada finalista cresceu.
+ *
+ * Comparamos uma RAZÃO, não p.p.: a fração da massa liberada que foi para o
+ * primeiro finalista. Razão é adimensional e sobrevive à diferença de escala
+ * entre intenção bruta (pesquisa) e votos válidos (urna); comparar p.p. seria
+ * comparar coisas medidas em bases diferentes.
+ *
+ * O que a comparação SUPÕE, e que pode ser falso: que o eleitorado válido dos
+ * dois turnos é o mesmo bolo (abstenção, brancos e nulos mudam entre turnos) e
+ * que não houve troca direta entre os dois finalistas (se houve, os ganhos
+ * líquidos escondem fluxo bruto). São exatamente as suposições que tornam
+ * transferência não identificável — e é por isso que esta checagem é um piso, não
+ * um selo.
+ *
+ * A banda da razão é obtida por aritmética de INTERVALO sobre as bandas dos
+ * fluxos (pior caso em cada extremo), o que a torna mais larga que um bootstrap
+ * conjunto faria. Consequência assumida: um REPROVOU aqui é um sinal forte; um
+ * PASSOU é evidência fraca — a mesma leitura honesta da §4.3.
+ */
+export interface TransitionCheck {
+  fromDate: string;
+  toDate: string;
+  /** Ids dos finalistas, na ordem do par da fixture. */
+  finalistIds: [string, string];
+  eliminatedIds: string[];
+  /** Fluxo estimado dos eliminados para cada finalista, em p.p. de intenção. */
+  flowToFirstPp: number;
+  flowToSecondPp: number;
+  /** Fração (escala 0–100) da massa liberada que o modelo manda ao 1º finalista. */
+  estimatedShareToFirstPct: number;
+  loShareToFirstPct: number;
+  hiShareToFirstPct: number;
+  /** A mesma fração implícita no resultado da urna (nunca vista pelo modelo). */
+  officialShareToFirstPct: number;
+  /** Algum dos fluxos comparados veio marcado como não distinguível de zero. */
+  anyFlowNotIdentifiable: boolean;
+  /** false ⇒ faltou dado para avaliar. NUNCA é lido como aprovação. */
+  evaluable: boolean;
+  passed: boolean;
 }
 
 export function runBacktest(fixture: Fixture): BacktestResult {
@@ -269,7 +328,15 @@ export function runBacktest(fixture: Fixture): BacktestResult {
 
   // --- 1º turno (corte CUTOFF_ROUND_1) --------------------------------------
   const r1Obs = fixtureToObservations(fixture, SCENARIO_KIND.t1Estimulado, CUTOFF_ROUND_1);
-  const r1Out = runModel({ observations: r1Obs, referenceDate: CUTOFF_ROUND_1 });
+  // A fixture de 2022 não carrega branco/nulo nem não-sabe (as divulgações
+  // reconstruídas não os trazem em campo estruturado), então o array vai VAZIO —
+  // que significa "nenhuma pesquisa declarou a grandeza", não zero (Q-10/R4). A
+  // consequência honesta é que o backtest NÃO exercita a série de eleitorado.
+  const r1Out = runModel({
+    observations: r1Obs,
+    referenceDate: CUTOFF_ROUND_1,
+    electorateObservations: [],
+  });
   const r1TrackedIds = fixture.candidateMeta.filter((m) => m.tracked).map((m) => m.candidateId);
   const r1MeanSum = sumTrackedMeans(r1Out, r1TrackedIds, latestFirstRoundBand);
   for (const meta of r1Targets) {
@@ -283,7 +350,11 @@ export function runBacktest(fixture: Fixture): BacktestResult {
 
   // --- 2º turno (corte CUTOFF_ROUND_2) --------------------------------------
   const r2Obs = fixtureToObservations(fixture, SCENARIO_KIND.t2, CUTOFF_ROUND_2);
-  const r2Out = runModel({ observations: r2Obs, referenceDate: CUTOFF_ROUND_2 });
+  const r2Out = runModel({
+    observations: r2Obs,
+    referenceDate: CUTOFF_ROUND_2,
+    electorateObservations: [],
+  });
   const pair = fixture.runoffPair;
   const r2Bands = new Map<string, BandPct>();
   for (const meta of r2Targets) {
@@ -303,9 +374,129 @@ export function runBacktest(fixture: Fixture): BacktestResult {
     );
   }
 
-  const allPassed = comparisons.every((c) => c.passed);
+  // --- Checagem de transferência (Q-10 condição 6) --------------------------
+  const transition = checkTransition(fixture, r1Out, r2Bands);
+
+  // O veredito geral inclui a transferência: se ela for avaliável e reprovar, o
+  // backtest REPROVA. Não avaliável não conta como aprovação (nem como reprovação).
+  const comparisonsPassed = comparisons.every((c) => c.passed);
+  const transitionFailed = transition !== null && transition.evaluable && !transition.passed;
+  const allPassed = comparisonsPassed && !transitionFailed;
   const narrowBandPass = comparisons.some((c) => c.passed && c.ciWidthPp < NARROW_BAND_SUSPECT_PP);
-  return { comparisons, allPassed, narrowBandPass };
+  return { comparisons, allPassed, narrowBandPass, transition };
+}
+
+function checkTransition(
+  fixture: Fixture,
+  r1Out: ModelOutput,
+  r2Bands: ReadonlyMap<string, BandPct>,
+): TransitionCheck | null {
+  const pair = fixture.runoffPair;
+  const first = pair[ZERO];
+  const second = pair[ONE];
+  const trackedIds = fixture.candidateMeta.filter((m) => m.tracked).map((m) => m.candidateId);
+  const eliminatedIds = trackedIds.filter((id) => id !== first && id !== second).sort();
+  if (eliminatedIds.length === ZERO) return null;
+
+  // Composição do 1º turno no corte, em intenção bruta (o que a pesquisa mede).
+  const byStateFrom: Record<string, LatentBandInput | null> = {};
+  for (const id of trackedIds) {
+    const band = latestFirstRoundBand(r1Out, id);
+    byStateFrom[id] = band
+      ? { meanPct: band.meanPct, lo90Pct: band.lo90Pct, hi90Pct: band.hi90Pct }
+      : null;
+  }
+
+  // Composição do 2º turno no corte. Para os eliminados o valor é ZERO de fato —
+  // eles não estão na cédula do 2º turno. Isto NÃO contradiz o R4: zero aqui é
+  // um fato estrutural, não uma medida ausente (que seria `null`).
+  const byStateTo: Record<string, LatentBandInput | null> = {};
+  for (const id of trackedIds) {
+    if (id === first || id === second) {
+      const band = r2Bands.get(id);
+      byStateTo[id] = band
+        ? { meanPct: band.meanPct, lo90Pct: band.lo90Pct, hi90Pct: band.hi90Pct }
+        : null;
+      continue;
+    }
+    byStateTo[id] = { meanPct: ZERO, lo90Pct: ZERO, hi90Pct: ZERO };
+  }
+
+  const step = estimateSingleStep(
+    { date: CUTOFF_ROUND_1, byState: byStateFrom },
+    { date: CUTOFF_ROUND_2, byState: byStateTo },
+    trackedIds,
+    ZERO,
+  );
+  if (!step) return null;
+
+  const flowOf = (from: string, to: string): TransitionFlow | undefined =>
+    step.flows.find((f) => f.from === from && f.to === to);
+
+  let toFirst = ZERO;
+  let toFirstLo = ZERO;
+  let toFirstHi = ZERO;
+  let toSecond = ZERO;
+  let toSecondLo = ZERO;
+  let toSecondHi = ZERO;
+  let anyFlowNotIdentifiable = false;
+  for (const e of eliminatedIds) {
+    const fa = flowOf(e, first ?? '');
+    const fb = flowOf(e, second ?? '');
+    if (!fa || !fb) return null;
+    toFirst += fa.pp;
+    toFirstLo += Math.max(ZERO, fa.lo90Pp);
+    toFirstHi += fa.hi90Pp;
+    toSecond += fb.pp;
+    toSecondLo += Math.max(ZERO, fb.lo90Pp);
+    toSecondHi += fb.hi90Pp;
+    if (fa.notIdentifiable || fb.notIdentifiable) anyFlowNotIdentifiable = true;
+  }
+
+  // Fração da massa liberada que o MODELO manda ao primeiro finalista, com banda
+  // conservadora (pior caso em cada ponta).
+  const total = toFirst + toSecond;
+  const estimatedShare = total > ZERO ? (toFirst / total) * PCT_MAX : ZERO;
+  const loDen = toFirstLo + toSecondHi;
+  const hiDen = toFirstHi + toSecondLo;
+  const loShare = loDen > ZERO ? (toFirstLo / loDen) * PCT_MAX : ZERO;
+  const hiShare = hiDen > ZERO ? (toFirstHi / hiDen) * PCT_MAX : PCT_MAX;
+
+  // A mesma fração implícita na URNA: ganho de cada finalista, em votos válidos,
+  // entre o 1º e o 2º turno. O modelo nunca vê estes números.
+  const metaFirst = fixture.candidateMeta.find((m) => m.candidateId === first);
+  const metaSecond = fixture.candidateMeta.find((m) => m.candidateId === second);
+  const gainFirst = officialGain(metaFirst);
+  const gainSecond = officialGain(metaSecond);
+  const evaluable =
+    gainFirst !== null && gainSecond !== null && gainFirst + gainSecond > ZERO && total > ZERO;
+  const officialShare = evaluable
+    ? ((gainFirst ?? ZERO) / ((gainFirst ?? ZERO) + (gainSecond ?? ZERO))) * PCT_MAX
+    : ZERO;
+
+  return {
+    fromDate: CUTOFF_ROUND_1,
+    toDate: CUTOFF_ROUND_2,
+    finalistIds: [first ?? '', second ?? ''],
+    eliminatedIds,
+    flowToFirstPp: toFirst,
+    flowToSecondPp: toSecond,
+    estimatedShareToFirstPct: estimatedShare,
+    loShareToFirstPct: loShare,
+    hiShareToFirstPct: hiShare,
+    officialShareToFirstPct: officialShare,
+    anyFlowNotIdentifiable,
+    evaluable,
+    passed: evaluable && officialShare >= loShare && officialShare <= hiShare,
+  };
+}
+
+function officialGain(meta: FixtureCandidateMeta | undefined): number | null {
+  if (!meta) return null;
+  const r1 = meta.officialR1ValidPct;
+  const r2 = meta.officialR2ValidPct;
+  if (r1 === null || r2 === null) return null;
+  return r2 - r1;
 }
 
 function sumTrackedMeans(
@@ -339,13 +530,40 @@ function comparisonRow(c: Comparison): string {
   return `R${c.round} ${c.roleLabel.padEnd(COL_ROLE)} est ${estimate.padStart(COL_PCT)}  IC90 ${ci.padStart(COL_CI)}  largura ${width.padStart(COL_WIDTH)}  urna ${official.padStart(COL_PCT)}  ${verdictOf(c)}`;
 }
 
+function transitionLines(t: TransitionCheck | null): string[] {
+  const lines: string[] = [];
+  lines.push('');
+  lines.push('Transferência 1º ⇒ 2º turno (Q-10 condição 6)');
+  if (!t) {
+    lines.push('  NÃO AVALIÁVEL: a fixture não permite montar o passo. Não conta como aprovação.');
+    return lines;
+  }
+  const est = `${fmt(t.estimatedShareToFirstPct, PRINT_DECIMALS)}%`;
+  const band = `[${fmt(t.loShareToFirstPct, PRINT_DECIMALS)}; ${fmt(t.hiShareToFirstPct, PRINT_DECIMALS)}]`;
+  const official = `${fmt(t.officialShareToFirstPct, PRINT_DECIMALS)}%`;
+  lines.push(
+    `  massa liberada por ${t.eliminatedIds.join(', ')} — fração para ${t.finalistIds[ZERO]}:`,
+  );
+  lines.push(
+    `  modelo ${est.padStart(COL_PCT)}  banda 90% ${band.padStart(COL_CI)}  urna ${official.padStart(COL_PCT)}  ` +
+      `${t.evaluable ? (t.passed ? 'PASS' : 'FAIL') : 'N/A'}`,
+  );
+  lines.push(
+    `  fluxo estimado: ${fmt(t.flowToFirstPp, WIDTH_DECIMALS)} p.p. ⇒ ${t.finalistIds[ZERO]}, ` +
+      `${fmt(t.flowToSecondPp, WIDTH_DECIMALS)} p.p. ⇒ ${t.finalistIds[ONE]}` +
+      (t.anyFlowNotIdentifiable ? '  (algum fluxo não distinguível de zero)' : ''),
+  );
+  return lines;
+}
+
 export function formatTable(result: BacktestResult): string {
   const lines: string[] = [];
   lines.push('Backtest 2022 — quatro comparações (docs/07 §4)');
   lines.push('');
   for (const c of result.comparisons) lines.push(comparisonRow(c));
+  lines.push(...transitionLines(result.transition));
   lines.push('');
-  lines.push(`Veredito geral: ${result.allPassed ? 'PASSOU (4/4)' : 'REPROVOU'}`);
+  lines.push(`Veredito geral: ${result.allPassed ? 'PASSOU' : 'REPROVOU'}`);
   const passedCount = result.comparisons.filter((c) => c.passed).length;
   lines.push(`Comparações aprovadas: ${passedCount} de ${result.comparisons.length}`);
   if (result.narrowBandPass) {
@@ -387,10 +605,72 @@ function mdRow(c: Comparison): string {
   return `| ${c.round}º | ${c.roleLabel} | ${est} | ${ci} | ${width} | ${official} | ${verdictOf(c)} |`;
 }
 
+function transitionMarkdown(t: TransitionCheck | null): string[] {
+  const lines: string[] = [];
+  lines.push('');
+  lines.push('## Transferência 1º ⇒ 2º turno (Q-10 condição 6)');
+  lines.push('');
+  lines.push(
+    'As TAXAS saem só de pesquisa (composição latente de 1º turno no corte ⇒ composição de ' +
+      '2º turno no corte, pelo mesmo estimador que roda em produção). O ponto de checagem sai ' +
+      'só da URNA, que o modelo nunca vê. Compara-se uma RAZÃO — a fração da massa liberada ' +
+      'pelos eliminados que foi para o primeiro finalista — porque razão sobrevive à diferença ' +
+      'de base entre intenção bruta e votos válidos.',
+  );
+  lines.push('');
+  if (!t) {
+    lines.push(
+      '**NÃO AVALIÁVEL** com esta fixture — não foi possível montar o passo. Não avaliável ' +
+        'NÃO é aprovação.',
+    );
+    return lines;
+  }
+  lines.push(`- Eliminados: ${t.eliminatedIds.join(', ')}`);
+  lines.push(`- Finalistas: ${t.finalistIds[ZERO]}, ${t.finalistIds[ONE]}`);
+  lines.push(
+    `- Fluxo estimado dos eliminados: ${fmt(t.flowToFirstPp, WIDTH_DECIMALS)} p.p. para ` +
+      `${t.finalistIds[ZERO]}, ${fmt(t.flowToSecondPp, WIDTH_DECIMALS)} p.p. para ${t.finalistIds[ONE]}`,
+  );
+  lines.push('');
+  lines.push('| Grandeza | Modelo | Banda 90% | Urna | Veredito |');
+  lines.push('|----------|--------|-----------|------|----------|');
+  lines.push(
+    `| fração da massa liberada para ${t.finalistIds[ZERO]} | ` +
+      `${fmt(t.estimatedShareToFirstPct, PRINT_DECIMALS)}% | ` +
+      `[${fmt(t.loShareToFirstPct, PRINT_DECIMALS)}; ${fmt(t.hiShareToFirstPct, PRINT_DECIMALS)}] | ` +
+      `${fmt(t.officialShareToFirstPct, PRINT_DECIMALS)}% | ` +
+      `${t.evaluable ? (t.passed ? 'PASS' : 'FAIL') : 'N/A'} |`,
+  );
+  lines.push('');
+  if (t.anyFlowNotIdentifiable) {
+    lines.push(
+      '> Ao menos um dos fluxos comparados vem marcado como **não distinguível de zero** ' +
+        '(banda cruzando zero ou abaixo do piso de visibilidade). Ele é publicado assim mesmo ' +
+        '(Q-10 condição 3) e entra nesta conta com o rótulo à vista.',
+    );
+    lines.push('');
+  }
+  lines.push(
+    `Leitura honesta. O prior de permanência (stickiness ${TRANSITION_STICKINESS_PRIOR}) responde ` +
+      'por parte deste número: transferência não é identificável a partir de agregado (Q-10), e a ' +
+      'banda acima é aritmética de intervalo sobre as bandas dos fluxos, portanto MAIS LARGA que ' +
+      'um bootstrap conjunto. Consequência: um FAIL aqui é sinal forte; um PASS é evidência fraca. ' +
+      'A comparação ainda supõe que o bolo de votos válidos é o mesmo nos dois turnos e que não ' +
+      'houve troca direta entre os finalistas — suposições que o dado agregado não pode verificar. ' +
+      'Se reprovou, o veredito fica publicado como reprovado: o prior NÃO é ajustado para passar (R1).',
+  );
+  return lines;
+}
+
 export function renderMarkdown(result: BacktestResult, generatedAt: string): string {
   const { sha, note } = gitSha();
   const passedCount = result.comparisons.filter((c) => c.passed).length;
-  const verdict = result.allPassed ? 'PASSOU (4/4)' : `REPROVOU (${passedCount}/4)`;
+  const comparisonVerdict = `${passedCount}/${result.comparisons.length}`;
+  const t = result.transition;
+  const transitionVerdict = !t || !t.evaluable ? 'N/A' : t.passed ? 'PASS' : 'FAIL';
+  const verdict = result.allPassed
+    ? `PASSOU (${comparisonVerdict}, transferência ${transitionVerdict})`
+    : `REPROVOU (${comparisonVerdict}, transferência ${transitionVerdict})`;
 
   const lines: string[] = [];
   lines.push('# Resultados do backtest 2022');
@@ -412,6 +692,7 @@ export function renderMarkdown(result: BacktestResult, generatedAt: string): str
   lines.push('| Turno | Papel | Estimativa | IC 90% | Largura | Urna | Veredito |');
   lines.push('|-------|-------|-----------|--------|---------|------|----------|');
   for (const c of result.comparisons) lines.push(mdRow(c));
+  lines.push(...transitionMarkdown(result.transition));
   lines.push('');
   lines.push(`**Veredito geral: ${verdict}.**`);
   lines.push('');
@@ -451,6 +732,14 @@ export function renderMarkdown(result: BacktestResult, generatedAt: string): str
       '. Corte do 2º turno: ' +
       CUTOFF_ROUND_2 +
       '. Nenhuma pesquisa com `field_end` posterior ao corte entra no run (sem vazamento).',
+  );
+  lines.push('');
+  lines.push(
+    'Limite conhecido desta fixture: ela NÃO traz branco/nulo nem não-sabe (as divulgações ' +
+      'reconstruídas não os publicam em campo estruturado), então o backtest roda com ' +
+      '`electorateObservations` vazio e **não exercita a série de eleitorado** nem os estados ' +
+      'de branco/nulo e não-sabe dentro da transferência. Array vazio significa "ninguém ' +
+      'declarou a grandeza" — não zero (R4).',
   );
   lines.push('');
   return lines.join('\n');

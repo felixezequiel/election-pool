@@ -1,15 +1,22 @@
 /**
- * Extração e detecção de `javax.faces.ViewState` do PesqEle (docs/04 §2). O
- * PesqEle é JSF/MyFaces: cada resposta HTML carrega um `ViewState` que precisa
- * ser reenviado no POST seguinte. O ViewState EXPIRA — a resposta de sessão
- * inválida traz um HTML de erro do JSF (`ViewExpiredException`) e/ou não traz o
- * campo esperado. Detectamos isso para reestabelecer sem entrar em loop.
+ * `javax.faces.ViewState` do PesqEle (JSF/MyFaces + PrimeFaces 8).
  *
- * O id do campo observado no PesqEle real é `j_id__v_0:javax.faces.ViewState:1`,
- * mas o `name` é sempre `javax.faces.ViewState`. Casamos pelo `name` (estável).
+ * O ViewState muda a CADA resposta, INCLUSIVE nas parciais AJAX. Reenviar o
+ * antigo derruba a sessão e o sintoma é uma página vazia — indistinguível de
+ * "não há resultado" (armadilha registrada em T-15). Por isso há duas leituras:
+ * do HTML completo (`<input name="javax.faces.ViewState">`) e da resposta parcial
+ * (`<update id="...:javax.faces.ViewState:1">`), e ambas falham alto (R4).
+ *
+ * ARMADILHA (Q-09): `formAviso` existe OCULTO em TODA página do PesqEle e é o
+ * modal "Sessão Expirada!" — não um aviso legal a aceitar, e muito menos prova de
+ * que a sessão expirou. Detectar expiração pela presença dele dá falso positivo em
+ * toda requisição. Expiração de verdade chega como `<error-name>` de
+ * `ViewExpiredException` na resposta parcial.
  */
 
 import { parse as parseHtml } from 'node-html-parser';
+import type { PartialResponse } from './partial-response.js';
+import { FIELD } from './constants.js';
 
 export class ViewStateError extends Error {
   constructor(message: string) {
@@ -18,47 +25,35 @@ export class ViewStateError extends Error {
   }
 }
 
-/**
- * Extrai o valor de `javax.faces.ViewState`. Lança `ViewStateError` se o campo
- * não existir (documento não é uma página JSF válida ou a sessão expirou). Falha
- * alta (R4): nunca devolve string vazia silenciosa.
- */
-export const extractViewState = (html: string): string => {
-  const root = parseHtml(html);
-  const input = root.querySelector('input[name="javax.faces.ViewState"]');
+/** ViewState de uma página HTML completa. Ausente ⇒ LANÇA. */
+export const extractViewStateFromHtml = (html: string): string => {
+  const input = parseHtml(html).querySelector(`input[name="${FIELD.viewState}"]`);
   const value = input?.getAttribute('value');
-  if (value === undefined || value === null || value.length === 0) {
-    throw new ViewStateError('javax.faces.ViewState ausente na resposta do PesqEle');
+  if (value === undefined || value.length === 0) {
+    throw new ViewStateError(`${FIELD.viewState} ausente no HTML do PesqEle`);
   }
   return value;
 };
 
-/** `true` se há um `javax.faces.ViewState` no HTML (sem lançar). */
-export const hasViewState = (html: string): boolean => {
-  const root = parseHtml(html);
-  const input = root.querySelector('input[name="javax.faces.ViewState"]');
-  const value = input?.getAttribute('value');
-  return value !== undefined && value !== null && value.length > 0;
-};
-
 /**
- * Assinaturas de sessão/ViewState expirados no MyFaces. Se a resposta bater
- * numa destas, reestabelecemos a sessão (novo GET) UMA vez — sem loop.
+ * ViewState de uma resposta parcial. O id do `<update>` é gerado pelo MyFaces
+ * (`j_id__v_0:javax.faces.ViewState:1`) e não é estável entre builds — casamos
+ * pelo SUFIXO `javax.faces.ViewState`, que é o nome canônico do campo.
  */
-const SESSION_EXPIRED_MARKERS = [
-  'viewexpiredexception',
-  'view could not be restored',
-  'a view expirou',
-  'sessão expirou',
-  'sessao expirou',
-  'session expired',
-];
-
-export const isSessionExpired = (html: string): boolean => {
-  const lower = html.toLowerCase();
-  if (SESSION_EXPIRED_MARKERS.some((m) => lower.includes(m))) {
-    return true;
+export const extractViewStateFromPartial = (partial: PartialResponse): string => {
+  for (const [id, content] of partial.updates) {
+    if (!id.includes(FIELD.viewState)) continue;
+    const value = content.trim();
+    if (value.length === 0) {
+      throw new ViewStateError('<update> do ViewState veio vazio na resposta do PesqEle');
+    }
+    return value;
   }
-  // Sem ViewState numa resposta que deveria tê-lo também indica sessão perdida.
-  return !hasViewState(html);
+  throw new ViewStateError(
+    `Nenhum <update> de ${FIELD.viewState} na resposta parcial (ids: ${[...partial.updates.keys()].join(', ')})`,
+  );
 };
+
+/** Assinatura de ViewState/sessão expirados que o JSF devolve numa parcial. */
+export const isSessionExpired = (partial: PartialResponse): boolean =>
+  partial.errorName !== null && partial.errorName.includes('ViewExpiredException');

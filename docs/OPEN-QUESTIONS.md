@@ -239,3 +239,168 @@ proveniência (a armadilha não estava documentada e custou uma iteração de e2
 
 **Decide:** nada a decidir — informativo. Sinalizar se o modelo de deploy mudar
 (ex.: build fora do container) e o pressuposto same-fs deixar de valer.
+
+---
+
+## Q-09 — O cliente do PesqEle (T-05) foi escrito contra um PesqEle que não existe
+
+**Contexto.** Ao subir a stack local completa e rodar o pipeline real contra o
+`pesqele-divulgacao.tse.jus.br`, o DiscoveryJob terminou com `seen=0, upserted=0,
+alerts=0` — sucesso silencioso, zero registro. O site está no ar e tem dado: a
+consulta de últimos 30 dias para "Eleições Gerais 2026 / BRASIL" devolve **50
+registros de pesquisas presidenciais** (Datafolha, Instituto Opnus, Instituto
+Perfil, Verita, …), em 5 páginas de 10.
+
+O motivo é que `packages/adapters/pesqele/` foi escrito contra uma estrutura
+SUPOSTA, nunca confrontada com o site real. Divergências verificadas ao vivo:
+
+| O que o código assume | O que o PesqEle 3.9.2 realmente faz |
+|---|---|
+| Busca em `POST /index.xhtml` | `/index.xhtml` é só um menu. A busca é `/app/pesquisa/listar30dias.xhtml` (há também `listar.xhtml`) |
+| `formAviso` é um aviso legal a aceitar, com botão `formAviso:aceitar` | `formAviso` é o modal **"Sessão Expirada!"**, presente OCULTO em toda página; seus elementos são `j_id_q/j_id_s/j_id_t` e o botão só faz `window.location.href=''` |
+| Campos `formPesquisa:eleicao`, `:abrangencia`, `:periodoInicio`, `:periodoFim`, `:btnPesquisar` | `formPesquisa:eleicoes_input` (`81` = Eleições Gerais 2026), `formPesquisa:filtroUF_input` (`BR` = BRASIL), `formPesquisa:selectCidades_input`; sem campos de período (a página JÁ é a de 30 dias); botão `formPesquisa:idBtnPesquisar` |
+| POST de formulário comum, resposta HTML | commandLink PrimeFaces **AJAX**: exige `javax.faces.partial.ajax=true`, `javax.faces.source`, `partial.execute/render`; a resposta é `<partial-response>` com o HTML em CDATA e o ViewState novo num `<update>` |
+| Paginação por `formPesquisa:tabelaPesquisas:pagina` | DataTable PrimeFaces `formPesquisa:tabelaPesquisas`, paginação AJAX (`_pagination`, `_first`, `_rows`) |
+| Lista traz todos os campos do registro, marcados com `data-field="..."`/`data-row="registration"` | A lista tem 6 `<td>` SEM atributo semântico algum (tse_id, empresa, cargos, data de registro, abrangência, ações). `data-field`/`data-row` **não existem no PesqEle** — são invenção das fixtures |
+| Um documento por registro | Datas de campo, nº de entrevistados, CNPJ, valor e contratante só existem na tela de detalhe: `detalhar` (AJAX) ⇒ `redirect` ⇒ `GET /app/pesquisa/detalhar.xhtml` |
+
+**Por que os testes não pegaram.** As fixtures de `pesqele/__fixtures__/` foram
+escritas com os mesmos `data-field` inventados que o parser procura — o teste
+prova que o parser lê a fixture, não que o parser lê o PesqEle. O aceite de T-05
+pedia "fixture de HTML **real** do PesqEle" e isso não foi cumprido. É a lição
+cara desta task: **fixture sintética de fonte externa não é evidência de
+integração**; ela só vale depois que uma captura real do site é congelada.
+
+**Consequência.** Sem discovery não há `poll_registrations`; sem registro não há
+harvest; sem harvest não há observação; sem observação o M-1 reprova e nada é
+publicado. Toda a trilha de ingestão está de pé, testada e correta em relação a
+si mesma — e alimentada por zero.
+
+**O que o detalhe REALMENTE oferece** (capturado de `BR-06783/2026`): número de
+identificação, data de registro, cargo(s), data de divulgação, empresa contratada
++ CNPJ, eleição, entrevistados (`1200`), data de início e término da pesquisa,
+estatístico responsável e CONRE, valor (`R$ 148.800,00`), se é recurso próprio,
+contratante(s) + CPF/CNPJ. **Margem de erro e nível de confiança NÃO existem em
+campo estruturado** — aparecem apenas dentro do texto metodológico do instituto,
+que R3/docs/08 proíbe armazenar. `marginOfError`/`confidenceLevel` são anuláveis
+no schema, então o caminho honesto é `null`, nunca extrair da prosa.
+
+**Custo a decidir.** Com o rate limit de 1 req/10s (docs/04 §6), colher o detalhe
+de cada registro custa ~3 requisições (detalhar ⇒ GET detalhe ⇒ voltar). Para 50
+registros isso é ~25 min de ciclo. Opções: (a) buscar detalhe só de registro
+NOVO (o `tse_id` já visto não muda) — reduz o regime permanente a quase nada e é
+o que a idempotência do upsert já permite; (b) aceitar o ciclo longo; (c) avaliar
+se o TSE publica esses registros em dados abertos, evitando o scraping do JSF.
+
+**Recomendação (minha):** (a) — detalhe só para `tse_id` inédito, com o resto do
+ciclo intocado. E congelar capturas REAIS do site como fixtures antes de escrever
+uma linha de parser novo, invertendo a ordem que produziu este bug.
+
+**Decide:** Felix (sobretudo o custo/ritmo de (a)/(b)/(c)). A reescrita em si é
+trabalho de implementação, especificada em `tasks/T-15-pesqele-real.md`.
+
+---
+
+## Q-10 — Modelo de transferência de votos: objeção registrada e decisão do Felix
+
+**Registro obrigatório (R1).** Esta seção foi escrita ANTES de qualquer linha do
+modelo novo e ANTES de ver qualquer saída dele. É a justificativa exigida pelo R1
+do CLAUDE.md para incrementar `MODEL_VERSION`.
+
+**O pedido.** Mostrar "para onde estão indo os votos ao longo do tempo" — fluxo
+entre candidatos e entre candidatos e o bolo de branco/nulo/não-sabe.
+
+**A objeção, registrada na íntegra.** A partir de pesquisa AGREGADA não é possível
+IDENTIFICAR transferência individual de voto. É o problema clássico de inferência
+ecológica. Se o "não sabe" cai 4 p.p. e o candidato A sobe 4 p.p., são
+observacionalmente idênticos: (i) 4 p.p. de indecisos foram para A; (ii) 6 p.p. de
+indecisos foram para A e 2 p.p. de A foram para B, com B recebendo também 2 p.p. de
+C; (iii) nada se moveu e a composição da amostra mudou. Com `K` estados há `K²`
+incógnitas por passo e apenas `K` equações (as marginais), mais a restrição de
+soma. O sistema é subdeterminado por construção — nenhuma quantidade de dado
+agregado o resolve. Só dado de PAINEL (mesma pessoa entrevistada duas vezes)
+identifica fluxo, e o PesqEle não expõe painel.
+
+Consequência honesta: **os números de fluxo serão determinados pelo PRIOR tanto
+quanto pelo dado.** Mudar a força do prior muda o resultado sem que o ajuste do
+dado piore. Isso é o oposto do que o resto deste projeto faz, e é o motivo de
+`docs/01` §2 tratar os `μ` como independentes e de a Q-03 ter adiado correlação
+para v2.
+
+**Decisão (Felix, 2026-08-16), com a objeção acima à vista:** implementar o modelo
+de transferência. Registro que a recomendação técnica era a alternativa "séries de
+branco/nulo/não-sabe + co-movimento descritivo", e que ela foi preterida.
+
+**Condições que a implementação DEVE respeitar** — sem elas o recurso vira
+exatamente o número inventado que o R4 proíbe:
+
+1. `MODEL_VERSION` vai a `2.0.0`. O espaço de estados muda (branco/nulo e
+   não-sabe passam a ser estados rastreados, não descarte).
+2. O prior é EXPLÍCITO, versionado em `constants.ts` e publicado em
+   `params_json` e no `data.json`. Quem lê precisa poder ver de quanto foi a
+   ajuda do prior.
+3. A banda do fluxo é publicada SEMPRE, e ela vai ser larga. Fluxo cuja banda
+   cruza zero é publicado como "não distinguível de zero" — nunca escondido, nunca
+   arredondado para uma seta bonita.
+4. A UI rotula o painel como ESTIMATIVA DE MODELO sob suposição, não medida, com
+   a limitação escrita na própria seção — não só na página de metodologia.
+5. Entra uma linha nova em `docs/01` §10 ("o que este modelo não faz"):
+   transferência é inferida de agregado e não identifica fluxo individual.
+6. O backtest de 2022 ganha uma comparação de transferência entre o 1º e o 2º
+   turno, onde o resultado da urna dá um ponto de checagem real. Se reprovar, o
+   veredito é publicado como reprovado (R1) — não se ajusta o prior para passar.
+7. Nada de transferência entra na estimativa de `μ_t` nem nos house effects. O
+   modelo de fluxo LÊ a série latente e não a realimenta. Assim, um erro no fluxo
+   não contamina o número principal do site.
+
+**Decide:** decidido. Registrado para auditoria de por que a v2 existe.
+
+### Q-10, adendo pós-implementação (2026-08-16) — o prior domina, e o rótulo não avisa
+
+Escrito DEPOIS de rodar o modelo, e por isso separado da justificativa acima: o
+que segue são MEDIÇÕES, não previsões. Elas confirmam a objeção original com
+número, e uma delas exige decisão nova.
+
+**1. Quanto do número é prior: ~92%.** No run de 1º turno de 2022, o ajuste ao
+dado desloca 7,00 p.p. de 91,00 p.p. de massa por passo. Oito por cento do que
+está publicado vem das pesquisas; o resto vem da hipótese de permanência. A
+implementação publica essa medição em `transitions.prior.note`, então o número não
+está escondido — mas é preciso dizer com todas as letras: **o painel de
+transferência é majoritariamente uma consequência do prior.**
+
+**2. O backtest de transferência REPROVOU, e ficou assim.** O modelo estima 38,7%
+da massa liberada pelos eliminados indo ao primeiro finalista, IC 90% [31,6; 46,2];
+a urna de 2022 implica 29,8% — fora da banda. O veredito geral do backtest passou a
+`REPROVOU (2/4, transferência FAIL)`. Nada foi ajustado para passar (R1). A causa é
+diagnóstica, não um bug: o prior de permanência redistribui a massa liberada de
+forma quase simétrica, e 2022 foi fortemente assimétrico. A estimativa cai a meio
+caminho entre o prior (~50/50) e o que as marginais sozinhas diriam (~15–20%).
+
+**3. DECISÃO NOVA NECESSÁRIA — `notIdentifiable` não faz o que a condição 3
+pretendia.** A condição 3 da Q-10 supunha que marcar fluxo com banda cruzando zero
+protegeria o leitor. Não protege: a banda só captura ruído AMOSTRAL, e como as
+bandas latentes são estreitas (Q-07, o mesmo problema de novo), fluxos de ~2 p.p.
+quase inteiramente priorísticos saem com banda acima de zero e SEM rótulo. No run
+de 2022, só 34 de 272 fluxos foram marcados. Um leitor que interprete
+`notIdentifiable: false` como "este fluxo é confiável" está sendo enganado pela
+nossa própria UI.
+
+Opções: (a) publicar assim, com o aviso de prior em destaque máximo na seção e o
+rótulo rebaixado a "banda não cruza zero", sem conotação de confiança; (b) criar um
+segundo indicador, por fluxo, de QUANTO daquele número veio do prior, e marcar como
+não-informativo o que passar de um limiar — mais honesto e mais caro; (c) não
+publicar o painel de fluxo e ficar com as séries de branco/nulo e não-sabe, que são
+dado puro.
+
+**Recomendação:** (b) se o painel for publicado. (c) continua sendo a leitura
+tecnicamente mais defensável, e o backtest reprovado é evidência a favor dela.
+A implementação atual segue (a).
+
+**Decide:** Felix.
+
+**4. Pendências menores.** O backtest não exercita as séries de branco/nulo — a
+fixture de 2022 não traz essas grandezas e nenhum valor foi inventado (roda com
+array vazio, e isso está dito em `docs/BACKTEST-RESULTS.md`). E o número de
+réplicas do bootstrap (400) ficou como constante local em `transitions.ts`: não é
+parâmetro de modelo, mas afeta o erro de Monte Carlo da largura da banda —
+candidata a migrar para `constants.ts` se virar objeto de ajuste.

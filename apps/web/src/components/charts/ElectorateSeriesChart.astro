@@ -1,0 +1,552 @@
+---
+/**
+ * <ElectorateSeriesChart> — branco/nulo e não-sabe como SÉRIES (MODEL_VERSION
+ * 2.0.0, Q-10). Mesma linguagem do <LatentBandChart>: banda dominante, linha
+ * central discreta, SVG nosso, D3 só para escala/forma/eixo.
+ *
+ * Por que um componente separado e não mais duas séries no gráfico de candidatos:
+ *
+ *  1. Branco/nulo e não-sabe NÃO são candidatura. Misturados às faixas coloridas
+ *     dos candidatos, entrariam na leitura como "mais um concorrente" — e o
+ *     não-sabe costuma ser maior que o terceiro colocado, o que distorceria a
+ *     leitura da disputa. Aqui eles ficam LADO A LADO com a série de candidatos,
+ *     no mesmo eixo do tempo (o `xDomain` é imposto de fora), mas com identidade
+ *     visual própria: grafite/tinta neutra, hachura própria, traço tracejado.
+ *  2. Estas séries têm BURACOS. Um ponto `null` é data sem medida, e o desenho
+ *     precisa interromper a linha — nunca interpolar por cima, nunca desenhar
+ *     zero (R4). Zero aqui afirmaria "ninguém está indeciso", que é outra coisa.
+ *     A "linha de cobertura" no topo torna o buraco explícito em vez de deixá-lo
+ *     como um vão silencioso que o leitor confunde com fim de série.
+ *
+ * SSR-completo: sem JS o gráfico já está inteiro e correto.
+ */
+import AnimatedNum from '../AnimatedNum.astro';
+import Num from '../Num.astro';
+import UncertaintyRule from './UncertaintyRule.astro';
+import {
+  buildElectorateGeometry,
+  type ElectorateSeriesInput,
+} from './lib/electorate-geometry.js';
+import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
+import './lib/charts.css';
+
+interface Props {
+  /** As grandezas do eleitorado, em ordem de plotagem/legenda. */
+  series: ElectorateSeriesInput[];
+  title: string;
+  /** id único (namespace de padrões SVG). */
+  id: string;
+  /** Domínio de tempo imposto (ms) — use o da série latente para alinhar os eixos. */
+  xDomain?: [number, number] | undefined;
+  width?: number;
+  height?: number;
+  class?: string | undefined;
+}
+
+const { series, title, id, xDomain, width = 960, height = 300, class: className } = Astro.props;
+
+/**
+ * Margens IGUAIS às do <LatentBandChart> nas laterais (left 40 / right 20). Isso
+ * não é detalhe: os dois gráficos têm a mesma largura de viewBox e o mesmo
+ * domínio de tempo, então a mesma coluna vertical cai na mesma data nos dois. Se
+ * as margens divergissem, a leitura conjunta ficaria fora de registro — e é
+ * exatamente a leitura conjunta que justifica pôr as duas coisas na mesma seção.
+ * A margem superior é maior porque ali mora a linha de cobertura.
+ */
+const margins = { top: 72, right: 20, bottom: 32, left: 40 };
+const geo = buildElectorateGeometry(series, width, height, margins, xDomain);
+
+// Uma pista de cobertura por série, empilhada no topo, cada uma com seu rótulo.
+const RAIL_TOP = 30;
+const RAIL_GAP = 26;
+const MARK_R = 3.5;
+
+const isoOf = (t: number): string => new Date(t).toISOString();
+
+// Prosa do <desc> (docs/05 §7): diz o valor E diz o buraco.
+const descParts = geo.series.map((s) => {
+  const l = s.latest;
+  const value = l
+    ? `central ${formatPct(l.band.mean)}%, faixa de 90% de ${formatPct(l.band.lo90)} a ${formatPct(
+        l.band.hi90,
+      )}`
+    : 'sem nenhuma medida na janela';
+  const gaps =
+    s.missingCount > 0
+      ? `; ${String(s.missingCount)} ${
+          s.missingCount === 1 ? 'data sem medida' : 'datas sem medida'
+        }, em que a linha é interrompida`
+      : '';
+  return `${s.displayName}: ${value}${gaps}`;
+});
+const desc = `Branco e nulo e não-sabe estimados ao longo do tempo, com faixa de 90% dominante. ${descParts.join(
+  '; ',
+)}. Data sem medida não é zero: a linha para e a lacuna é marcada na linha de cobertura.`;
+
+const ruleDomain: [number, number] = [geo.yDomain[0], geo.yDomain[1]];
+
+/** Índice de valores por data para a tabela (equivalente textual). */
+const byDate = new Map<number, Map<string, { mean: number; lo90: number; hi90: number } | null>>();
+for (const t of geo.dates) byDate.set(t, new Map());
+for (const s of series) {
+  for (const p of s.points) byDate.get(p.t)?.set(s.key, p.band);
+}
+---
+
+<figure class:list={['chart electorate-chart', className]} data-electorate-chart>
+  <figcaption class="label">{title}</figcaption>
+
+  <div class="chart-plot substrate-plot">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-labelledby={`${id}-title ${id}-desc`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <title id={`${id}-title`}>{title}</title>
+      <desc id={`${id}-desc`}>{desc}</desc>
+
+      <defs>
+        {/*
+          Hachura PRÓPRIA, não a dos candidatos: outra densidade e outro ângulo,
+          para que ninguém confunda estas séries com uma candidatura em P&B.
+        */}
+        <pattern
+          id={`${id}-hachura-blankNull`}
+          patternUnits="userSpaceOnUse"
+          width="8"
+          height="8"
+          patternTransform="rotate(45)"
+        >
+          <line class="elec-hachura-stroke is-blank" x1="0" y1="0" x2="0" y2="8"></line>
+        </pattern>
+        <pattern
+          id={`${id}-hachura-undecided`}
+          patternUnits="userSpaceOnUse"
+          width="8"
+          height="8"
+          patternTransform="rotate(135)"
+        >
+          <line
+            class="elec-hachura-stroke is-undecided"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="8"
+            stroke-dasharray="3 3"
+          ></line>
+        </pattern>
+      </defs>
+
+      {/* Substrato: eixos e ticks — instantâneos, nunca animados. */}
+      <g class="axes" aria-hidden="true">
+        {
+          geo.yTicks.map((t) => (
+            <g>
+              <line
+                class="axis-tick"
+                x1={margins.left}
+                y1={t.pos}
+                x2={width - margins.right}
+                y2={t.pos}
+              />
+              <text class="axis-label" x={margins.left - 6} y={t.pos + 3} text-anchor="end">
+                {t.label}
+              </text>
+            </g>
+          ))
+        }
+        {
+          geo.xTicks.map((t) => (
+            <text class="axis-label" x={t.pos} y={height - margins.bottom + 18} text-anchor="middle">
+              {t.label}
+            </text>
+          ))
+        }
+        <line
+          class="axis-line"
+          x1={margins.left}
+          y1={height - margins.bottom}
+          x2={width - margins.right}
+          y2={height - margins.bottom}></line>
+      </g>
+
+      {/* Vãos: linha vertical pontilhada descendo da marca vazada da cobertura.
+          Marca ONDE não há medida, sem sugerir valor nenhum naquele ponto. */}
+      <g class="elec-gaps" aria-hidden="true">
+        {
+          geo.series.flatMap((s) =>
+            s.gapX.map((gx) => (
+              <line
+                class="elec-gap-line"
+                x1={gx}
+                y1={margins.top}
+                x2={gx}
+                y2={height - margins.bottom}
+              />
+            )),
+          )
+        }
+      </g>
+
+      {/* Séries: um path por SEGMENTO contíguo. Buraco = ausência de path. */}
+      {
+        geo.series.map((s, si) => (
+          <g class:list={['elec-series', `elec-${s.key}`]} data-series={s.key}>
+            {s.segments.map((seg) =>
+              seg.single ? (
+                <g class="elec-single">
+                  {/* Ponto isolado entre dois buracos: a banda vira uma barra
+                      vertical curta — ainda é a banda, não um valor pontual. */}
+                  <line
+                    class="elec-single-band"
+                    x1={seg.single.x}
+                    y1={seg.single.yLo}
+                    x2={seg.single.x}
+                    y2={seg.single.yHi}
+                  />
+                  <circle class="elec-single-dot" cx={seg.single.x} cy={seg.single.yMean} r={3} />
+                </g>
+              ) : (
+                <g>
+                  <path class="elec-band" d={seg.bandPath} />
+                  <path
+                    class="elec-band-hachura"
+                    d={seg.bandPath}
+                    fill={`url(#${id}-hachura-${s.key})`}
+                  />
+                  <path class="elec-center" d={seg.centerPath} />
+                </g>
+              ),
+            )}
+
+            {/* Linha de cobertura: marca cheia = medido, vazada = sem medida.
+                O rótulo fica ACIMA da pista — a lateral direita é margem do eixo
+                compartilhado com a série de candidatos e não pode crescer. */}
+            <g class="elec-rail" aria-hidden="true">
+              <text class="elec-rail-label" x={margins.left} y={RAIL_TOP + si * RAIL_GAP - 7}>
+                {s.displayName}
+              </text>
+              <line
+                class="elec-rail-axis"
+                x1={margins.left}
+                y1={RAIL_TOP + si * RAIL_GAP}
+                x2={width - margins.right}
+                y2={RAIL_TOP + si * RAIL_GAP}
+              />
+              {series[si]?.points.map((p) =>
+                p.band ? (
+                  <circle
+                    class="elec-rail-mark"
+                    cx={geo.x(p.t)}
+                    cy={RAIL_TOP + si * RAIL_GAP}
+                    r={MARK_R}
+                  />
+                ) : (
+                  <circle
+                    class="elec-rail-mark is-missing"
+                    cx={geo.x(p.t)}
+                    cy={RAIL_TOP + si * RAIL_GAP}
+                    r={MARK_R}
+                  />
+                ),
+              )}
+            </g>
+          </g>
+        ))
+      }
+    </svg>
+  </div>
+
+  {/* Readout: último valor MEDIDO de cada grandeza, sempre com a régua ao lado
+      (docs/05 §1.1 — número de destaque nunca aparece sem a sua régua). */}
+  <ul class="elec-readout">
+    {
+      geo.series.map((s) => (
+        <li class:list={['elec-readout-item', `elec-${s.key}`]}>
+          <span class="elec-readout-name">
+            <span class="elec-readout-swatch" aria-hidden="true" />
+            {s.displayName}
+          </span>
+          {s.latest ? (
+            <>
+              <span class="elec-readout-value">
+                <AnimatedNum
+                  value={s.latest.band.mean}
+                  decimals={1}
+                  suffix="%"
+                  label={`${s.displayName}: ${formatPct(s.latest.band.mean)} por cento`}
+                />
+              </span>
+              <span class="elec-readout-rule">
+                <UncertaintyRule
+                  mean={s.latest.band.mean}
+                  lo90={s.latest.band.lo90}
+                  hi90={s.latest.band.hi90}
+                  domain={ruleDomain}
+                  label={s.displayName}
+                  width={200}
+                />
+              </span>
+              <span class="elec-readout-meta">
+                em{' '}
+                <time datetime={isoDateOnly(isoOf(s.latest.t))}>
+                  <Num>{formatDayMonth(isoOf(s.latest.t))}</Num>
+                </time>
+              </span>
+            </>
+          ) : (
+            <span class="elec-readout-value elec-readout-none">sem medida na janela</span>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+
+  <p class="elec-note body-muted">
+    Marca vazada na linha de cobertura e vão na faixa significam <strong>sem medida</strong> naquela
+    data — não zero. Quando o instituto não pergunta, ou não publica, nós não inventamos o ponto.
+  </p>
+
+  {/* Equivalente textual: tabela HTML real, fechada por padrão (docs/05 §7). */}
+  <details class="chart-table">
+    <summary>Ver branco/nulo e não-sabe em tabela</summary>
+    <table>
+      <caption>
+        Branco e nulo e não-sabe estimados, central e faixa de <Num>90</Num>%, por data. Em
+        pontos percentuais do eleitorado.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Data</th>
+          {series.map((s) => (
+            <th class="num" scope="col">
+              {s.displayName}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          geo.dates.map((t) => (
+            <tr>
+              <td>
+                <time datetime={isoDateOnly(isoOf(t))}>
+                  <Num>{formatDayMonth(isoOf(t))}</Num>
+                </time>
+              </td>
+              {series.map((s) => {
+                const band = byDate.get(t)?.get(s.key) ?? null;
+                return (
+                  <td class="num">
+                    {band ? (
+                      <>
+                        <Num>{formatPct(band.mean)}</Num> (<Num>{formatPct(band.lo90)}</Num>–
+                        <Num>{formatPct(band.hi90)}</Num>)
+                      </>
+                    ) : (
+                      <span class="elec-cell-missing">sem medida</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<style>
+  /*
+   * Identidade visual do eleitorado: NEUTRA de propósito. Grafite (slot 8, o
+   * mesmo reservado a "Demais") para branco/nulo; tinta secundária para não-sabe.
+   * Nenhuma cor do espectro de candidatos entra aqui — não são candidatura.
+   */
+  .electorate-chart {
+    margin-block: calc(var(--rhythm) * 2);
+    --elec-blank: var(--c8);
+    --elec-undecided: var(--ink-2);
+  }
+  .elec-blankNull {
+    --elec-color: var(--elec-blank);
+  }
+  .elec-undecided {
+    --elec-color: var(--elec-undecided);
+  }
+
+  .chart-plot {
+    position: relative;
+  }
+
+  /* Banda dominante (docs/05 §1.1), linha central secundária — como no herói. */
+  .elec-band {
+    fill: var(--elec-color);
+    fill-opacity: 0.2;
+  }
+  .elec-band-hachura {
+    fill-opacity: 0.45;
+    pointer-events: none;
+  }
+  /*
+   * O conteúdo de um <pattern> herda cor do <defs>, não do elemento que o
+   * referencia — `currentColor` aqui não pegaria a cor da série. Cada hachura
+   * declara a sua tinta explicitamente.
+   */
+  .elec-hachura-stroke {
+    stroke-width: 1;
+    opacity: 0.5;
+  }
+  .elec-hachura-stroke.is-blank {
+    stroke: var(--c8);
+  }
+  .elec-hachura-stroke.is-undecided {
+    stroke: var(--ink-2);
+  }
+  .elec-series {
+    color: var(--elec-color);
+  }
+  .elec-center {
+    fill: none;
+    stroke: var(--elec-color);
+    stroke-width: 1.5;
+    opacity: 0.75;
+  }
+  /* Traço diferente por grandeza: distinguível sem depender de cor nem de hachura. */
+  .elec-undecided .elec-center {
+    stroke-dasharray: 6 4;
+  }
+
+  /* Ponto medido isolado entre dois buracos: banda vertical + marca central. */
+  .elec-single-band {
+    stroke: var(--elec-color);
+    stroke-width: 6;
+    stroke-linecap: round;
+    opacity: 0.28;
+  }
+  .elec-single-dot {
+    fill: var(--elec-color);
+    opacity: 0.85;
+  }
+
+  /* Vão: onde não houve medida. Pontilhado discreto, sem valor associado. */
+  .elec-gap-line {
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    stroke-dasharray: 2 5;
+    opacity: 0.6;
+  }
+
+  /* Linha de cobertura (topo): cheia = medido, vazada = sem medida. */
+  .elec-rail-axis {
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+  .elec-rail-mark {
+    fill: var(--elec-color);
+    opacity: 0.75;
+  }
+  .elec-rail-mark.is-missing {
+    fill: var(--bg);
+    stroke: var(--ink-3);
+    stroke-width: 1.5;
+    stroke-dasharray: 2 2;
+    opacity: 1;
+  }
+  .elec-rail-label {
+    fill: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  /* Readout ------------------------------------------------------------- */
+  .elec-readout {
+    list-style: none;
+    margin: calc(var(--rhythm) * 2) 0 0;
+    padding: 0;
+    display: grid;
+    gap: calc(var(--rhythm) * 1.5);
+  }
+  .elec-readout-item {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) auto minmax(160px, 220px) auto;
+    align-items: center;
+    gap: calc(var(--rhythm) * 2);
+  }
+  .elec-readout-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+  }
+  .elec-readout-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    background: var(--elec-color);
+    opacity: 0.55;
+    border: 1px solid var(--elec-color);
+    flex: 0 0 auto;
+  }
+  .elec-readout-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+    color: var(--ink);
+  }
+  .elec-readout-none {
+    color: var(--ink-3);
+    font-size: var(--fs-label);
+  }
+  .elec-readout-meta {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  /*
+   * A régua herda a cor NEUTRA da grandeza. O <UncertaintyRule> escreve
+   * `--rule-color` no atributo style (ele só conhece slots de candidato), então a
+   * sobreposição precisa de !important — é o único jeito de vencer inline style
+   * sem duplicar o componente da régua.
+   */
+  .elec-readout-item :global([data-uncertainty-rule]) {
+    --rule-color: var(--elec-color) !important;
+  }
+
+  .elec-note {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 68ch;
+    font-size: var(--fs-body-s);
+  }
+  .elec-cell-missing {
+    color: var(--ink-3);
+    font-family: var(--font-body);
+  }
+
+  @media (max-width: 640px) {
+    .elec-readout-item {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'name value'
+        'rule rule'
+        'meta meta';
+    }
+    .elec-readout-name {
+      grid-area: name;
+    }
+    .elec-readout-value {
+      grid-area: value;
+    }
+    .elec-readout-rule {
+      grid-area: rule;
+    }
+    .elec-readout-meta {
+      grid-area: meta;
+    }
+  }
+</style>

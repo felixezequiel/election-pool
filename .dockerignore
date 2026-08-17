@@ -1,0 +1,16 @@
+# A imagem da api faz `COPY . .` (infra/Dockerfile). Fora daqui, o contexto de
+# build levaria o histórico do git e os node_modules do host — lentidão e, pior,
+# binários compilados para o SO do host sobrescrevendo os do container.
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+**/dist-build
+**/.dist-build
+**/.astro
+coverage
+**/coverage
+.env
+.playwright-mcp
+*.tsbuildinfo

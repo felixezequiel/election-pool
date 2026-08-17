@@ -9,11 +9,15 @@
 import type { PublicData } from '@election-pool/contracts/public-data';
 import { fieldMidpointMs, isoDayMs, type LatentSeries, type PollPoint } from './latent-geometry.js';
 
-/** Metadados de candidato indexados por id (cor/slot/nome). */
+/** Metadados de candidato indexados por id (cor/slot/nome/foto). */
 export interface CandidateMeta {
   id: string;
   displayName: string;
   colorSlot: number;
+  /** Caminho LOCAL da foto oficial, ou null (⇒ monograma na UI). */
+  photoPath: string | null;
+  /** Link do registro de candidatura que originou a foto (proveniência, R6). */
+  photoSourceUrl: string | null;
 }
 
 /** Institutos indexados por id (nome/método), para rótulos de tooltip. */
@@ -22,7 +26,13 @@ export type InstituteIndex = Map<string, PublicData['institutes'][number]>;
 export function indexCandidates(candidates: PublicData['candidates']): Map<string, CandidateMeta> {
   const m = new Map<string, CandidateMeta>();
   for (const c of candidates) {
-    m.set(c.id, { id: c.id, displayName: c.displayName, colorSlot: c.colorSlot });
+    m.set(c.id, {
+      id: c.id,
+      displayName: c.displayName,
+      colorSlot: c.colorSlot,
+      photoPath: c.photoPath,
+      photoSourceUrl: c.photoSourceUrl,
+    });
   }
   return m;
 }
@@ -50,6 +60,7 @@ export function toLatentSeries(
           candidateId,
           displayName: meta.displayName,
           colorSlot: meta.colorSlot,
+          photoPath: meta.photoPath,
           samples: [],
         };
         byCandidate.set(candidateId, s);

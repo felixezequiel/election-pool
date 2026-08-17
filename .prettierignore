@@ -10,3 +10,12 @@ pnpm-lock.yaml
 # Markdown is owned by the docs/tasks authors; contracts must conform to the
 # docs, not reformat them. LOG.md/tasks are prose, not code style.
 **/*.md
+
+# Fixtures CAPTURADAS de fontes externas (HTML/XML cru do PesqEle e do Divulga).
+# São EVIDÊNCIA, não código nosso: o valor delas está em serem byte a byte o que a
+# fonte devolveu. Reformatar reindenta a marcação, mexe em espaço significativo e
+# faz a fixture deixar de representar o que o parser vai encontrar em produção —
+# ou seja, recria em outra forma exatamente o problema da Q-09 (fixture que não
+# corresponde ao site real).
+packages/adapters/pesqele/__fixtures__/**
+packages/adapters/tse-candidatos/__fixtures__/**

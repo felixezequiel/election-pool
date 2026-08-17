@@ -30,6 +30,7 @@ import { configurePgTypes } from './db/types.js';
 import { createDatabase } from './db/pool.js';
 import type { Database } from './db/pool.js';
 import { runMigrations } from './db/migrate.js';
+import { seed as seedReference } from './db/seed.js';
 import { JobRunsRepository } from './db/job-runs.repository.js';
 import { JobLock } from './jobs/job-lock.js';
 import { DiscoveryJob, makePoolTransaction } from './jobs/discovery.job.js';
@@ -39,11 +40,15 @@ import { RenderJob } from './jobs/render.job.js';
 import { buildRegistry, loadCandidateResolver } from './jobs/build-registry.js';
 import { makeCurrentLatentProvider } from './jobs/latent-provider.js';
 import { PesqEleClient } from '@election-pool/adapters/pesqele/client';
+import { TseCandidatosClient } from '@election-pool/adapters/tse-candidatos/client';
+import { CandidatePhotosJob } from './jobs/candidate-photos.job.js';
+import { CandidatePhotosRepository } from './db/candidate-photos.repository.js';
 import { requirePublishBaseDir, resolvePublishPaths } from './publish/paths.js';
 import { startHealthServer, DEFAULT_HEALTH_PORT } from './health/health-server.js';
 import type { RunningHealthServer } from './health/health-server.js';
 import { AlertSink, alertsFromHealth } from './health/alerts.js';
 import { buildHealthSnapshot } from './health/health.js';
+import { isEntrypoint } from './is-entrypoint.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -70,6 +75,17 @@ const requireDatabaseUrl = (): string => {
   return url;
 };
 
+/**
+ * Flag booleana de ambiente. Só a string exata `'true'` liga — qualquer outra
+ * coisa (inclusive ausência) devolve o default. Nada de coerção esperta: uma
+ * variável mal escrita não pode LIGAR silenciosamente um passo de boot.
+ */
+const envFlag = (name: string, fallback: boolean): boolean => {
+  const raw = process.env[name];
+  if (raw === undefined || raw.length === 0) return fallback;
+  return raw === 'true';
+};
+
 // --- Orquestrador (montável para teste) -------------------------------------
 
 export interface Orchestrator {
@@ -86,6 +102,7 @@ export interface Orchestrator {
     harvest: () => Promise<Record<string, unknown>>;
     model: () => Promise<Record<string, unknown>>;
     render: () => Promise<Record<string, unknown>>;
+    candidatePhotos: () => Promise<Record<string, unknown>>;
   };
   /** Varredura de staleness ⇒ dispara alertas (docs/02 §5). Devolve nº disparado. */
   checkAndAlert: () => Promise<number>;
@@ -190,12 +207,42 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
       // §6.6: um adapter suspeito há mais de 3 ciclos bloqueia a publicação. A
       // métrica real vem do contador compartilhado (LOG do render, T-13).
       suspectAdapterOverThreshold: failureCounter.failing().length > 0,
+      // Primeira publicação sem cobertura ⇒ publica o estado vazio explicado em
+      // vez de deixar o nginx em 404. Ver `allowPlaceholderPublish` no RenderJob:
+      // só vale quando NÃO existe dist/ e o único gate reprovado é o do modelo.
+      allowPlaceholderPublish: envFlag('PUBLISH_PLACEHOLDER_WHEN_EMPTY', false),
     });
     const r = await job.run();
     return {
       published: r.published,
+      placeholder: r.placeholder,
       abortReason: r.abortReason,
       distPath: r.distPath,
+      alerts: r.alerts.length,
+    };
+  };
+
+  /**
+   * Fotos oficiais de candidatura no TSE. Cadência DIÁRIA, não a cada 2h: o
+   * registro de candidatura muda em escala de dias, e bater no Divulga a cada
+   * ciclo seria tráfego sem informação nova. O job já é idempotente e tem janela
+   * de recheck própria — este cron só dá a ele um lugar em `job_runs` e no
+   * /health, para que uma falha continuada apareça em vez de sumir no stdout.
+   */
+  const candidatePhotos = async (): Promise<Record<string, unknown>> => {
+    const job = new CandidatePhotosJob({
+      repo: new CandidatePhotosRepository(db),
+      client: new TseCandidatosClient(),
+      photosDir: join(webDir, 'public', 'candidatos'),
+      now,
+    });
+    const r = await job.run();
+    return {
+      casados: r.casados,
+      novas: r.novas,
+      atualizadas: r.atualizadas,
+      inalteradas: r.inalteradas,
+      downloads: r.downloads,
       alerts: r.alerts.length,
     };
   };
@@ -244,7 +291,7 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
     jobRuns,
     distPath: paths.dist,
     runJob,
-    jobs: { discovery, harvest, model, render },
+    jobs: { discovery, harvest, model, render, candidatePhotos },
     checkAndAlert,
   };
 };
@@ -264,6 +311,16 @@ const main = async (): Promise<void> => {
   const pool = new Pool({ connectionString: databaseUrl });
   const db = createDatabase(pool);
 
+  // 3. Seed das tabelas de referência (docs/03 §2.1). Idempotente (ON CONFLICT DO
+  //    NOTHING) e BLOQUEANTE: sem corridas/institutos/candidatos/aliases o
+  //    discovery não resolve instituto e o harvest não resolve candidato — o
+  //    pipeline rodaria em vazio, silenciosamente. Em produção o seed é passo de
+  //    deploy (`pnpm db:seed`) e esta flag fica `false`.
+  if (envFlag('SEED_REFERENCE_ON_BOOT', false)) {
+    await seedReference(db);
+    logJson({ level: 'info', event: 'reference_seeded' });
+  }
+
   const orch = createOrchestrator({ db, pool, publishBaseDir });
 
   // 4. Agenda os jobs nos crons de docs/02 §3 (cada tick sob lock + job_runs).
@@ -282,6 +339,9 @@ const main = async (): Promise<void> => {
   schedule('0 */2 * * *', JOB_NAME.discovery, orch.jobs.discovery); // docs/02 §3.1
   schedule('5 */2 * * *', JOB_NAME.harvest, orch.jobs.harvest); // docs/02 §3.2
   schedule('15 */2 * * *', JOB_NAME.model, orch.jobs.model); // docs/02 §3.3 (dispara render)
+  // Fotos de candidatura: 1x/dia, de madrugada. Registro de candidatura muda em
+  // escala de dias; bater no Divulga a cada 2h seria tráfego sem informação nova.
+  schedule('40 3 * * *', JOB_NAME.candidatePhotos, orch.jobs.candidatePhotos);
 
   // 5. /health interno + loop de alertas de staleness (docs/02 §5).
   let health: RunningHealthServer | null = null;
@@ -311,7 +371,7 @@ const main = async (): Promise<void> => {
   logJson({
     level: 'info',
     event: 'orchestrator_ready',
-    jobs: ['discovery', 'harvest', 'model', 'render'],
+    jobs: ['discovery', 'harvest', 'model', 'render', 'candidate_photos'],
   });
 
   // Encerramento gracioso: para os crons, o timer, o health e o pool.
@@ -327,17 +387,40 @@ const main = async (): Promise<void> => {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+
+  // 6. Passagem imediata do pipeline (opcional). O cron de docs/02 §3 só dispara
+  //    no minuto 0/5/15 das horas pares; num ambiente recém-subido isso significa
+  //    até 2h de espera antes de qualquer sinal de vida. Com a flag ligada rodamos
+  //    UMA passagem agora, na ordem do §3, cada job sob o MESMO lock e registro em
+  //    `job_runs` do caminho agendado — não é um atalho, é o mesmo caminho.
+  //    Depois do handler de shutdown de propósito: um Ctrl+C durante a passagem
+  //    (o harvest é lento — 1 req/10s por host) precisa ser atendido.
+  if (envFlag('RUN_JOBS_ON_BOOT', false)) {
+    logJson({ level: 'info', event: 'boot_pipeline_start' });
+    // Fotos primeiro: o data.json do render lê `candidates.photo_path`, então
+    // colher antes evita publicar um ciclo inteiro sem foto por questão de ordem.
+    await orch.runJob(JOB_NAME.candidatePhotos, orch.jobs.candidatePhotos);
+    await orch.runJob(JOB_NAME.discovery, orch.jobs.discovery);
+    await orch.runJob(JOB_NAME.harvest, orch.jobs.harvest);
+    // O ModelJob dispara o render sozinho quando os gates passam (docs/02 §3.4).
+    await orch.runJob(JOB_NAME.model, orch.jobs.model);
+
+    // O gate M-7 (backtest 2022) REPROVA hoje (docs/OPEN-QUESTIONS Q-07), então o
+    // ModelJob acima não dispara o render. Esta flag roda o RenderJob mesmo assim
+    // — o que NÃO relaxa gate algum: o RenderJob aplica integralmente os gates de
+    // publicação de docs/07 §6 (cobertura do modelo, build limpo, frescor, prosa
+    // de terceiros) e aborta sozinho se algum reprovar. Serve para inspecionar a
+    // página localmente; em produção fica `false`.
+    if (envFlag('RENDER_ON_BOOT', false)) {
+      await orch.runJob(JOB_NAME.render, orch.jobs.render);
+    }
+    logJson({ level: 'info', event: 'boot_pipeline_done' });
+  }
 };
 
 // Só executa o bootstrap quando rodado como entrypoint (não ao ser importado por
-// teste). `import.meta.url` === argv[1] resolvido a file URL.
-const isEntrypoint = (): boolean => {
-  const argv1 = process.argv[1];
-  if (argv1 === undefined) return false;
-  return import.meta.url === `file://${argv1}` || import.meta.url.endsWith(argv1);
-};
-
-if (isEntrypoint()) {
+// teste). Ver `is-entrypoint.ts`: a comparação ingênua de string falha no Windows.
+if (isEntrypoint(import.meta.url)) {
   main().catch((err: unknown) => {
     // Falha de migration/boot cai aqui: log e sai != 0. Os jobs NUNCA começaram.
     logJson({

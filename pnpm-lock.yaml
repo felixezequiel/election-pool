@@ -142,6 +142,9 @@ importers:
       unpdf:
         specifier: 1.8.1
         version: 1.8.1
+      zod:
+        specifier: 3.24.1
+        version: 3.24.1
     devDependencies:
       '@types/node':
         specifier: 22.10.5

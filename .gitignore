@@ -3,3 +3,6 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+# Configuração local do compose (copie de .env.example). Não versionada mesmo sem
+# segredo: porta e flags de boot são escolha de cada máquina.
+.env

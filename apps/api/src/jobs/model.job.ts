@@ -34,8 +34,16 @@ import {
 } from '@election-pool/model/diagnostics';
 import type { RegistrationRecord, HouseEffectInput } from '@election-pool/model/diagnostics';
 import { runBacktest, loadFixture } from '@election-pool/model/backtest';
-import type { ModelOutput, Observation } from '@election-pool/contracts/model-io';
-import { observationsSchema } from '@election-pool/contracts/model-io';
+import type {
+  ModelOutput,
+  Observation,
+  ElectorateObservation,
+} from '@election-pool/contracts/model-io';
+import {
+  observationsSchema,
+  electorateObservationsSchema,
+  TRANSITION_STATE_KIND,
+} from '@election-pool/contracts/model-io';
 import { DIAGNOSTIC_KIND, SCENARIO_KIND } from '@election-pool/contracts/enums';
 import {
   MODEL_VERSION,
@@ -51,7 +59,7 @@ import {
 } from '@election-pool/contracts/constants';
 import type { Database } from '../db/pool.js';
 import { RenderReadModel } from '../publish/read-model.js';
-import type { ScenarioResultRow, RegistrationRow } from '../publish/read-model.js';
+import type { ScenarioResultRow, ElectorateRow, RegistrationRow } from '../publish/read-model.js';
 import { CanonicalSelector } from '../ingestion/canonical-selector.js';
 import type { CanonicalSelectionResult } from '../ingestion/canonical-selector.js';
 
@@ -114,18 +122,20 @@ export class ModelJob {
     const canonical = await new CanonicalSelector(this.db).selectForRace(this.raceId);
 
     const read = new RenderReadModel(this.db);
-    const [scenarioResults, registrations] = await Promise.all([
+    const [scenarioResults, electorate, registrations] = await Promise.all([
       read.listCanonicalScenarioResults(this.raceId),
+      read.listCanonicalElectorate(this.raceId),
       read.listRegistrations(this.raceId),
     ]);
 
     const observations = buildObservations(scenarioResults);
     const referenceDate = referenceDateFor(scenarioResults, this.now());
+    const electorateObservations = buildElectorateObservations(electorate);
     const inputHash = computeInputHash(observations);
 
     // 2. Roda o modelo. Se a restrição de soma estourar (R4), runModel LANÇA — o
     //    orquestrador trata como falha de run (job_runs=error), não publica.
-    const modelInput: ModelInput = { observations, referenceDate };
+    const modelInput: ModelInput = { observations, referenceDate, electorateObservations };
     const output = runModel(modelInput);
 
     // 3. Gates M-1..M-7 (docs/07 §3).
@@ -270,8 +280,78 @@ export class ModelJob {
     );
 
     await this.persistEstimates(args.runId, args.output);
+    await this.persistElectorateEstimates(args.runId, args.output);
+    await this.persistTransitions(args.runId, args.output);
     await this.persistHouseEffects(args.runId, args.output);
     await this.persistDiagnostics(args.runId, args.diagnostics);
+  }
+
+  /**
+   * Séries de branco/nulo e não-sabe (Q-10). Tabela própria, não `model_estimates`:
+   * aquela tem FK para `candidates` e branco/nulo não é candidato — inventar uma
+   * linha falsa em `candidates` para acomodá-los corromperia a referência.
+   *
+   * Ponto com banda `null` é GRAVADO assim mesmo (colunas anuláveis): "não medimos
+   * aqui" é um fato do histórico e precisa sobreviver no banco. Pular a linha
+   * apagaria a diferença entre "não medimos" e "nunca existiu esse instante".
+   */
+  private async persistElectorateEstimates(runId: string, output: ModelOutput): Promise<void> {
+    for (const point of output.latent.electorate) {
+      const byKind: ReadonlyArray<
+        [string, { meanPct: number; lo90Pct: number; hi90Pct: number } | null]
+      > = [
+        [TRANSITION_STATE_KIND.blankNull, point.blankNull],
+        [TRANSITION_STATE_KIND.undecided, point.undecided],
+      ];
+      for (const [kind, band] of byKind) {
+        await this.db.query(
+          `INSERT INTO model_electorate_estimates
+             (run_id, scenario_kind, kind, date, mean_pct, lo90_pct, hi90_pct)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (run_id, scenario_kind, kind, date) DO NOTHING`,
+          [
+            runId,
+            SCENARIO_KIND.t1Estimulado,
+            kind,
+            point.date,
+            band?.meanPct ?? null,
+            band?.lo90Pct ?? null,
+            band?.hi90Pct ?? null,
+          ],
+        );
+      }
+    }
+  }
+
+  /**
+   * Fluxos estimados (Q-10). Gravamos TODOS, inclusive os `not_identifiable` —
+   * filtrar aqui seria decidir, na camada de persistência, o que o leitor pode
+   * saber. O histórico precisa poder responder "o que o modelo achava, e com
+   * quanta dúvida", e a dúvida é metade do dado.
+   */
+  private async persistTransitions(runId: string, output: ModelOutput): Promise<void> {
+    if (output.transitions === null) return;
+    for (const step of output.transitions.steps) {
+      for (const flow of step.flows) {
+        await this.db.query(
+          `INSERT INTO model_transitions
+             (run_id, from_date, to_date, from_state, to_state, pp, lo90_pp, hi90_pp, not_identifiable)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (run_id, from_date, to_date, from_state, to_state) DO NOTHING`,
+          [
+            runId,
+            step.fromDate,
+            step.toDate,
+            flow.from,
+            flow.to,
+            flow.pp,
+            flow.lo90Pp,
+            flow.hi90Pp,
+            flow.notIdentifiable,
+          ],
+        );
+      }
+    }
   }
 
   /** Grava a série latente μ_t (model_estimates). t2_pair '{}' no 1º turno (docs/03 §2.5). */
@@ -619,6 +699,26 @@ const buildObservations = (rows: readonly ScenarioResultRow[]): Observation[] =>
     valuePct: r.valuePct,
   }));
   return observationsSchema.parse(raw);
+};
+
+/**
+ * Branco/nulo e não-sabe em forma de observação do modelo (Q-10). Cenário sem
+ * NENHUMA das duas grandezas é descartado: não carrega medida. Cenário com uma
+ * só é mantido, e a outra segue `null` — ausência, nunca zero (R4).
+ */
+const buildElectorateObservations = (rows: readonly ElectorateRow[]): ElectorateObservation[] => {
+  const raw = rows
+    .filter((r) => r.blankNullPct !== null || r.undecidedPct !== null)
+    .map((r) => ({
+      tseId: r.tseId,
+      instituteId: r.instituteId,
+      scenarioKind: r.scenarioKind,
+      fieldMedianDate: medianFieldDate(r.fieldStart, r.fieldEnd),
+      sampleSize: r.sampleSize,
+      blankNullPct: r.blankNullPct,
+      undecidedPct: r.undecidedPct,
+    }));
+  return electorateObservationsSchema.parse(raw);
 };
 
 const medianFieldDate = (fieldStart: string, fieldEnd: string): string => {
