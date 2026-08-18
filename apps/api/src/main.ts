@@ -404,17 +404,21 @@ const main = async (): Promise<void> => {
     await orch.runJob(JOB_NAME.harvest, orch.jobs.harvest);
     // O ModelJob dispara o render sozinho quando os gates passam (docs/02 §3.4).
     await orch.runJob(JOB_NAME.model, orch.jobs.model);
-
-    // O gate M-7 (backtest 2022) REPROVA hoje (docs/OPEN-QUESTIONS Q-07), então o
-    // ModelJob acima não dispara o render. Esta flag roda o RenderJob mesmo assim
-    // — o que NÃO relaxa gate algum: o RenderJob aplica integralmente os gates de
-    // publicação de docs/07 §6 (cobertura do modelo, build limpo, frescor, prosa
-    // de terceiros) e aborta sozinho se algum reprovar. Serve para inspecionar a
-    // página localmente; em produção fica `false`.
-    if (envFlag('RENDER_ON_BOOT', false)) {
-      await orch.runJob(JOB_NAME.render, orch.jobs.render);
-    }
     logJson({ level: 'info', event: 'boot_pipeline_done' });
+  }
+
+  // RENDER_ON_BOOT roda o RenderJob INDEPENDENTE de RUN_JOBS_ON_BOOT. Motivo (deploy):
+  // um job de ingestão lento ou TRAVADO (ex.: discovery esperando o TSE sem timeout)
+  // não pode impedir que a página — mesmo o "estado vazio explicado" — chegue ao ar.
+  // Antes o render vivia DENTRO do bloco de jobs, então um discovery pendurado o
+  // bloqueava e o nginx só servia o fallback. O gate M-7 (backtest 2022) REPROVA hoje
+  // (docs/OPEN-QUESTIONS Q-07), então o ModelJob não dispara o render sozinho; esta
+  // flag o roda mesmo assim, SEM relaxar gate algum: o RenderJob aplica integralmente
+  // os gates de docs/07 §6 (cobertura do modelo, build limpo, frescor, prosa de
+  // terceiros) e aborta sozinho se algum reprovar. Em produção, com dado real passando
+  // pelos gates, fica `false`.
+  if (envFlag('RENDER_ON_BOOT', false)) {
+    await orch.runJob(JOB_NAME.render, orch.jobs.render);
   }
 };
 
