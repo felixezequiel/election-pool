@@ -97,14 +97,44 @@ services:
     networks: [coolify]
     depends_on:
       - api
-    environment:
-      # Variável mágica do Coolify: gera domínio + labels do Traefik + TLS para a
-      # porta 80 deste serviço. O valor (FQDN) vem das envs da aplicação no Coolify.
-      - SERVICE_FQDN_NGINX_80
     expose:
       - '80'
     volumes:
       - publish_data:/var/lib/election-pool:ro
+    # Labels do Traefik ESCRITAS À MÃO. A variável mágica SERVICE_FQDN do Coolify não
+    # anexou router ao serviço neste app compose (o nginx ficava sem nenhum label
+    # traefik.* e o Traefik devolvia 404), então declaramos os routers explicitamente
+    # — mesmo padrão do proxy do Coolify. Dois domínios com routers SEPARADOS: o sslip
+    # resolve sozinho e sobe já; eleicoes.fgti.cloud só emite TLS após o registro A no
+    # DNS, mas por ser router separado não bloqueia o do sslip.
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.middlewares.gzip.compress=true
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      # ── sslip.io (imediato, sem depender de DNS) ──
+      - 'traefik.http.routers.electionpool-sslip-http.entryPoints=http'
+      - 'traefik.http.routers.electionpool-sslip-http.rule=Host(`election-pool.31.97.243.112.sslip.io`)'
+      - traefik.http.routers.electionpool-sslip-http.middlewares=redirect-to-https
+      - traefik.http.routers.electionpool-sslip-http.service=electionpool
+      - 'traefik.http.routers.electionpool-sslip-https.entryPoints=https'
+      - 'traefik.http.routers.electionpool-sslip-https.rule=Host(`election-pool.31.97.243.112.sslip.io`)'
+      - traefik.http.routers.electionpool-sslip-https.tls=true
+      - traefik.http.routers.electionpool-sslip-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.electionpool-sslip-https.middlewares=gzip
+      - traefik.http.routers.electionpool-sslip-https.service=electionpool
+      # ── eleicoes.fgti.cloud (exige registro A eleicoes.fgti.cloud -> 31.97.243.112) ──
+      - 'traefik.http.routers.electionpool-eleicoes-http.entryPoints=http'
+      - 'traefik.http.routers.electionpool-eleicoes-http.rule=Host(`eleicoes.fgti.cloud`)'
+      - traefik.http.routers.electionpool-eleicoes-http.middlewares=redirect-to-https
+      - traefik.http.routers.electionpool-eleicoes-http.service=electionpool
+      - 'traefik.http.routers.electionpool-eleicoes-https.entryPoints=https'
+      - 'traefik.http.routers.electionpool-eleicoes-https.rule=Host(`eleicoes.fgti.cloud`)'
+      - traefik.http.routers.electionpool-eleicoes-https.tls=true
+      - traefik.http.routers.electionpool-eleicoes-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.electionpool-eleicoes-https.middlewares=gzip
+      - traefik.http.routers.electionpool-eleicoes-https.service=electionpool
+      - traefik.http.services.electionpool.loadbalancer.server.port=80
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:80/']
       interval: 15s
