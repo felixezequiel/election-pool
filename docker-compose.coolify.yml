@@ -24,6 +24,7 @@ services:
   db-init:
     image: postgres:17-alpine
     restart: 'no'
+    networks: [coolify]
     environment:
       PGHOST: ${PG_HOST}
       PGPORT: ${PG_PORT:-5432}
@@ -49,6 +50,7 @@ services:
       context: .
       dockerfile: infra/Dockerfile
     restart: unless-stopped
+    networks: [coolify]
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -87,6 +89,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    networks: [coolify]
     depends_on:
       - api
     environment:
@@ -107,6 +110,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+networks:
+  # Rede gerenciada pelo Coolify onde o Traefik e o Postgres compartilhado vivem.
+  # `external: true` faz os serviços entrarem NELA (em vez de uma rede isolada do
+  # app), o que dá: ingress do Traefik para o nginx e acesso ao Postgres pelo nome
+  # do container (`PG_HOST`). É o mesmo mecanismo que o smart-shelf usa.
+  coolify:
+    external: true
 
 volumes:
   # Árvore de publicação (dist/, dist-staging/, snapshots). Volume nomeado para o
