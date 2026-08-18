@@ -7,7 +7,29 @@
  * sem valor para um candidato simplesmente não gera ponto.
  */
 import type { PublicData } from '@election-pool/contracts/public-data';
+import { COLOR_SLOT_MAX } from '@election-pool/contracts/constants';
 import { fieldMidpointMs, isoDayMs, type LatentSeries, type PollPoint } from './latent-geometry.js';
+
+/** Média da amostra MAIS RECENTE (a série já vem ordenada por `t` asc); série sem
+ * amostra vai para o fim. Não inventa número: ausência é −∞ de posição, não zero. */
+function latestMean(s: LatentSeries): number {
+  const last = s.samples[s.samples.length - 1];
+  return last ? last.mean : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * Ordem de exibição ÚNICA de candidatos em toda a UI (docs/06 §3): intenção de
+ * voto MAIS RECENTE, decrescente. O resíduo "Demais" (slot grafite = COLOR_SLOT_MAX,
+ * palette.ts) fica SEMPRE por último — não é candidatura, não disputa posição. A
+ * mesma função ordena legenda, readout, mini-trajetórias e z-order, para as quatro
+ * leituras nunca discordarem entre si.
+ */
+export function byLatestMeanDesc(a: LatentSeries, b: LatentSeries): number {
+  const aResidual = a.colorSlot === COLOR_SLOT_MAX;
+  const bResidual = b.colorSlot === COLOR_SLOT_MAX;
+  if (aResidual !== bResidual) return aResidual ? 1 : -1;
+  return latestMean(b) - latestMean(a);
+}
 
 /** Metadados de candidato indexados por id (cor/slot/nome/foto). */
 export interface CandidateMeta {
@@ -70,6 +92,7 @@ export function toLatentSeries(
   }
   const series = [...byCandidate.values()];
   for (const s of series) s.samples.sort((a, b) => a.t - b.t);
+  series.sort(byLatestMeanDesc);
   return series;
 }
 

@@ -8,7 +8,7 @@
  * Duas provas, porque uma sozinha não basta:
  *
  *  1. CONTRA O PASSADO. `__fixtures__/pre-v2-latent.json` foi gerado com o código
- *     ANTERIOR ao MODEL_VERSION 2.0.0, rodando esta mesma entrada. Se `μ_t` ou
+ *     ANTERIOR ao MODEL_VERSION 0.0.4, rodando esta mesma entrada. Se `μ_t` ou
  *     `h_i` tivessem mudado um bit por causa da v2, a comparação abaixo quebra.
  *     É a única forma de testar "saiu idêntico ao que saía antes": guardar o que
  *     saía antes.
@@ -169,7 +169,7 @@ function electorateObs(day: number, instituteId: string): ElectorateObservation 
 }
 
 describe('isolamento do modelo de transferência (Q-10 condição 7)', () => {
-  it('μ_t e house effects saem IDÊNTICOS ao baseline pré-2.0.0 congelado', () => {
+  it('μ_t e house effects saem IDÊNTICOS ao baseline pré-0.0.4 congelado', () => {
     const frozen = loadFrozen();
     const input: ModelInput = {
       observations: frozenObservations(),

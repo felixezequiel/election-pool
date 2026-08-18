@@ -1,6 +1,6 @@
 /**
  * Estimador de TRANSFERÊNCIA DE VOTOS entre estados do eleitorado
- * (MODEL_VERSION 2.0.0, `docs/OPEN-QUESTIONS.md` Q-10). T-18.
+ * (MODEL_VERSION 0.0.4, `docs/OPEN-QUESTIONS.md` Q-10). T-18.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * LEIA A Q-10 ANTES DE MEXER AQUI. O que segue não é uma medida, é uma

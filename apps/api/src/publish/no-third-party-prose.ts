@@ -12,6 +12,14 @@ import type { PublicData } from '@election-pool/contracts/public-data';
  *   - `displayName`: nome próprio de candidato/instituto/corrida (fato, curto).
  *   - `sourceUrl`: LINK (referência à fonte é sempre link, nunca conteúdo).
  *
+ * Além do nome, há uma allowlist por CAMINHO exato (`ALLOWLISTED_PATHS`) para o
+ * caso em que o campo NOSSO tem um nome genérico que também aparece em dado de
+ * terceiro. É o caso de `transitions.prior.note`: prosa NOSSA obrigatória (Q-10
+ * condição 2 — "quem lê precisa ver de quanto foi a ajuda do prior", gerada por
+ * `packages/model/transitions.ts`), mas o nome `note` também é usado em campos que
+ * NÃO são nossos (ex.: `polls[].note`). Allowlistar o nome `note` liberaria os dois;
+ * allowlistar o CAMINHO liberta só o nosso. R3 mira texto de TERCEIROS — este é nosso.
+ *
  * Retorna a lista de violações (vazia = aprovado). Pura: sem I/O.
  */
 
@@ -23,6 +31,13 @@ const ALLOWLISTED_FIELDS: ReadonlySet<string> = new Set([
   'displayName',
   'sourceUrl',
 ]);
+
+/**
+ * Caminhos exatos (dot-path, sem índice de array) cujo texto é comprovadamente
+ * NOSSO, ainda que o nome do campo se repita em dado de terceiro. Só o caminho
+ * inteiro casa — `transitions.prior.note` passa; `polls[0].note` não.
+ */
+const ALLOWLISTED_PATHS: ReadonlySet<string> = new Set(['transitions.prior.note']);
 
 export interface ProseViolation {
   path: string;
@@ -44,6 +59,7 @@ const walk = (
 ): void => {
   if (typeof value === 'string') {
     if (keyName !== null && ALLOWLISTED_FIELDS.has(keyName)) return;
+    if (ALLOWLISTED_PATHS.has(path)) return;
     if (value.length > MAX_FIELD_CHARS) {
       out.push({ path, length: value.length, sample: value.slice(0, 60) });
     }
@@ -63,4 +79,4 @@ const walk = (
   }
 };
 
-export const __test = { MAX_FIELD_CHARS, ALLOWLISTED_FIELDS };
+export const __test = { MAX_FIELD_CHARS, ALLOWLISTED_FIELDS, ALLOWLISTED_PATHS };

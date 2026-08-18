@@ -1,5 +1,5 @@
 /**
- * Geometria do painel de TRANSFERÊNCIA de votos (MODEL_VERSION 2.0.0,
+ * Geometria do painel de TRANSFERÊNCIA de votos (MODEL_VERSION 0.0.4,
  * docs/OPEN-QUESTIONS Q-10). Puro, sem DOM. D3 só para escala; o SVG é nosso
  * (CLAUDE.md — nenhuma biblioteca de gráfico, `d3-sankey` inclusive).
  *
@@ -37,6 +37,8 @@ export interface TransitionStateMeta {
   displayName: string;
   /** Slot de cor da entidade quando é candidatura; null para branco/nulo e não-sabe. */
   colorSlot: number | null;
+  /** Foto oficial (só candidatura), para o cabeçalho da matriz; null ⇒ monograma. */
+  photoPath?: string | null;
 }
 
 export interface TransitionFlowInput {

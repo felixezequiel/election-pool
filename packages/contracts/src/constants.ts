@@ -9,11 +9,14 @@
 
 // docs/01 (cabeçalho): MODEL_VERSION. Muda com R1 do CLAUDE.md — o incremento
 // exige justificativa ESCRITA ANTES de ver a nova saída.
-// 2.0.0 (docs/OPEN-QUESTIONS.md Q-10): branco/nulo e não-sabe viram séries
-// rastreadas e o modelo ganha estimativa de transferência entre estados. A
+// Pré-produção: o projeto NUNCA foi ao ar, então a versão vive em 0.x (semver:
+// 0.x = sem promessa de estabilidade pública). O "2.0.0" anterior era um número
+// aspiracional, não uma release. Esta renumeração NÃO altera a saída do modelo,
+// só o rótulo. 0.0.4 (docs/OPEN-QUESTIONS.md Q-10): branco/nulo e não-sabe viram
+// séries rastreadas e o modelo ganha estimativa de transferência entre estados. A
 // justificativa e as sete condições que a implementação deve respeitar estão na
 // Q-10, escrita antes desta linha existir.
-export const MODEL_VERSION = '2.0.0';
+export const MODEL_VERSION = '0.0.4';
 
 // === Série latente / processo (docs/01 §2) ==================================
 
@@ -159,7 +162,7 @@ export const COLOR_SLOT_MAX = 8;
 export const TSE_ID_SEQUENCE_DIGITS = 5;
 
 // docs/03 §5: schemaVersion literal do contrato público.
-// Sobe para '2' junto do MODEL_VERSION 2.0.0 (Q-10): o data.json ganhou
+// Sobe para '2' junto do MODEL_VERSION 0.0.4 (Q-10): o data.json ganhou
 // `latent.electorate`, `transitions`, `polls[].blankNullPct`/`undecidedPct` e
 // `candidates[].photoPath`/`photoSourceUrl`. São adições, mas o schemaVersion
 // existe justamente para um consumidor externo saber que a forma mudou.
@@ -169,7 +172,7 @@ export const PUBLIC_DATA_SCHEMA_VERSION = '2';
 export const ROUND_FIRST = 1;
 export const ROUND_SECOND = 2;
 
-// === Modelo de transferência de votos (MODEL_VERSION 2.0.0, Q-10) ============
+// === Modelo de transferência de votos (MODEL_VERSION 0.0.4, Q-10) ============
 
 // Peso do prior de PERMANÊNCIA na estimativa de transferência. Fluxo não é
 // identificável a partir de agregado (Q-10): com K estados há K² incógnitas por

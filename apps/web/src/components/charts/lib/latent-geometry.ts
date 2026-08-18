@@ -30,7 +30,7 @@ export interface LatentSeries {
   displayName: string;
   colorSlot: number;
   /**
-   * Foto oficial do candidato servida por nós (MODEL_VERSION 2.0.0), ou null
+   * Foto oficial do candidato servida por nós (MODEL_VERSION 0.0.4), ou null
    * quando não há registro casado — nesse caso a UI usa monograma. Fica junto de
    * `displayName` e `colorSlot` porque é a mesma coisa que eles: identidade da
    * entidade, não geometria. Nada aqui usa o campo para desenhar.
@@ -85,6 +85,51 @@ export interface LatentGeometry {
   /** Domínio de datas usado (ms) — o cliente reconstrói a escala idêntica. */
   xDomain: [number, number];
   yDomain: [number, number];
+}
+
+/** Mini-trajetória (sparkline) de um candidato: banda + linha num quadro pequeno. */
+export interface Sparkline {
+  candidateId: string;
+  colorSlot: number;
+  bandPath: string;
+  linePath: string;
+}
+
+/**
+ * Mini-trajetórias por candidato, TODAS na MESMA escala (`yDomain`/`xDomain` do
+ * gráfico principal), para que "quem oscila e quem não oscila" se compare batendo o
+ * olho. Puro, sem DOM. O quadro é pequeno (uns 160×40) — a banda continua sendo o
+ * dado; a linha central é secundária, como no gráfico grande.
+ */
+export function buildSparklines(
+  series: LatentSeries[],
+  width: number,
+  height: number,
+  xDomain: [number, number],
+  yDomain: [number, number],
+  pad = 3,
+): Sparkline[] {
+  const x = scaleTime()
+    .domain(xDomain)
+    .range([pad, Math.max(pad, width - pad)]);
+  const y = scaleLinear()
+    .domain(yDomain)
+    .range([height - pad, pad]);
+  const bandArea = area<LatentSample>()
+    .x((d) => x(d.t))
+    .y0((d) => y(d.lo90))
+    .y1((d) => y(d.hi90))
+    .curve(curveMonotoneX);
+  const centerLine = line<LatentSample>()
+    .x((d) => x(d.t))
+    .y((d) => y(d.mean))
+    .curve(curveMonotoneX);
+  return series.map((s) => ({
+    candidateId: s.candidateId,
+    colorSlot: s.colorSlot,
+    bandPath: bandArea(s.samples) ?? '',
+    linePath: centerLine(s.samples) ?? '',
+  }));
 }
 
 /** Datas médias de campo de cada pesquisa, em ms. */

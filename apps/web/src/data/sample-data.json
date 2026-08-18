@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-14T15:00:00-03:00",
   "nextUpdateAt": "2026-08-14T17:00:00-03:00",
   "updateIntervalMinutes": 120,
-  "modelVersion": "2.0.0",
+  "modelVersion": "0.0.4",
   "gitSha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
   "race": {
     "id": "presidencia-2026",
@@ -1715,6 +1715,6 @@
     "Não distingue mudança real de opinião de mudança de metodologia do instituto",
     "Não detecta fraude; os indicadores da §6 têm explicações inocentes e são publicados como diagnóstico, não acusação",
     "Não pondera institutos por acurácia histórica na v1",
-    "Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado (MODEL_VERSION 2.0.0, Q-10)"
+    "Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado (MODEL_VERSION 0.0.4, Q-10)"
   ]
 }

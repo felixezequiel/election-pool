@@ -52,7 +52,7 @@ export interface AssembleInput {
   raceId: string;
   race: RaceRow;
   scenarioResults: readonly ScenarioResultRow[];
-  /** Branco/nulo e não-sabe por cenário canônico (MODEL_VERSION 2.0.0, Q-10). */
+  /** Branco/nulo e não-sabe por cenário canônico (MODEL_VERSION 0.0.4, Q-10). */
   electorate: readonly ElectorateRow[];
   registrations: readonly RegistrationRow[];
   polls: readonly PollRow[];

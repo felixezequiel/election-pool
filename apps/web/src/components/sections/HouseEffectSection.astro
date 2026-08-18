@@ -12,9 +12,11 @@ import type { ChartInputs } from '../../data/chart-inputs.js';
 
 interface Props {
   houseRows: ChartInputs['houseRows'];
+  /** Ordem de exibição dos candidatos (ids em voto decrescente), da série latente. */
+  candidateOrder: string[];
 }
 
-const { houseRows } = Astro.props;
+const { houseRows, candidateOrder } = Astro.props;
 const hasRows = houseRows.length > 0;
 ---
 
@@ -52,7 +54,12 @@ const hasRows = houseRows.length > 0;
   {
     hasRows ? (
       <div class="container house-plot">
-        <HouseEffectPlot id="house" title="House effect estimado por instituto e candidato" rows={houseRows} />
+        <HouseEffectPlot
+          id="house"
+          title="House effect estimado por instituto e candidato"
+          rows={houseRows}
+          candidateOrder={candidateOrder}
+        />
       </div>
     ) : (
       <div class="container">

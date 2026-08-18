@@ -139,6 +139,9 @@ services:
     volumes:
       - publish_data:/var/lib/election-pool:ro
       - ./infra/nginx/election-pool.conf:/etc/nginx/conf.d/default.conf:ro
+      # Página de fallback de marca (offline.html) — montada FORA de `dist` para
+      # existir mesmo antes da primeira publicação. Ver `error_page` no .conf.
+      - ./infra/nginx/fallback:/usr/share/nginx/fallback:ro
     ports:
       - '${SITE_PORT:-8080}:80'
     networks: [dev-shared]

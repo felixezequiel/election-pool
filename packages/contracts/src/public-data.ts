@@ -76,7 +76,7 @@ export const publicDataSchema = z.object({
       }),
     ),
     /**
-     * Branco/nulo e não-sabe como SÉRIES RASTREADAS (MODEL_VERSION 2.0.0, Q-10),
+     * Branco/nulo e não-sabe como SÉRIES RASTREADAS (MODEL_VERSION 0.0.4, Q-10),
      * não como descarte. São estados do eleitorado com a mesma dignidade de um
      * candidato: é deles que sai (e para eles que vai) a maior parte do movimento.
      * Ponto sem a grandeza medida ⇒ `null`, nunca zero (R4: ausência não é zero).
@@ -172,7 +172,7 @@ export const publicDataSchema = z.object({
   ),
 
   /**
-   * Transferência de votos entre estados ao longo do tempo (MODEL_VERSION 2.0.0).
+   * Transferência de votos entre estados ao longo do tempo (MODEL_VERSION 0.0.4).
    *
    * LEIA A Q-10 ANTES DE CONSUMIR ISTO. Fluxo NÃO é identificável a partir de
    * pesquisa agregada: há K² incógnitas por passo para K equações marginais. O

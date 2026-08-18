@@ -60,6 +60,32 @@ describe('findThirdPartyProse', () => {
     expect(violations[0]!.length).toBe(201);
   });
 
+  it('accepts a long transitions.prior.note (our note, allowlisted by exact path)', () => {
+    // A nota do prior é prosa NOSSA obrigatória (Q-10) e passa de 200 chars por
+    // natureza. Allowlistada pelo caminho exato, não pelo nome do campo.
+    const data = baseData();
+    (data as unknown as { transitions: { prior: { note: string } } }).transitions = {
+      prior: { note: 'Estimativa de modelo sob suposição, não medida. '.repeat(20) },
+    } as never;
+    expect(findThirdPartyProse(data)).toEqual([]);
+  });
+
+  it('does NOT allowlist the name `note` — a note at another path is still flagged', () => {
+    // Prova que a allowlist é por CAMINHO, não por nome: o mesmo `note`, fora de
+    // `transitions.prior`, continua reprovando (senão prosa de terceiro vazaria).
+    const data = baseData();
+    (data as unknown as { polls: { note: string }[] }).polls = [
+      { note: 'z'.repeat(201) } as never,
+    ];
+    const violations = findThirdPartyProse(data);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.path).toContain('note');
+  });
+
+  it('exposes the exact allowlisted path (documented contract)', () => {
+    expect(__test.ALLOWLISTED_PATHS.has('transitions.prior.note')).toBe(true);
+  });
+
   it('threshold is exactly 200 chars', () => {
     expect(__test.MAX_FIELD_CHARS).toBe(200);
     const data = baseData();

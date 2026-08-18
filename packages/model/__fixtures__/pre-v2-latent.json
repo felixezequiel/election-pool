@@ -1,5 +1,5 @@
 {
-  "note": "CONGELADO com o código anterior ao MODEL_VERSION 2.0.0 (Q-10). Prova da condição 7: μ_t e house effects não mudam com a chegada da série de branco/nulo e da transferência.",
+  "note": "CONGELADO com o código anterior ao MODEL_VERSION 0.0.4 (Q-10). Prova da condição 7: μ_t e house effects não mudam com a chegada da série de branco/nulo e da transferência.",
   "seed": 2718,
   "referenceDate": "2026-05-31",
   "firstRound": [

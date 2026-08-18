@@ -1,0 +1,657 @@
+---
+/**
+ * <TransitionMatrix> — panorama de→para da transferência (Q-10). Substitui a lista
+ * vertical de faixas (ilegível: até ~90 relações por passo). Origem nas linhas,
+ * destino nas colunas; a INTENSIDADE da célula escala pelo maior fluxo CRUZADO do
+ * passo (a permanência da diagonal fica à parte, senão apagaria tudo — ver
+ * transition-matrix.ts). Cada célula mostra o NÚMERO, não só a cor (docs/06 §5).
+ *
+ * O que a lista fazia certo e continua valendo:
+ *  - `notIdentifiable` é mostrado pelo que é (o ruído amostral não distingue de
+ *    zero) — célula tracejada, e o texto do painel repete que ausência do selo NÃO
+ *    é aval;
+ *  - nenhuma seta grossa: a matriz é um mapa de calor, não um Sankey — não sugere
+ *    trajetória medida;
+ *  - a incerteza aparece no tooltip como faixa de 90% em escala real.
+ *
+ * SSR-completo: a tabela do passo mais recente já vem pronta. O JS só adiciona o
+ * seletor de passo, o foco de linha e o tooltip. A tabela exaustiva da seção
+ * (todos os passos) é o equivalente textual completo.
+ */
+import CandidatePhoto from '../CandidatePhoto.astro';
+import { formatNumber, formatDayMonth, isoDateOnly } from './lib/format.js';
+import { buildTransitionMatrix } from './lib/transition-matrix.js';
+import type { TransitionStateMeta } from './lib/transition-geometry.js';
+
+interface StepInput {
+  fromDate: string;
+  toDate: string;
+  flows: {
+    from: string;
+    to: string;
+    pp: number;
+    lo90: number;
+    hi90: number;
+    notIdentifiable: boolean;
+  }[];
+}
+
+interface Props {
+  id: string;
+  states: TransitionStateMeta[];
+  steps: StepInput[];
+}
+
+const { id, states, steps } = Astro.props;
+
+// Um passo por matriz; o mais recente é o visível por padrão.
+const matrices = steps.map((step) => ({
+  step,
+  data: buildTransitionMatrix(states, step.flows),
+}));
+const latestIndex = matrices.length - 1;
+
+// Intensidade da célula cruzada: alfa mínimo para o pouco que se move ainda
+// aparecer; máximo folgado para o maior fluxo não virar bloco chapado.
+const MIN_ALPHA = 12;
+const MAX_ALPHA = 78;
+/** Abaixo disto o número vira um ponto — está lá, mas não compete com o que se move. */
+const TEXT_FLOOR_PP = 0.05;
+
+function cellAlpha(absPp: number, maxCross: number): number {
+  if (maxCross <= 0) return MIN_ALPHA;
+  const ratio = Math.min(1, absPp / maxCross);
+  return Math.round(MIN_ALPHA + ratio * (MAX_ALPHA - MIN_ALPHA));
+}
+
+/** Cor do DESTINO (a coluna): candidatura tem slot; neutro cai no cinza da tinta. */
+function tintVar(state: TransitionStateMeta): string {
+  return state.colorSlot !== null && state.colorSlot !== undefined
+    ? `var(--c${state.colorSlot})`
+    : 'var(--ink-2)';
+}
+
+/** `+1,2` / `−0,3` / `0,0`. Sinal explícito ajuda a diferenciar ganho de perda. */
+function signed(pp: number): string {
+  const s = formatNumber(Math.abs(pp), 1);
+  if (pp > 0) return `+${s}`;
+  if (pp < 0) return `−${s}`;
+  return '0,0';
+}
+
+/** Rótulo curto de cabeçalho: candidatura = primeiro nome; neutro = forma curta. */
+function shortLabel(state: TransitionStateMeta): string {
+  if (state.kind === 'candidate') return state.displayName.split(/\s+/)[0] ?? state.displayName;
+  if (state.kind === 'blank_null') return 'Br/nulo';
+  return 'Não sabe';
+}
+
+/** Iniciais para o chip neutro (sem cor de candidatura). */
+function neutralChip(state: TransitionStateMeta): string {
+  return state.kind === 'blank_null' ? 'B/N' : 'NS';
+}
+---
+
+<figure class="tmatrix" data-tmatrix data-chart-id={id}>
+  <figcaption class="tmatrix-caption label">
+    Para onde o voto foi, por passo — cada célula é a fração do eleitorado que iria da
+    linha (origem) para a coluna (destino).
+  </figcaption>
+
+  {/* Seletor de passo: só quando há mais de um. Default = mais recente. */}
+  {
+    matrices.length > 1 && (
+      <div class="tmatrix-steps" role="tablist" aria-label="Passo da transferência">
+        {matrices.map((m, i) => (
+          <button
+            type="button"
+            class="tmatrix-step-btn"
+            data-step-btn={String(i)}
+            role="tab"
+            aria-selected={i === latestIndex ? 'true' : 'false'}
+          >
+            <time datetime={isoDateOnly(m.step.fromDate)}>{formatDayMonth(m.step.fromDate)}</time>
+            {' → '}
+            <time datetime={isoDateOnly(m.step.toDate)}>{formatDayMonth(m.step.toDate)}</time>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  {/* Chave de leitura junto do gráfico (docs/06 §5), não em nota de rodapé. */}
+  <ul class="tmatrix-key" aria-hidden="true">
+    <li><span class="tmatrix-key-heat"></span> mais escuro = mais gente</li>
+    <li><span class="tmatrix-key-diag"></span> diagonal = permaneceu</li>
+    <li><span class="tmatrix-key-uncertain"></span> tracejado = não distinguível de zero</li>
+  </ul>
+
+  {
+    matrices.map((m, i) => (
+      <div class="tmatrix-step" data-step={String(i)} hidden={i !== latestIndex}>
+        <div class="tmatrix-scroll">
+          <table class="tmatrix-grid" data-max-cross={String(m.data.maxCrossAbsPp)}>
+            <caption class="sr-only">
+              Transferência de {formatDayMonth(m.step.fromDate)} a {formatDayMonth(m.step.toDate)},
+              em pontos percentuais do eleitorado. Diagonal = permanência; célula tracejada = não
+              distinguível de zero.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" class="tmatrix-corner">
+                  <span class="tmatrix-corner-from">de ↓</span>
+                  <span class="tmatrix-corner-to">para →</span>
+                </th>
+                {m.data.states.map((to) => (
+                  <th scope="col" class="tmatrix-col" title={to.displayName}>
+                    {to.kind === 'candidate' ? (
+                      <CandidatePhoto
+                        photoPath={to.photoPath ?? null}
+                        displayName={to.displayName}
+                        colorSlot={to.colorSlot ?? 8}
+                        size={26}
+                      />
+                    ) : (
+                      <span class="tmatrix-neutral-chip" aria-hidden="true">
+                        {neutralChip(to)}
+                      </span>
+                    )}
+                    <span class="tmatrix-col-name">{shortLabel(to)}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {m.data.rows.map((row) => (
+                <tr data-row data-candidate={row.state.id}>
+                  <th scope="row" class="tmatrix-rowhead">
+                    <button
+                      type="button"
+                      class="tmatrix-rowbtn"
+                      data-focus-trigger
+                      data-candidate={row.state.id}
+                      aria-pressed="false"
+                      aria-label={`Destacar de onde ${row.state.displayName} recebeu e para onde foi`}
+                    >
+                      {row.state.kind === 'candidate' ? (
+                        <CandidatePhoto
+                          photoPath={row.state.photoPath ?? null}
+                          displayName={row.state.displayName}
+                          colorSlot={row.state.colorSlot ?? 8}
+                          size={24}
+                        />
+                      ) : (
+                        <span class="tmatrix-neutral-chip" aria-hidden="true">
+                          {neutralChip(row.state)}
+                        </span>
+                      )}
+                      <span class="tmatrix-rowname">{row.state.displayName}</span>
+                    </button>
+                  </th>
+                  {row.cells.map((cell, ci) => {
+                    const to = m.data.states[ci]!;
+                    if (cell.isDiagonal) {
+                      return (
+                        <td class="tmatrix-cell tmatrix-diag" title={`${row.state.displayName}: permaneceu`}>
+                          {cell.present ? (
+                            <span class="tmatrix-diag-val">{formatNumber(cell.pp, 0)}</span>
+                          ) : (
+                            <span class="tmatrix-dash">—</span>
+                          )}
+                        </td>
+                      );
+                    }
+                    if (!cell.present) {
+                      return <td class="tmatrix-cell tmatrix-empty"><span class="tmatrix-dash">·</span></td>;
+                    }
+                    const alpha = cellAlpha(Math.abs(cell.pp), m.data.maxCrossAbsPp);
+                    const showNum = Math.abs(cell.pp) >= TEXT_FLOOR_PP;
+                    return (
+                      <td
+                        class:list={['tmatrix-cell', { 'is-uncertain': cell.notIdentifiable }]}
+                        data-cell
+                        data-from={cell.from}
+                        data-to={cell.to}
+                        data-from-name={row.state.displayName}
+                        data-to-name={to.displayName}
+                        data-pp={String(cell.pp)}
+                        data-lo={String(cell.lo90)}
+                        data-hi={String(cell.hi90)}
+                        data-uncertain={cell.notIdentifiable ? '1' : '0'}
+                        tabindex="0"
+                        style={`--cell-tint: ${tintVar(to)}; background: color-mix(in srgb, var(--cell-tint) ${alpha}%, transparent)`}
+                      >
+                        <span class="tmatrix-num">{showNum ? signed(cell.pp) : '·'}</span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ))
+  }
+
+  {/* Tooltip (preenchido na hidratação; vazio e oculto no SSR). */}
+  <div class="chart-tooltip tmatrix-tip" data-tmatrix-tip role="tooltip" aria-hidden="true"></div>
+</figure>
+
+<style>
+  .tmatrix {
+    margin: 0;
+  }
+  .tmatrix-caption {
+    color: var(--ink-2);
+    max-width: 64ch;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Seletor de passo. */
+  .tmatrix-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--rhythm);
+    margin-top: calc(var(--rhythm) * 2);
+  }
+  .tmatrix-step-btn {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-s);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: calc(var(--rhythm) * 0.75) var(--rhythm);
+    cursor: pointer;
+  }
+  .tmatrix-step-btn[aria-selected='true'] {
+    color: var(--ink);
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .tmatrix-step-btn:focus-visible,
+  .tmatrix-rowbtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Chave de leitura. */
+  .tmatrix-key {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gutter);
+    margin: calc(var(--rhythm) * 2) 0 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .tmatrix-key li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6ch;
+  }
+  .tmatrix-key-heat,
+  .tmatrix-key-diag,
+  .tmatrix-key-uncertain {
+    inline-size: 16px;
+    block-size: 12px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+  }
+  .tmatrix-key-heat {
+    background: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  .tmatrix-key-diag {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--surface-2),
+      var(--surface-2) 3px,
+      transparent 3px,
+      transparent 6px
+    );
+  }
+  .tmatrix-key-uncertain {
+    border-style: dashed;
+    border-color: var(--ink-3);
+  }
+
+  /* Grade. */
+  .tmatrix-scroll {
+    margin-top: calc(var(--rhythm) * 3);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tmatrix-grid {
+    border-collapse: separate;
+    border-spacing: 3px;
+  }
+  .tmatrix-corner {
+    text-align: left;
+    vertical-align: bottom;
+    min-width: 120px;
+  }
+  .tmatrix-corner-from,
+  .tmatrix-corner-to {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .tmatrix-col {
+    inline-size: 56px;
+    padding: 4px 2px;
+    vertical-align: bottom;
+    text-align: center;
+  }
+  .tmatrix-col-name {
+    display: block;
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 54px;
+  }
+  .tmatrix-neutral-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-2);
+  }
+  .tmatrix-rowhead {
+    text-align: left;
+    vertical-align: middle;
+    padding: 0;
+  }
+  .tmatrix-rowbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    width: 100%;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-s);
+    padding: 3px 6px;
+    cursor: pointer;
+    text-align: left;
+    color: var(--ink);
+    font: inherit;
+  }
+  .tmatrix-rowname {
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    white-space: nowrap;
+  }
+  .tmatrix-rowbtn:hover,
+  .tmatrix-rowbtn[aria-pressed='true'] {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  /* Células. */
+  .tmatrix-cell {
+    inline-size: 56px;
+    block-size: 34px;
+    text-align: center;
+    vertical-align: middle;
+    border-radius: var(--radius-s);
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-s);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink);
+  }
+  .tmatrix-num {
+    display: inline-block;
+    min-width: 4ch;
+  }
+  /* Não distinguível de zero: contorno tracejado, número recuado. Não escondido. */
+  .tmatrix-cell.is-uncertain {
+    outline: 1px dashed color-mix(in srgb, var(--ink-3) 80%, transparent);
+    outline-offset: -3px;
+  }
+  .tmatrix-cell.is-uncertain .tmatrix-num {
+    color: var(--ink-3);
+  }
+  /* Permanência: fora da escala de calor; hachura neutra + valor recuado. */
+  .tmatrix-diag {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--surface-2),
+      var(--surface-2) 3px,
+      transparent 3px,
+      transparent 6px
+    );
+    color: var(--ink-2);
+  }
+  .tmatrix-diag-val {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .tmatrix-empty {
+    color: var(--ink-3);
+  }
+  .tmatrix-dash {
+    color: var(--ink-3);
+  }
+  .tmatrix-cell[data-cell] {
+    cursor: default;
+  }
+  .tmatrix-cell[data-cell]:hover,
+  .tmatrix-cell[data-cell]:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    outline: none;
+  }
+
+  /* Foco de linha: a origem apontada fica; as outras recuam. */
+  .tmatrix-grid tbody tr,
+  .tmatrix-grid tbody tr td,
+  .tmatrix-grid tbody tr th {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .tmatrix[data-focus] tbody tr:not(.is-focus) {
+    opacity: 0.28;
+  }
+
+  /* Tooltip: faixa de 90% em escala real. */
+  .tmatrix-tip {
+    position: fixed;
+    z-index: 30;
+    max-width: 270px;
+    pointer-events: none;
+    padding: calc(var(--rhythm) * 1.5);
+    background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-s);
+    box-shadow: var(--shadow-2);
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .tmatrix-tip[data-open='true'] {
+    opacity: 1;
+  }
+  .tmatrix-tip-head {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+  }
+  .tmatrix-tip-val {
+    margin: calc(var(--rhythm) * 0.5) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink);
+  }
+  .tmatrix-tip-unit {
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .tmatrix-tip-band {
+    position: relative;
+    height: 8px;
+    margin-top: var(--rhythm);
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .tmatrix-tip-range {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .tmatrix-tip-mark {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--ink);
+  }
+  .tmatrix-tip-band-label {
+    margin: calc(var(--rhythm) * 0.5) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-2);
+  }
+  .tmatrix-tip-note {
+    margin: var(--rhythm) 0 0;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+    line-height: 1.4;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tmatrix-grid tbody tr,
+    .tmatrix-grid tbody tr td,
+    .tmatrix-grid tbody tr th {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  const nf1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function initMatrix(root: HTMLElement): void {
+    // ── Seletor de passo ──
+    const stepBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-step-btn]'));
+    const stepPanels = Array.from(root.querySelectorAll<HTMLElement>('[data-step]'));
+    function showStep(i: number): void {
+      stepPanels.forEach((p) => {
+        p.hidden = p.dataset.step !== String(i);
+      });
+      stepBtns.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.stepBtn === String(i))));
+    }
+    stepBtns.forEach((b) => b.addEventListener('click', () => showStep(Number(b.dataset.stepBtn))));
+
+    // ── Foco de linha (origem) ──
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-row]'));
+    const rowBtns = Array.from(root.querySelectorAll<HTMLElement>('[data-focus-trigger]'));
+    let pinned: string | null = null;
+    function applyFocus(cid: string | null): void {
+      if (cid) root.setAttribute('data-focus', '');
+      else root.removeAttribute('data-focus');
+      rows.forEach((r) => r.classList.toggle('is-focus', cid !== null && r.dataset.candidate === cid));
+      rowBtns.forEach((b) =>
+        b.setAttribute('aria-pressed', String(pinned !== null && b.dataset.candidate === pinned)),
+      );
+    }
+    rowBtns.forEach((b) => {
+      const cid = b.dataset.candidate ?? null;
+      b.addEventListener('mouseenter', () => applyFocus(cid ?? pinned));
+      b.addEventListener('mouseleave', () => applyFocus(pinned));
+      b.addEventListener('focus', () => applyFocus(cid ?? pinned));
+      b.addEventListener('blur', () => applyFocus(pinned));
+      b.addEventListener('click', () => {
+        pinned = pinned === cid ? null : cid;
+        applyFocus(pinned);
+      });
+    });
+    root.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Escape' && pinned) {
+        pinned = null;
+        applyFocus(null);
+      }
+    });
+
+    // ── Tooltip por célula: faixa de 90% em escala real ──
+    const tip = root.querySelector<HTMLElement>('[data-tmatrix-tip]');
+    const cells = Array.from(root.querySelectorAll<HTMLElement>('[data-cell]'));
+
+    function tipHtml(td: HTMLElement): string {
+      const pp = Number(td.dataset.pp);
+      const lo = Number(td.dataset.lo);
+      const hi = Number(td.dataset.hi);
+      const uncertain = td.dataset.uncertain === '1';
+      const table = td.closest('table');
+      const maxCross = Number(table?.getAttribute('data-max-cross') ?? '1') || 1;
+      // Barra de faixa 0..maxCross (fluxo é sempre ≥ 0): mostra lo–hi e a média.
+      const scale = (v: number): number => Math.max(0, Math.min(100, (v / maxCross) * 100));
+      const barLo = scale(lo);
+      const barHi = scale(hi);
+      const barMean = scale(pp);
+      const note = uncertain
+        ? '<p class="tmatrix-tip-note">A faixa alcança zero: o dado não distingue este movimento de nenhum. E mesmo sem esse selo, a maior parte do valor vem do prior.</p>'
+        : '<p class="tmatrix-tip-note">Sem o selo de “não distinguível de zero” — mas a maior parte do valor ainda vem do prior, não da medição.</p>';
+      return `
+        <p class="tmatrix-tip-head">${td.dataset.fromName} <span aria-hidden="true">→</span> ${td.dataset.toName}</p>
+        <p class="tmatrix-tip-val">${nf1.format(pp)} <span class="tmatrix-tip-unit">p.p. do eleitorado</span></p>
+        <div class="tmatrix-tip-band" aria-hidden="true">
+          <span class="tmatrix-tip-range" style="left:${barLo}%;right:${100 - barHi}%"></span>
+          <span class="tmatrix-tip-mark" style="left:${barMean}%"></span>
+        </div>
+        <p class="tmatrix-tip-band-label">faixa de 90%: ${nf1.format(lo)}–${nf1.format(hi)} p.p.</p>
+        ${note}`;
+    }
+
+    function showTip(td: HTMLElement): void {
+      if (!tip) return;
+      tip.innerHTML = tipHtml(td);
+      tip.setAttribute('data-open', 'true');
+      tip.setAttribute('aria-hidden', 'false');
+      const r = td.getBoundingClientRect();
+      tip.style.left = `${Math.min(window.innerWidth - 270, r.left)}px`;
+      tip.style.top = `${r.bottom + 8}px`;
+    }
+    function hideTip(): void {
+      if (!tip) return;
+      tip.setAttribute('data-open', 'false');
+      tip.setAttribute('aria-hidden', 'true');
+    }
+    cells.forEach((td) => {
+      td.addEventListener('mouseenter', () => showTip(td));
+      td.addEventListener('mouseleave', hideTip);
+      td.addEventListener('focus', () => showTip(td));
+      td.addEventListener('blur', hideTip);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideTip();
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-tmatrix]').forEach((el) => initMatrix(el));
+</script>

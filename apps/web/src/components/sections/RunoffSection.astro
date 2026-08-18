@@ -5,6 +5,7 @@
  * série independente (docs/01 §3).
  */
 import LatentBandChart from '../charts/LatentBandChart.astro';
+import Num from '../Num.astro';
 import type { ChartInputs } from '../../data/chart-inputs.js';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 const { runoffs } = Astro.props;
+const single = runoffs.length === 1;
 ---
 
 {
@@ -25,6 +27,16 @@ const { runoffs } = Astro.props;
         <p class="body runoff-lead">
           Quando as pesquisas simulam um segundo turno, tratamos cada par como uma série
           separada. A leitura vale para o momento medido, não para o resultado final.
+        </p>
+        <p class="body-muted runoff-count">
+          {single ? (
+            'Nas pesquisas da janela, os institutos simularam só um segundo turno — nenhum outro par foi testado. O modelo desenha um confronto assim que ele aparece em alguma pesquisa; não inventamos pares que ninguém mediu.'
+          ) : (
+            <>
+              <Num>{String(runoffs.length)}</Num> pares com série própria, cada um lido de forma
+              independente.
+            </>
+          )}
         </p>
         <div class="runoff-grid">
           {runoffs.map((r, i) => (
@@ -51,6 +63,10 @@ const { runoffs } = Astro.props;
     max-width: 24ch;
   }
   .runoff-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .runoff-count {
     margin-top: calc(var(--rhythm) * 2);
     max-width: 62ch;
   }

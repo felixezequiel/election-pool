@@ -23,7 +23,12 @@ import CandidatePhoto from '../CandidatePhoto.astro';
 import Num from '../Num.astro';
 import UncertaintyRule from './UncertaintyRule.astro';
 import HachuraDefs from './HachuraDefs.astro';
-import { buildLatentGeometry, type LatentSeries, type PollPoint } from './lib/latent-geometry.js';
+import {
+  buildLatentGeometry,
+  buildSparklines,
+  type LatentSeries,
+  type PollPoint,
+} from './lib/latent-geometry.js';
 import { hachuraFill } from './lib/hachura.js';
 import { formatPct, formatDayMonth, isoDateOnly } from './lib/format.js';
 import './lib/charts.css';
@@ -53,6 +58,12 @@ interface Props {
   id: string;
   width?: number;
   height?: number;
+  /**
+   * Faixa de mini-trajetórias por candidato (uma sparkline cada, mesma escala).
+   * Default: só quando há mais de 2 séries — num par de 2º turno o readout já
+   * mostra os dois e a faixa seria redundante.
+   */
+  showSparklines?: boolean;
   class?: string | undefined;
 }
 
@@ -64,13 +75,27 @@ const {
   id,
   width = 960,
   height = 420,
+  showSparklines,
   class: className,
 } = Astro.props;
 
-const margins = { top: 16, right: 20, bottom: 32, left: 40 };
+// Margem direita larga: é onde ficam os RÓTULOS DE FIM DE LINHA (nome + valor de
+// cada candidato). Sem eles o gráfico não se identifica — "qual linha é qual?" é
+// justamente a queixa que eles resolvem.
+const margins = { top: 16, right: 156, bottom: 32, left: 40 };
 const geo = buildLatentGeometry(series, points, width, height, margins);
 
 const slots = [...new Set(series.map((s) => s.colorSlot))];
+
+// Mini-trajetórias: mesma escala (xDomain/yDomain) do gráfico grande, para que a
+// oscilação de cada candidato seja comparável batendo o olho (docs/06 §8 P&B).
+const SPARK_W = 172;
+const SPARK_H = 40;
+const withSparks = showSparklines ?? series.length > 2;
+const sparklines = withSparks
+  ? buildSparklines(series, SPARK_W, SPARK_H, geo.xDomain, geo.yDomain)
+  : [];
+const sparkById = new Map(sparklines.map((s) => [s.candidateId, s]));
 
 // Último ponto de cada série: valor "de agora" para o readout de scrub e a régua.
 function latestOf(s: LatentSeries): { date: number; mean: number; lo90: number; hi90: number } {
@@ -82,6 +107,41 @@ const latest = new Map(series.map((s) => [s.candidateId, latestOf(s)]));
 
 // Domínio de valor compartilhado entre as réguas do readout (comparáveis lado a lado).
 const ruleDomain: [number, number] = [geo.yDomain[0], geo.yDomain[1]];
+
+// ── Rótulos de fim de linha ────────────────────────────────────────────────
+// Cada linha ganha um rótulo (nome + valor) na ponta direita, na cor da entidade.
+// Como as linhas se amontoam embaixo, os rótulos são AFASTADOS na vertical (de-
+// colisão) e ligados ao ponto real por um conector curvo — o gráfico passa a
+// "dizer quem é" sem depender de hover nem de ler a legenda.
+const plotRight = width - margins.right;
+const labelX = plotRight + 14;
+const END_LABEL_GAP = 15; // px mínimos entre rótulos empilhados
+const firstName = (name: string): string => name.split(/\s+/)[0] ?? name;
+interface EndLabel {
+  candidateId: string;
+  colorSlot: number;
+  name: string;
+  mean: number;
+  yLine: number;
+  yLabel: number;
+}
+const endLabels: EndLabel[] = series
+  .map((s): EndLabel => {
+    const l = latest.get(s.candidateId);
+    const mean = l?.mean ?? 0;
+    const y = geo.y(mean);
+    return { candidateId: s.candidateId, colorSlot: s.colorSlot, name: firstName(s.displayName), mean, yLine: y, yLabel: y };
+  })
+  .sort((a, b) => a.yLine - b.yLine);
+// De-colisão: empilha para baixo respeitando o gap; se estourar o rodapé, sobe tudo.
+let prevY = Number.NEGATIVE_INFINITY;
+for (const l of endLabels) {
+  l.yLabel = Math.max(l.yLine, prevY + END_LABEL_GAP);
+  prevY = l.yLabel;
+}
+const labelBottom = height - margins.bottom;
+const labelOverflow = (endLabels[endLabels.length - 1]?.yLabel ?? 0) - labelBottom;
+if (labelOverflow > 0) for (const l of endLabels) l.yLabel -= labelOverflow;
 
 // Prosa do <desc> (docs/05 §7) — leitura em voz alta que faz sentido.
 const descParts = series.map((s) => {
@@ -102,6 +162,7 @@ const clientSeries = series.map((s) => ({
   candidateId: s.candidateId,
   displayName: s.displayName,
   colorSlot: s.colorSlot,
+  photoPath: s.photoPath ?? null,
   samples: s.samples,
 }));
 ---
@@ -191,7 +252,11 @@ const clientSeries = series.map((s) => ({
       <g class="bands">
         {
           geo.bands.map((b) => (
-            <g style={`color: var(--c${b.colorSlot}); --band-delay: ${slots.indexOf(b.colorSlot) * 80}ms`}>
+            <g
+              class="band-group"
+              data-candidate={b.candidateId}
+              style={`color: var(--c${b.colorSlot}); --band-delay: ${slots.indexOf(b.colorSlot) * 80}ms`}
+            >
               <path
                 class="band"
                 d={b.path}
@@ -216,6 +281,26 @@ const clientSeries = series.map((s) => ({
               data-center
               data-candidate={c.candidateId}
             />
+          ))
+        }
+      </g>
+
+      {/* Rótulos de fim de linha: cada linha diz QUEM é, na cor da entidade, sem
+          depender de hover nem da legenda. Conector curvo liga o ponto real ao
+          rótulo afastado (de-colisão vertical no frontmatter). */}
+      <g class="end-labels">
+        {
+          endLabels.map((l) => (
+            <g class="end-label" data-candidate={l.candidateId} style={`color: var(--c${l.colorSlot})`}>
+              <path
+                class="end-label-connector"
+                d={`M ${plotRight} ${l.yLine} C ${plotRight + 10} ${l.yLine}, ${labelX - 10} ${l.yLabel}, ${labelX} ${l.yLabel}`}
+              />
+              <circle class="end-label-dot" cx={labelX} cy={l.yLabel} r={3.5} />
+              <text class="end-label-name" x={labelX + 8} y={l.yLabel + 3.6}>
+                {l.name} <tspan class="end-label-val">{formatPct(l.mean)}%</tspan>
+              </text>
+            </g>
           ))
         }
       </g>
@@ -245,6 +330,34 @@ const clientSeries = series.map((s) => ({
 
     {/* Tooltip (preenchido pela hidratação; vazio e oculto no SSR). */}
     <div class="chart-tooltip" data-tooltip role="tooltip" aria-hidden="true"></div>
+
+    {/* Tooltip da LINHA: acompanha o scrub, com FOTO + valor de cada candidato na
+        data sob o cursor. Pré-renderizado (foto/monograma reusam o <CandidatePhoto>);
+        o JS só posiciona e atualiza os valores. Some sem JS (aria-hidden). Sob foco,
+        só a linha do candidato em foco aparece (as demais recebem .is-dim). */}
+    <div class="scrub-tip" data-scrub-tip aria-hidden="true">
+      <p class="scrub-tip-date" data-scrub-tip-date>
+        {formatDayMonth(new Date(geo.xDomain[1]).toISOString())}
+      </p>
+      <ul class="scrub-tip-list">
+        {
+          series.map((s) => (
+            <li class="scrub-tip-row" data-scrub-tip-row data-candidate={s.candidateId}>
+              <CandidatePhoto
+                photoPath={s.photoPath ?? null}
+                displayName={s.displayName}
+                colorSlot={s.colorSlot}
+                size={22}
+              />
+              <span class="scrub-tip-name">{s.displayName}</span>
+              <span class="scrub-tip-val" data-scrub-tip-val data-candidate={s.candidateId}>
+                {formatPct(latest.get(s.candidateId)?.mean ?? 0)}%
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
   </div>
 
   {/* Readout de scrub: valor "de agora" por candidato, que ANIMA, sempre com a
@@ -260,7 +373,7 @@ const clientSeries = series.map((s) => ({
         series.map((s) => {
           const l = latest.get(s.candidateId);
           return (
-            <li class="readout-item">
+            <li class="readout-item" data-candidate={s.candidateId}>
               <span class="readout-name">
                 {/* Identidade do candidato: foto quando existe, monograma quando
                     não. Decorativa (alt=""), porque o nome vem logo em seguida. */}
@@ -300,19 +413,90 @@ const clientSeries = series.map((s) => ({
     </ul>
   </div>
 
-  {/* Legenda: sempre visível, com cor + hachura (cor nunca sozinha). */}
-  <ul class="chart-legend">
+  {/* Mini-trajetórias: uma por candidato, MESMA escala. Deixa ver quem oscila e
+      quem não, sem o amontoado do gráfico grande. Cada item foca a série lá em cima
+      (hover/foco realça, clique fixa). O gráfico grande fica legível por foco. */}
+  {
+    withSparks && (
+      <div class="sparklines" data-sparklines>
+        <p class="label sparklines-title">Como cada um oscila — mesma escala</p>
+        <ul class="sparkline-list">
+          {series.map((s) => {
+            const sp = sparkById.get(s.candidateId);
+            const l = latest.get(s.candidateId);
+            return (
+              <li>
+                <button
+                  type="button"
+                  class="spark-trigger"
+                  data-focus-trigger
+                  data-candidate={s.candidateId}
+                  aria-pressed="false"
+                  aria-label={`${s.displayName}: apoio atual ${formatPct(l?.mean ?? 0)} por cento. Focar esta série.`}
+                  style={`color: var(--c${s.colorSlot})`}
+                >
+                  <span class="spark-photo">
+                    <CandidatePhoto
+                      photoPath={s.photoPath ?? null}
+                      displayName={s.displayName}
+                      colorSlot={s.colorSlot}
+                      size={24}
+                    />
+                  </span>
+                  <span class="spark-head">
+                    <span class="spark-name">{s.displayName}</span>
+                    <span class="spark-val">
+                      <Num>{formatPct(l?.mean ?? 0)}</Num>%
+                    </span>
+                  </span>
+                  <svg
+                    class="spark-svg"
+                    viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <path class="spark-band" d={sp?.bandPath} fill="currentColor" fill-opacity="0.2" />
+                    <path
+                      class="spark-line"
+                      d={sp?.linePath}
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      vector-effect="non-scaling-stroke"
+                    />
+                  </svg>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    )
+  }
+
+  {/* Legenda: sempre visível, com cor + hachura (cor nunca sozinha). Cada item é um
+      gatilho de foco (hover/foco realça a série; clique fixa; Esc solta). */}
+  <ul class="chart-legend" data-legend>
     {
       series.map((s) => (
         <li>
-          <svg class="swatch" viewBox="0 0 18 12" width="18" height="12" aria-hidden="true" style={`color: var(--c${s.colorSlot})`}>
-            <defs>
-              <HachuraDefs idPrefix={`${id}-lg-${s.colorSlot}`} slots={[s.colorSlot]} />
-            </defs>
-            <rect x="0" y="0" width="18" height="12" rx="2" fill="currentColor" fill-opacity="0.22" />
-            <rect x="0" y="0" width="18" height="12" rx="2" fill={hachuraFill(`${id}-lg-${s.colorSlot}`, s.colorSlot)} fill-opacity="0.5" />
-          </svg>
-          <span>{s.displayName}</span>
+          <button
+            type="button"
+            class="legend-trigger"
+            data-focus-trigger
+            data-candidate={s.candidateId}
+            aria-pressed="false"
+            aria-label={`Focar ${s.displayName}`}
+          >
+            <svg class="swatch" viewBox="0 0 18 12" width="18" height="12" aria-hidden="true" style={`color: var(--c${s.colorSlot})`}>
+              <defs>
+                <HachuraDefs idPrefix={`${id}-lg-${s.colorSlot}`} slots={[s.colorSlot]} />
+              </defs>
+              <rect x="0" y="0" width="18" height="12" rx="2" fill="currentColor" fill-opacity="0.22" />
+              <rect x="0" y="0" width="18" height="12" rx="2" fill={hachuraFill(`${id}-lg-${s.colorSlot}`, s.colorSlot)} fill-opacity="0.5" />
+            </svg>
+            <span>{s.displayName}</span>
+          </button>
         </li>
       ))
     }
@@ -372,7 +556,7 @@ const clientSeries = series.map((s) => ({
     is:inline
     type="application/json"
     data-latent-state
-    set:html={JSON.stringify({ series: clientSeries, pollMeta, margins, width, height, ruleDomain })}
+    set:html={JSON.stringify({ series: clientSeries, pollMeta, margins, width, height, ruleDomain, yDomain: geo.yDomain })}
   />
 </figure>
 
@@ -434,6 +618,210 @@ const clientSeries = series.map((s) => ({
       grid-area: rule;
     }
   }
+
+  /* ── Foco interativo: um candidato em evidência, o resto recua ────────────── */
+  .band-group,
+  .center-line,
+  .poll-points,
+  .readout-item,
+  .legend-trigger,
+  .spark-trigger,
+  .end-label {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .latent-chart[data-focus] .band-group,
+  .latent-chart[data-focus] .center-line,
+  .latent-chart[data-focus] .readout-item,
+  .latent-chart[data-focus] .legend-trigger,
+  .latent-chart[data-focus] .spark-trigger,
+  .latent-chart[data-focus] .end-label {
+    opacity: 0.16;
+  }
+  .latent-chart[data-focus] .poll-points {
+    opacity: 0.08;
+  }
+  .latent-chart[data-focus] .band-group.is-focus,
+  .latent-chart[data-focus] .center-line.is-focus,
+  .latent-chart[data-focus] .readout-item.is-focus,
+  .latent-chart[data-focus] .legend-trigger.is-focus,
+  .latent-chart[data-focus] .spark-trigger.is-focus,
+  .latent-chart[data-focus] .end-label.is-focus {
+    opacity: 1;
+  }
+
+  /* ── Rótulos de fim de linha ─────────────────────────────────────────────── */
+  .end-label-connector {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+    opacity: 0.45;
+  }
+  .end-label-dot {
+    fill: currentColor;
+  }
+  .end-label-name {
+    fill: currentColor;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums lining-nums;
+    dominant-baseline: middle;
+  }
+  .end-label-val {
+    fill: currentColor;
+    opacity: 0.65;
+  }
+  .latent-chart[data-focus] .center-line.is-focus {
+    stroke-width: 2.6;
+  }
+
+  /* Gatilhos de foco (legenda + sparkline): botões sem cara de botão. */
+  .legend-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rhythm);
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    margin: 0;
+    border-radius: var(--radius-s);
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .legend-trigger[aria-pressed='true'] {
+    background: var(--surface);
+  }
+  .legend-trigger:focus-visible,
+  .spark-trigger:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ── Mini-trajetórias (sparklines) ───────────────────────────────────────── */
+  .sparklines {
+    margin-top: calc(var(--rhythm) * 3);
+  }
+  .sparklines-title {
+    color: var(--ink-3);
+  }
+  .sparkline-list {
+    list-style: none;
+    margin: calc(var(--rhythm) * 1.5) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: var(--rhythm);
+  }
+  .spark-trigger {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'photo head'
+      'photo spark';
+    align-items: center;
+    column-gap: var(--rhythm);
+    row-gap: 2px;
+    width: 100%;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-s);
+    padding: calc(var(--rhythm) * 0.75) var(--rhythm);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+  }
+  .spark-trigger:hover,
+  .spark-trigger[aria-pressed='true'] {
+    border-color: color-mix(in srgb, currentColor 45%, transparent);
+    background: var(--surface);
+  }
+  .spark-photo {
+    grid-area: photo;
+    display: inline-flex;
+  }
+  .spark-head {
+    grid-area: head;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--rhythm);
+    color: var(--ink);
+  }
+  .spark-name {
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+  }
+  .spark-val {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-s);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink-2);
+  }
+  .spark-svg {
+    grid-area: spark;
+    width: 100%;
+    height: 34px;
+    display: block;
+    overflow: visible;
+  }
+
+  /* ── Tooltip da linha (scrub-tip): foto + valor na data sob o cursor ──────── */
+  .scrub-tip {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 4;
+    min-width: 150px;
+    max-width: 240px;
+    padding: calc(var(--rhythm) * 1.25);
+    background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-s);
+    box-shadow: var(--shadow-1);
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .scrub-tip[data-open='true'] {
+    opacity: 1;
+  }
+  .scrub-tip-date {
+    margin: 0 0 var(--rhythm);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-3);
+  }
+  .scrub-tip-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .scrub-tip-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--rhythm);
+  }
+  .scrub-tip-row.is-dim {
+    display: none;
+  }
+  .scrub-tip-name {
+    font-family: var(--font-body);
+    font-size: var(--fs-body-s);
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .scrub-tip-val {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-s);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink);
+  }
 </style>
 
 <script>
@@ -468,6 +856,7 @@ const clientSeries = series.map((s) => ({
     width: number;
     height: number;
     ruleDomain: [number, number];
+    yDomain: [number, number];
   }
 
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -512,8 +901,16 @@ const clientSeries = series.map((s) => ({
     const tToX = (t: number): number =>
       innerLeft + ((t - tMin) / tSpan) * (innerRight - innerLeft);
 
+    // Valor (p.p.) → px vertical, para achar a LINHA mais próxima do cursor.
+    const innerH = state.height - state.margins.top - state.margins.bottom;
+    const ySpan = state.yDomain[1] - state.yDomain[0] || 1;
+    const valueToPx = (v: number): number =>
+      state.margins.top + (1 - (v - state.yDomain[0]) / ySpan) * innerH;
+
     const scrubLine = root.querySelector<SVGLineElement>('[data-scrub-line]');
     const readoutTitle = root.querySelector<HTMLElement>('.scrub-readout .label time');
+    const scrubTip = root.querySelector<HTMLElement>('[data-scrub-tip]');
+    const scrubTipDate = root.querySelector<HTMLElement>('[data-scrub-tip-date]');
 
     // Orquestração de load: adiciona a classe que dispara as animações CSS
     // (bandas → linhas → pontos). Sob reduced-motion o CSS já ignora.
@@ -523,9 +920,18 @@ const clientSeries = series.map((s) => ({
       if (readoutTitle) {
         readoutTitle.textContent = dm.format(new Date(t));
       }
+      if (scrubTipDate) {
+        scrubTipDate.textContent = dm.format(new Date(t));
+      }
       for (const s of state.series) {
         const sample = nearestSample(s.samples, t);
         if (!sample) continue;
+        // Tooltip da linha: valor do candidato na data sob o cursor (com a foto
+        // pré-renderizada ao lado). Some quando não há JS; segue o foco.
+        const tipVal = root.querySelector<HTMLElement>(
+          `[data-scrub-tip-val][data-candidate="${CSS.escape(s.candidateId)}"]`,
+        );
+        if (tipVal) tipVal.textContent = `${nf1.format(sample.mean)}%`;
         const numEl = root.querySelector<HTMLElement>(
           `[data-readout-num][data-candidate="${CSS.escape(s.candidateId)}"]`,
         );
@@ -553,8 +959,20 @@ const clientSeries = series.map((s) => ({
         scrubLine.setAttribute('x1', String(clamped));
         scrubLine.setAttribute('x2', String(clamped));
       }
+      if (scrubTip) {
+        const box = svg!.getBoundingClientRect();
+        scrubTip.style.left = `${(clamped / width) * box.width}px`;
+        scrubTip.dataset.open = 'true';
+        scrubTip.setAttribute('aria-hidden', 'false');
+      }
       root.classList.add('is-scrubbing');
       setReadoutForT(xToT(clamped));
+    }
+
+    function hideScrubTip(): void {
+      if (!scrubTip) return;
+      scrubTip.dataset.open = 'false';
+      scrubTip.setAttribute('aria-hidden', 'true');
     }
 
     const hit = root.querySelector<SVGRectElement>('[data-scrub-hit]');
@@ -563,11 +981,34 @@ const clientSeries = series.map((s) => ({
       const scale = width / box.width;
       return (evt.clientX - box.left) * scale;
     };
-    hit?.addEventListener('mousemove', (e) => moveScrubTo(rectPx(e as MouseEvent)));
+    hit?.addEventListener('mousemove', (e) => {
+      const ev = e as MouseEvent;
+      const px = rectPx(ev);
+      moveScrubTo(px);
+      // Identifica a LINHA mais próxima do cursor e a coloca em foco: passar o
+      // mouse "numa linha" passa a dizer QUEM é (a queixa central).
+      const box = svg!.getBoundingClientRect();
+      const cy = (ev.clientY - box.top) * (state.height / box.height);
+      const t = xToT(Math.max(innerLeft, Math.min(innerRight, px)));
+      let nearest: string | null = null;
+      let best = Infinity;
+      for (const s of state.series) {
+        const samp = nearestSample(s.samples, t);
+        if (!samp) continue;
+        const d = Math.abs(valueToPx(samp.mean) - cy);
+        if (d < best) {
+          best = d;
+          nearest = s.candidateId;
+        }
+      }
+      applyFocus(nearest ?? pinnedCandidate);
+    });
     hit?.addEventListener('mouseleave', () => {
       root.classList.remove('is-scrubbing');
-      // Restaura o valor "de agora" (última data).
+      hideScrubTip();
+      // Restaura o valor "de agora" (última data) e o foco fixado, se houver.
       setReadoutForT(tMax);
+      applyFocus(pinnedCandidate);
     });
 
     // Teclado no scrub: setas movem por amostra.
@@ -667,6 +1108,58 @@ const clientSeries = series.map((s) => ({
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') hideTooltip();
+    });
+
+    // ── Foco interativo: isola um candidato (banda, linha, readout, legenda,
+    // sparkline e a linha do scrub-tip). Hover/foco realça temporariamente; clique
+    // fixa; Esc solta. Sem JS o gráfico mostra tudo — o foco é enriquecimento. ──
+    const focusTriggers = Array.from(root.querySelectorAll<HTMLElement>('[data-focus-trigger]'));
+    const focusMarked = Array.from(
+      root.querySelectorAll<Element>(
+        '.band-group,[data-center],.readout-item,[data-focus-trigger],[data-scrub-tip-row],.end-label',
+      ),
+    );
+    let pinnedCandidate: string | null = null;
+
+    function applyFocus(cid: string | null): void {
+      if (cid) root.setAttribute('data-focus', '');
+      else root.removeAttribute('data-focus');
+      for (const el of focusMarked) {
+        const match = el.getAttribute('data-candidate') === cid;
+        el.classList.toggle('is-focus', cid !== null && match);
+        if (el.hasAttribute('data-scrub-tip-row')) {
+          el.classList.toggle('is-dim', cid !== null && !match);
+        }
+      }
+      for (const t of focusTriggers) {
+        t.setAttribute(
+          'aria-pressed',
+          String(pinnedCandidate !== null && t.dataset.candidate === pinnedCandidate),
+        );
+      }
+    }
+
+    // Hover/foco mostra a série apontada; se algo está fixado, ela prevalece ao sair.
+    function hoverFocus(cid: string | null): void {
+      applyFocus(cid ?? pinnedCandidate);
+    }
+
+    for (const t of focusTriggers) {
+      const cid = t.dataset.candidate ?? null;
+      t.addEventListener('mouseenter', () => hoverFocus(cid));
+      t.addEventListener('mouseleave', () => hoverFocus(null));
+      t.addEventListener('focus', () => hoverFocus(cid));
+      t.addEventListener('blur', () => hoverFocus(null));
+      t.addEventListener('click', () => {
+        pinnedCandidate = pinnedCandidate === cid ? null : cid;
+        applyFocus(pinnedCandidate);
+      });
+    }
+    root.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Escape' && pinnedCandidate !== null) {
+        pinnedCandidate = null;
+        applyFocus(null);
+      }
     });
 
     // ── Transição de atualização (novo run): banda + números interpolam ──

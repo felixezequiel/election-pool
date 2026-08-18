@@ -420,7 +420,7 @@ describe('structural separation (T-08 aceite)', () => {
       'windowEnd',
     ]) {
       // Procura o TOKEN JSON entre aspas (chave `"rate":` ou valor `"gaveta"`), não
-      // o substring cru: desde o MODEL_VERSION 2.0.0 o latente tem a série
+      // o substring cru: desde o MODEL_VERSION 0.0.4 o latente tem a série
       // `electorate`, que contém 'rate' por acidente de ortografia e faria o teste
       // acusar vazamento onde não há.
       const token = `"${leak}"`;

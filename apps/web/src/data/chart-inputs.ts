@@ -8,6 +8,7 @@
  * para um candidato simplesmente não gera linha/ponto.
  */
 import type { PublicData } from '@election-pool/contracts/public-data';
+import { COLOR_SLOT_MAX } from '@election-pool/contracts/constants';
 import type { PollTooltipMeta } from '../components/charts/LatentBandChart.astro';
 import type { HouseEffectRow } from '../components/charts/HouseEffectPlot.astro';
 import type { PollStripRow, PollStripValue } from '../components/charts/PollStrip.astro';
@@ -47,7 +48,7 @@ export interface TransitionStepChart {
 }
 
 /**
- * Transferência adaptada para a UI (MODEL_VERSION 2.0.0, Q-10). Nada é filtrado
+ * Transferência adaptada para a UI (MODEL_VERSION 0.0.4, Q-10). Nada é filtrado
  * aqui: todos os passos e TODOS os fluxos chegam à seção, `notIdentifiable`
  * inclusive — quem decide o tratamento visual é o componente, e a decisão é
  * mostrar, nunca esconder.
@@ -118,7 +119,7 @@ export interface ChartInputs {
     /** Domínio de tempo (ms) do gráfico de 1º turno, para alinhar outros eixos. */
     xDomain: [number, number] | undefined;
   };
-  /** Branco/nulo e não-sabe (MODEL_VERSION 2.0.0). Ponto sem medida vira `null`. */
+  /** Branco/nulo e não-sabe (MODEL_VERSION 0.0.4). Ponto sem medida vira `null`. */
   electorate: ElectorateSeriesInput[];
   /** Último retrato medido da estimulada — o outro lado do contraste (Q-14). */
   electorateLatest: ElectorateSnapshot | null;
@@ -292,6 +293,7 @@ export function buildChartInputs(data: PublicData): ChartInputs {
       candidateId: h.candidateId,
       candidateName: cand?.displayName ?? h.candidateId,
       colorSlot: cand?.colorSlot ?? 8,
+      photoPath: cand?.photoPath ?? null,
       effect: h.effect,
       lo90: h.lo90,
       hi90: h.hi90,
@@ -315,6 +317,14 @@ export function buildChartInputs(data: PublicData): ChartInputs {
           : null;
       })
       .filter((v): v is PollStripValue => v !== null);
+    // Lista sempre por intenção de voto declarada, decrescente; "Demais" (grafite,
+    // COLOR_SLOT_MAX) por último. Mesma ordem de toda a UI (docs/06 §3).
+    values.sort((a, b) => {
+      const aResidual = a.colorSlot === COLOR_SLOT_MAX;
+      const bResidual = b.colorSlot === COLOR_SLOT_MAX;
+      if (aResidual !== bResidual) return aResidual ? 1 : -1;
+      return b.value - a.value;
+    });
     const inst = institutes.get(poll.instituteId);
     return {
       tseId: poll.tseId,
@@ -345,6 +355,7 @@ export function buildChartInputs(data: PublicData): ChartInputs {
             kind: s.kind,
             displayName: s.displayName,
             colorSlot: s.kind === 'candidate' ? (candidates.get(s.id)?.colorSlot ?? null) : null,
+            photoPath: s.kind === 'candidate' ? (candidates.get(s.id)?.photoPath ?? null) : null,
           }),
         ),
         steps: data.transitions.steps.map((step) => ({

@@ -76,7 +76,7 @@ export interface ModelInput {
   /** Data de referência do run (`YYYY-MM-DD` ou ISO com offset), docs/01 §4.4. */
   referenceDate: string;
   /**
-   * Branco/nulo e não-sabe declarados por pesquisa (MODEL_VERSION 2.0.0, Q-10).
+   * Branco/nulo e não-sabe declarados por pesquisa (MODEL_VERSION 0.0.4, Q-10).
    * OBRIGATÓRIO de propósito: um chamador que esquecesse de passar produziria uma
    * série de eleitorado vazia em silêncio, e silêncio em dado de pesquisa é
    * justamente o que o R4 proíbe — que quebre no typecheck. Array vazio é valor
@@ -137,7 +137,7 @@ export function runModel(input: ModelInput): ModelOutput {
     });
   }
 
-  // 4b. Séries de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10 condição 1).
+  // 4b. Séries de branco/nulo e não-sabe (MODEL_VERSION 0.0.4, Q-10 condição 1).
   // Passam pelo MESMO suavizador dos candidatos — mesma variância amostral, mesma
   // recência, mesma banda de 90%. Duas decisões explícitas aqui:
   //  (i) NÃO são corrigidas por house effect. `h_i` é estimado sobre intenção por

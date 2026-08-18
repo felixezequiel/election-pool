@@ -7,7 +7,7 @@ const validFixture: PublicData = {
   generatedAt: '2026-08-14T10:00:00-03:00',
   nextUpdateAt: '2026-08-14T12:00:00-03:00',
   updateIntervalMinutes: UPDATE_INTERVAL_MINUTES,
-  modelVersion: '2.0.0',
+  modelVersion: '0.0.4',
   gitSha: 'a1b2c3d4e5f6',
   race: { id: 'presidencia-2026', displayName: 'Presidência da República 2026' },
   candidates: [

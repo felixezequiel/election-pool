@@ -44,18 +44,46 @@ interface Props {
 const { series, title, id, width = 960, height = 300, class: className } = Astro.props;
 
 /**
- * Margens iguais às do <ElectorateSeriesChart>: os dois gráficos aparecem na
- * mesma página, um por forma de pergunta, e margens diferentes fariam o leitor
- * comparar alturas que não estão no mesmo registro. A margem superior maior é
- * onde mora a linha de cobertura.
+ * Margens bottom/left iguais às do <ElectorateSeriesChart> — mantém as alturas no
+ * mesmo registro. A direita é MAIOR aqui porque os rótulos de fim de linha têm
+ * nomes longos ("Não citaram nenhum nome"), e cada faixa precisa dizer QUEM é sem
+ * depender da legenda. A margem superior é pequena (o gráfico usa o espaço todo):
+ * a antiga linha de cobertura no topo foi removida — os vãos já aparecem como
+ * linha interrompida + verticais pontilhadas dentro do próprio gráfico.
  */
-const margins = { top: 72, right: 20, bottom: 32, left: 40 };
+const margins = { top: 16, right: 236, bottom: 32, left: 40 };
 const geo = buildElectorateGeometry(series, width, height, margins);
 
-// Pista de cobertura por série, empilhada no topo (mesma gramática do eleitorado).
-const RAIL_TOP = 30;
-const RAIL_GAP = 26;
-const MARK_R = 3.5;
+// ── Rótulos de fim de linha (mesmo princípio do <LatentBandChart>) ──────────
+// Ancorados no ÚLTIMO ponto MEDIDO (a série tem buracos e pode terminar em vão),
+// com conector até o rótulo afastado e de-colisão vertical entre os dois.
+const plotRight = width - margins.right;
+const labelX = plotRight + 14;
+const END_LABEL_GAP = 16;
+interface SpontEndLabel {
+  key: string;
+  displayName: string;
+  mean: number;
+  xEnd: number;
+  yLine: number;
+  yLabel: number;
+}
+const endLabels: SpontEndLabel[] = geo.series
+  .filter((s) => s.latest !== null)
+  .map((s): SpontEndLabel => {
+    const l = s.latest!;
+    const y = geo.y(l.band.mean);
+    return { key: s.key, displayName: s.displayName, mean: l.band.mean, xEnd: geo.x(l.t), yLine: y, yLabel: y };
+  })
+  .sort((a, b) => a.yLine - b.yLine);
+let spontPrevY = Number.NEGATIVE_INFINITY;
+for (const l of endLabels) {
+  l.yLabel = Math.max(l.yLine, spontPrevY + END_LABEL_GAP);
+  spontPrevY = l.yLabel;
+}
+const spontLabelBottom = height - margins.bottom;
+const spontOverflow = (endLabels[endLabels.length - 1]?.yLabel ?? 0) - spontLabelBottom;
+if (spontOverflow > 0) for (const l of endLabels) l.yLabel -= spontOverflow;
 
 const isoOf = (t: number): string => new Date(t).toISOString();
 
@@ -77,7 +105,7 @@ const descParts = geo.series.map((s) => {
 });
 const desc = `Pergunta espontânea, sem lista de nomes, ao longo do tempo, com faixa de 90% dominante. ${descParts.join(
   '; ',
-)}. Data sem medida não é zero: a linha para e a lacuna é marcada na linha de cobertura.`;
+)}. Data sem medida não é zero: a linha para e a lacuna aparece como uma vertical pontilhada.`;
 
 const ruleDomain: [number, number] = [geo.yDomain[0], geo.yDomain[1]];
 
@@ -170,7 +198,7 @@ for (const s of series) {
 
       {/* Séries: um path por SEGMENTO contíguo. Buraco = ausência de path. */}
       {
-        geo.series.map((s, si) => (
+        geo.series.map((s) => (
           <g class:list={['spont-series', `spont-${s.key}`]} data-series={s.key}>
             {s.segments.map((seg) =>
               seg.single ? (
@@ -199,32 +227,28 @@ for (const s of series) {
               ),
             )}
 
-            {/* Linha de cobertura: marca cheia = medido, vazada = sem medida.
-                Na espontânea ela é ainda mais necessária que no eleitorado —
-                poucos institutos publicam o cenário, então os vãos são a regra. */}
-            <g class="spont-rail" aria-hidden="true">
-              <text class="spont-rail-label" x={margins.left} y={RAIL_TOP + si * RAIL_GAP - 7}>
-                {s.displayName}
-              </text>
-              <line
-                class="spont-rail-axis"
-                x1={margins.left}
-                y1={RAIL_TOP + si * RAIL_GAP}
-                x2={width - margins.right}
-                y2={RAIL_TOP + si * RAIL_GAP}
-              />
-              {series[si]?.points.map((p) => (
-                <circle
-                  class:list={['spont-rail-mark', { 'is-missing': p.band === null }]}
-                  cx={geo.x(p.t)}
-                  cy={RAIL_TOP + si * RAIL_GAP}
-                  r={MARK_R}
-                />
-              ))}
-            </g>
           </g>
         ))
       }
+
+      {/* Rótulos de fim de linha: cada grandeza diz QUEM é, na sua cor, ancorada
+          no último ponto medido. Mesmo recurso do gráfico de candidatos. */}
+      <g class="spont-end-labels">
+        {
+          endLabels.map((l) => (
+            <g class:list={['spont-end-label', `spont-${l.key}`]}>
+              <path
+                class="spont-end-connector"
+                d={`M ${l.xEnd} ${l.yLine} C ${l.xEnd + 10} ${l.yLine}, ${labelX - 10} ${l.yLabel}, ${labelX} ${l.yLabel}`}
+              />
+              <circle class="spont-end-dot" cx={labelX} cy={l.yLabel} r={3.5} />
+              <text class="spont-end-name" x={labelX + 8} y={l.yLabel + 3.6}>
+                {l.displayName} <tspan class="spont-end-val">{formatPct(l.mean)}%</tspan>
+              </text>
+            </g>
+          ))
+        }
+      </g>
     </svg>
   </div>
 
@@ -397,27 +421,25 @@ for (const s of series) {
     opacity: 0.6;
   }
 
-  /* Linha de cobertura (topo): cheia = medido, vazada = sem medida. */
-  .spont-rail-axis {
-    stroke: var(--border);
+  /* Rótulos de fim de linha: identidade da faixa sem depender da legenda. */
+  .spont-end-connector {
+    fill: none;
+    stroke: var(--spont-color);
     stroke-width: 1;
+    opacity: 0.5;
   }
-  .spont-rail-mark {
+  .spont-end-dot {
     fill: var(--spont-color);
-    opacity: 0.75;
   }
-  .spont-rail-mark.is-missing {
-    fill: var(--bg);
-    stroke: var(--ink-3);
-    stroke-width: 1.5;
-    stroke-dasharray: 2 2;
-    opacity: 1;
-  }
-  .spont-rail-label {
-    fill: var(--ink-2);
+  .spont-end-name {
+    fill: var(--spont-color);
     font-family: var(--font-mono);
     font-size: 11px;
-    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums lining-nums;
+    dominant-baseline: middle;
+  }
+  .spont-end-val {
+    opacity: 0.7;
   }
 
   /* Readout ------------------------------------------------------------- */

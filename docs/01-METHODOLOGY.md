@@ -288,4 +288,4 @@ Publicar esta lista na UI, na íntegra:
 - Não pondera institutos por acurácia histórica na v1
 - Não mede transferência de voto: o fluxo entre candidatos é inferido de dado
   agregado, o que não identifica para onde foi o voto de ninguém — o resultado
-  depende do prior tanto quanto do dado (MODEL_VERSION 2.0.0, Q-10)
+  depende do prior tanto quanto do dado (MODEL_VERSION 0.0.4, Q-10)

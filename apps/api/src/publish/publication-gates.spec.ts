@@ -19,7 +19,7 @@ const VALID_DATA = {
   generatedAt: '2026-08-14T15:00:00-03:00',
   nextUpdateAt: '2026-08-14T17:00:00-03:00',
   updateIntervalMinutes: 120,
-  modelVersion: '2.0.0',
+  modelVersion: '0.0.4',
   gitSha: 'abc',
   race: { id: 'presidencia-2026', displayName: 'Presidência da República 2026' },
   candidates: [],

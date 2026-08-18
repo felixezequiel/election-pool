@@ -1,5 +1,5 @@
 /**
- * Estimador de transferência (MODEL_VERSION 2.0.0, Q-10).
+ * Estimador de transferência (MODEL_VERSION 0.0.4, Q-10).
  *
  * Estes testes não tentam provar que o número está CERTO — não há como: fluxo não
  * é identificável a partir de agregado, e é justamente essa a objeção registrada

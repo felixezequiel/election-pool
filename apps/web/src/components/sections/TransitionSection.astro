@@ -1,6 +1,6 @@
 ---
 /**
- * Seção — TRANSFERÊNCIA DE VOTOS (MODEL_VERSION 2.0.0, docs/OPEN-QUESTIONS Q-10).
+ * Seção — TRANSFERÊNCIA DE VOTOS (MODEL_VERSION 0.0.4, docs/OPEN-QUESTIONS Q-10).
  *
  * A seção mais delicada do site. A Q-10 explica por quê: fluxo de voto NÃO é
  * identificável a partir de pesquisa agregada — com K estados há K² fluxos
@@ -27,7 +27,7 @@
  *    com a seção.
  */
 import Num from '../Num.astro';
-import TransitionPanel from '../charts/TransitionPanel.astro';
+import TransitionMatrix from '../charts/TransitionMatrix.astro';
 import { formatNumber, formatDayMonth, isoDateOnly } from '../charts/lib/format.js';
 import type { TransitionChart } from '../../data/chart-inputs.js';
 
@@ -45,8 +45,6 @@ const { transitions, minSteps } = Astro.props;
  * medida, que é exatamente o efeito que esta seção existe para evitar.
  */
 const steps = transitions?.steps ?? [];
-const latestStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
-const olderCount = Math.max(0, steps.length - 1);
 
 const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayName]));
 ---
@@ -110,24 +108,13 @@ const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayNa
     {
       transitions ? (
         <>
-          {latestStep && (
-            <div class="trans-panel">
-              <TransitionPanel
-                id="transitions-latest"
-                states={transitions.states}
-                flows={latestStep.flows}
-                fromDate={latestStep.fromDate}
-                toDate={latestStep.toDate}
-              />
-            </div>
-          )}
-
-          {olderCount > 0 && (
-            <p class="body-muted trans-older">
-              O painel mostra o passo mais recente. Os outros <Num>{String(olderCount)}</Num>{' '}
-              passos publicados estão na tabela abaixo, com a mesma faixa e o mesmo aviso.
-            </p>
-          )}
+          <div class="trans-panel">
+            <TransitionMatrix
+              id="transitions-matrix"
+              states={transitions.states}
+              steps={transitions.steps}
+            />
+          </div>
 
           <details class="chart-table trans-table">
             <summary>Ver todos os passos e fluxos em tabela</summary>

@@ -64,7 +64,7 @@ export type PollRow = z.infer<typeof pollRowSchema>;
 
 /**
  * Branco/nulo e não-sabe por cenário canônico, para virar `ElectorateObservation`
- * (MODEL_VERSION 2.0.0, Q-10). Vem SEPARADO de `ScenarioResultRow` porque não é
+ * (MODEL_VERSION 0.0.4, Q-10). Vem SEPARADO de `ScenarioResultRow` porque não é
  * por candidato: é do cenário inteiro. Uma linha por cenário, não por candidato —
  * juntar as duas coisas na mesma query multiplicaria a grandeza pelo número de
  * candidatos e inflaria a série.
@@ -264,7 +264,7 @@ export class RenderReadModel {
   /** Candidatos referenciados por algum resultado da corrida (docs/03 §5). */
   /**
    * Branco/nulo e não-sabe dos cenários canônicos, uma linha POR CENÁRIO
-   * (MODEL_VERSION 2.0.0, Q-10). Vira `ElectorateObservation[]` na entrada do
+   * (MODEL_VERSION 0.0.4, Q-10). Vira `ElectorateObservation[]` na entrada do
    * modelo.
    *
    * Duas decisões que valem comentário:

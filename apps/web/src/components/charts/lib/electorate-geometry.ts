@@ -1,6 +1,6 @@
 /**
  * Geometria das séries do ELEITORADO — branco/nulo e não-sabe (MODEL_VERSION
- * 2.0.0, docs/OPEN-QUESTIONS Q-10). Puro, sem DOM, como `latent-geometry.ts`.
+ * 0.0.4, docs/OPEN-QUESTIONS Q-10). Puro, sem DOM, como `latent-geometry.ts`.
  *
  * D3 só para escalas (`scaleTime`/`scaleLinear`), formas (`area`/`line`) e ticks.
  * O `<svg>` é nosso (CLAUDE.md).

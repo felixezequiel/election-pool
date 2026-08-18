@@ -29,7 +29,7 @@ export const observationsSchema = z.array(observationSchema);
 export type Observations = z.infer<typeof observationsSchema>;
 
 /**
- * Branco/nulo e não-sabe declarados por uma pesquisa (MODEL_VERSION 2.0.0, Q-10).
+ * Branco/nulo e não-sabe declarados por uma pesquisa (MODEL_VERSION 0.0.4, Q-10).
  * Vêm SEPARADOS de `Observation` de propósito: não são por candidato, são do
  * cenário inteiro. `null` significa "o instituto não publicou a grandeza" — que
  * NÃO é zero (R4). O modelo trata `null` como ausência de medida, não como 0.
@@ -46,7 +46,7 @@ export const electorateObservationSchema = z.object({
 export type ElectorateObservation = z.infer<typeof electorateObservationSchema>;
 export const electorateObservationsSchema = z.array(electorateObservationSchema);
 
-// --- Transferência de votos (MODEL_VERSION 2.0.0, Q-10) ---------------------
+// --- Transferência de votos (MODEL_VERSION 0.0.4, Q-10) ---------------------
 // LEIA A Q-10: fluxo NÃO é identificável a partir de agregado. O schema obriga a
 // carregar a banda e o veredito de identificabilidade junto de cada número, para
 // que seja impossível consumir a média sem ver a incerteza que ela esconde.
@@ -119,7 +119,7 @@ export const latentRunoffSeriesSchema = z.object({
 export type LatentRunoffSeries = z.infer<typeof latentRunoffSeriesSchema>;
 
 /**
- * Ponto da série de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10). São
+ * Ponto da série de branco/nulo e não-sabe (MODEL_VERSION 0.0.4, Q-10). São
  * estados rastreados com a mesma dignidade de um candidato. `null` = sem medida
  * suficiente naquele ponto; nunca 0 (R4).
  */

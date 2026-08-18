@@ -5,7 +5,7 @@
  * e prova, na hora da geração, que o JSON passa no schema. Depois de gerar, este
  * script pode ser descartado — o artefato versionado é o JSON.
  *
- * ── Schema versão '2' (MODEL_VERSION 2.0.0, docs/OPEN-QUESTIONS Q-10) ────────
+ * ── Schema versão '2' (MODEL_VERSION 0.0.4, docs/OPEN-QUESTIONS Q-10) ────────
  * A amostra agora exercita os campos novos, porque um campo que a amostra não
  * cobre é um campo que a UI nunca é obrigada a tratar:
  *   - `candidates[].photoPath` / `photoSourceUrl` — dois candidatos COM foto e
@@ -443,7 +443,7 @@ const methodologyNotes = [
   'Não distingue mudança real de opinião de mudança de metodologia do instituto',
   'Não detecta fraude; os indicadores da §6 têm explicações inocentes e são publicados como diagnóstico, não acusação',
   'Não pondera institutos por acurácia histórica na v1',
-  'Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado (MODEL_VERSION 2.0.0, Q-10)',
+  'Não mede transferência de voto: o fluxo entre candidatos é inferido de dado agregado, o que não identifica para onde foi o voto de ninguém — o resultado depende do prior tanto quanto do dado (MODEL_VERSION 0.0.4, Q-10)',
 ];
 
 const data = {

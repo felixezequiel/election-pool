@@ -334,7 +334,7 @@ branco/nulo/não-sabe + co-movimento descritivo", e que ela foi preterida.
 **Condições que a implementação DEVE respeitar** — sem elas o recurso vira
 exatamente o número inventado que o R4 proíbe:
 
-1. `MODEL_VERSION` vai a `2.0.0`. O espaço de estados muda (branco/nulo e
+1. `MODEL_VERSION` vai a `0.0.4`. O espaço de estados muda (branco/nulo e
    não-sabe passam a ser estados rastreados, não descarte).
 2. O prior é EXPLÍCITO, versionado em `constants.ts` e publicado em
    `params_json` e no `data.json`. Quem lê precisa poder ver de quanto foi a

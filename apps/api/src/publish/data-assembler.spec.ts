@@ -164,7 +164,7 @@ const denseInput = () => ({
   candidates,
   institutes,
   now: NOW,
-  modelVersion: '2.0.0',
+  modelVersion: '0.0.4',
   gitSha: 'abc1234',
 });
 
@@ -208,7 +208,7 @@ describe('assemblePublicData', () => {
   it('methodologyNotes are the docs/01 §10 verbatim list (our text)', () => {
     const { data } = assemblePublicData(denseInput());
     expect(data.methodologyNotes).toEqual([...__test.METHODOLOGY_NOTES]);
-    // 7 desde a MODEL_VERSION 2.0.0: a lista ganhou a limitação de transferência
+    // 7 desde a MODEL_VERSION 0.0.4: a lista ganhou a limitação de transferência
     // de voto (docs/01 §10 / Q-10). A contagem é asserção deliberada — uma nota
     // que suma daqui some da UI, e a lista é publicada NA ÍNTEGRA por exigência.
     expect(data.methodologyNotes.length).toBe(7);

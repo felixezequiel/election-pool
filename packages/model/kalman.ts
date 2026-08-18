@@ -332,7 +332,7 @@ function smoothCandidate(
   return { mean: smMean, variance: smVar };
 }
 
-// --- Séries de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10) -----------
+// --- Séries de branco/nulo e não-sabe (MODEL_VERSION 0.0.4, Q-10) -----------
 //
 // Branco/nulo e não-sabe deixam de ser descarte e viram ESTADOS de primeira
 // classe (Q-10 condição 1). A matemática é EXATAMENTE a mesma dos candidatos —

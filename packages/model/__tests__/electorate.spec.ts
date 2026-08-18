@@ -1,5 +1,5 @@
 /**
- * Séries de branco/nulo e não-sabe (MODEL_VERSION 2.0.0, Q-10 condição 1).
+ * Séries de branco/nulo e não-sabe (MODEL_VERSION 0.0.4, Q-10 condição 1).
  *
  * O que estes testes protegem, em ordem de importância:
  *

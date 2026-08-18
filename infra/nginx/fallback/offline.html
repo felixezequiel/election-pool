@@ -1,0 +1,185 @@
+<!doctype html>
+<!--
+  Página de FALLBACK do nginx (T-14). Servida quando não há site publicado (`dist/`
+  ainda não existe: pré-primeira publicação ou render abortado) e em qualquer 404/50x.
+  Vive FORA de `dist` (montada em /usr/share/nginx/fallback) para existir mesmo sem
+  publicação. É conteúdo NOSSO — não viola o R3.
+
+  AUTOSSUFICIENTE de propósito: nenhum CSS/fonte/JS externo. Os assets do site vivem
+  em `dist/_astro/*` e podem não existir aqui. Os tokens abaixo são um subconjunto de
+  apps/web/src/styles/tokens.css (docs/05) — mesma marca, mesma paleta, dark-first com
+  tema claro por prefers-color-scheme.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>election-pool — preparando esta edição</title>
+    <style>
+      :root {
+        --bg: #0b0d11;
+        --ink: #f3f5f8;
+        --ink-2: #a6adba;
+        --ink-3: #656c79;
+        --accent: #6e9bff;
+        --border: rgba(255, 255, 255, 0.09);
+        --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+        --font-body: 'Source Serif 4', Georgia, serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
+        --rhythm: 8px;
+        --content-max: 720px;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #fbfbfd;
+          --ink: #12141a;
+          --ink-2: #565c67;
+          --ink-3: #8a909b;
+          --accent: #2f5bd8;
+          --border: rgba(12, 14, 20, 0.1);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        color-scheme: dark light;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-body);
+        font-size: 1.0625rem;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        flex-direction: column;
+      }
+      .wrap {
+        width: 100%;
+        max-width: var(--content-max);
+        margin-inline: auto;
+        padding: calc(var(--rhythm) * 3) var(--rhythm) calc(var(--rhythm) * 6);
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .brand {
+        font-family: var(--font-mono);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: var(--ink);
+        text-decoration: none;
+        padding-block: calc(var(--rhythm) * 2);
+        border-bottom: 1px solid var(--border);
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-block: calc(var(--rhythm) * 6);
+      }
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6ch;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--ink-2);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .dot {
+          animation: pulse 1.8s var(--ease, ease-in-out) infinite;
+        }
+        @keyframes pulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.3;
+          }
+        }
+      }
+      h1 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: clamp(1.9rem, 3.6vw, 2.8rem);
+        line-height: 1.1;
+        margin: calc(var(--rhythm) * 1.5) 0 0;
+        max-width: 20ch;
+      }
+      .lead {
+        margin-top: calc(var(--rhythm) * 3);
+        max-width: 58ch;
+        color: var(--ink);
+      }
+      .muted {
+        margin-top: calc(var(--rhythm) * 3);
+        max-width: 58ch;
+        color: var(--ink-2);
+        font-size: 0.9375rem;
+      }
+      .actions {
+        margin-top: calc(var(--rhythm) * 4);
+      }
+      a.reload {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.9375rem;
+        color: var(--accent);
+        text-decoration: none;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: calc(var(--rhythm) * 1.25) calc(var(--rhythm) * 2);
+      }
+      a.reload:hover {
+        border-color: var(--accent);
+      }
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+      footer {
+        color: var(--ink-3);
+        font-size: 0.75rem;
+        font-family: var(--font-mono);
+        border-top: 1px solid var(--border);
+        padding-top: calc(var(--rhythm) * 2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="brand" href="/">election-pool</a>
+      <main>
+        <p class="kicker"><span class="dot" aria-hidden="true"></span>Site em preparação</p>
+        <h1>Estamos preparando esta edição.</h1>
+        <p class="lead">
+          O pipeline está consultando o registro do TSE e os institutos e processando as pesquisas.
+          Este site só publica número quando o modelo tem base para produzir um — então ainda não há
+          o que mostrar.
+        </p>
+        <p class="muted">
+          Nada aqui é preenchido à mão. A página fica disponível assim que houver dado suficiente —
+          atualize em instantes.
+        </p>
+        <p class="actions"><a class="reload" href=".">Recarregar</a></p>
+      </main>
+      <footer>election-pool — agregador de pesquisas eleitorais</footer>
+    </div>
+  </body>
+</html>
