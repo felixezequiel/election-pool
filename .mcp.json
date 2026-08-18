@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "coolify": {
+      "command": "node",
+      "args": ["/home/felix/personal/site-creator/packages/coolify-mcp/server.mjs"],
+      "env": {
+        "COOLIFY_BASE_URL": "http://31.97.243.112:8000",
+        "COOLIFY_TOKEN_FILE": "/home/felix/personal/.coolify_token"
+      }
+    }
+  }
+}
