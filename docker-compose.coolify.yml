@@ -135,12 +135,12 @@ services:
       - traefik.http.routers.electionpool-eleicoes-https.middlewares=gzip
       - traefik.http.routers.electionpool-eleicoes-https.service=electionpool
       - traefik.http.services.electionpool.loadbalancer.server.port=80
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:80/']
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+    # SEM healthcheck de conteúdo de propósito: o Traefik NÃO registra o backend de um
+    # container cujo healthcheck do Docker não está "healthy", e o nginx responde 404
+    # (a página de marca offline.html, com status preservado) enquanto o `api` ainda não
+    # publicou o `dist`. Um healthcheck em `GET /` reprovaria esse estado VÁLIDO e
+    # deixaria o Traefik sem backend ("no available server" + sem desafio ACME → sem
+    # TLS). nginx é PID 1: se cair, o container cai e o restart cuida.
 
 networks:
   # Rede gerenciada pelo Coolify onde o Traefik e o Postgres compartilhado vivem.
