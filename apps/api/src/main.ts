@@ -354,7 +354,18 @@ const main = async (): Promise<void> => {
   //     aqui — ANTES do pipeline, para o ModelJob já enxergá-lo. Idempotente
   //     (só carrega com poll_results vazio); o raw depois se regenera sozinho (R5).
   if (envFlag('FIRST_LOAD_ON_BOOT', false)) {
-    await maybeFirstLoad(pool);
+    try {
+      await maybeFirstLoad(pool);
+    } catch (err) {
+      // NÃO-FATAL: uma falha na carga não pode derrubar o boot inteiro (o site
+      // sairia do ar em vez de ficar no estado vazio). Loga alto (R4) e segue —
+      // o pipeline/render abaixo ainda rodam.
+      logJson({
+        level: 'error',
+        event: 'first_load_failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   const orch = createOrchestrator({ db, pool, publishBaseDir });
@@ -431,6 +442,23 @@ const main = async (): Promise<void> => {
   //    `job_runs` do caminho agendado — não é um atalho, é o mesmo caminho.
   //    Depois do handler de shutdown de propósito: um Ctrl+C durante a passagem
   //    (o harvest é lento — 1 req/10s por host) precisa ser atendido.
+  // PUBLICA PRIMEIRO, ingere depois. O render (RENDER_ON_BOOT) roda ANTES do
+  // pipeline de ingestão, sobre o dado JÁ presente (carga manual / ciclo anterior)
+  // e AINDA intacto (o discovery não expirou registro nenhum). Motivo: em produção
+  // o harvest é lento (tenta fontes barradas por WAF, com retries de 1 req/10s) e,
+  // sendo sequencial, atrasava — ou, se travado, impedia — a publicação de um dado
+  // que já estava pronto. Rodamos modelo + render aqui para ter estimativas frescas
+  // e o site no ar em segundos. SEM relaxar gate: o RenderJob aplica integralmente
+  // os gates de docs/07 §6 (cobertura, build limpo, frescor, prosa de terceiros) e
+  // aborta sozinho se algum reprovar. O M-7 (backtest 2022, Q-07) reprova, então o
+  // ModelJob não dispara o render sozinho — por isso o disparamos explícito aqui.
+  if (envFlag('RENDER_ON_BOOT', false)) {
+    await orch.runJob(JOB_NAME.model, orch.jobs.model);
+    await orch.runJob(JOB_NAME.render, orch.jobs.render);
+  }
+
+  // Passagem de ingestão (docs/02 §3). Pode demorar (harvest lento em prod); o site
+  // já está no ar pelo bloco acima, então nada aqui bloqueia a publicação.
   if (envFlag('RUN_JOBS_ON_BOOT', false)) {
     logJson({ level: 'info', event: 'boot_pipeline_start' });
     // Fotos primeiro: o data.json do render lê `candidates.photo_path`, então
@@ -438,23 +466,10 @@ const main = async (): Promise<void> => {
     await orch.runJob(JOB_NAME.candidatePhotos, orch.jobs.candidatePhotos);
     await orch.runJob(JOB_NAME.discovery, orch.jobs.discovery);
     await orch.runJob(JOB_NAME.harvest, orch.jobs.harvest);
-    // O ModelJob dispara o render sozinho quando os gates passam (docs/02 §3.4).
+    // O ModelJob dispara o render sozinho quando os gates passam (docs/02 §3.4);
+    // com dado novo do harvest, republica com números atualizados.
     await orch.runJob(JOB_NAME.model, orch.jobs.model);
     logJson({ level: 'info', event: 'boot_pipeline_done' });
-  }
-
-  // RENDER_ON_BOOT roda o RenderJob INDEPENDENTE de RUN_JOBS_ON_BOOT. Motivo (deploy):
-  // um job de ingestão lento ou TRAVADO (ex.: discovery esperando o TSE sem timeout)
-  // não pode impedir que a página — mesmo o "estado vazio explicado" — chegue ao ar.
-  // Antes o render vivia DENTRO do bloco de jobs, então um discovery pendurado o
-  // bloqueava e o nginx só servia o fallback. O gate M-7 (backtest 2022) REPROVA hoje
-  // (docs/OPEN-QUESTIONS Q-07), então o ModelJob não dispara o render sozinho; esta
-  // flag o roda mesmo assim, SEM relaxar gate algum: o RenderJob aplica integralmente
-  // os gates de docs/07 §6 (cobertura do modelo, build limpo, frescor, prosa de
-  // terceiros) e aborta sozinho se algum reprovar. Em produção, com dado real passando
-  // pelos gates, fica `false`.
-  if (envFlag('RENDER_ON_BOOT', false)) {
-    await orch.runJob(JOB_NAME.render, orch.jobs.render);
   }
 };
 
