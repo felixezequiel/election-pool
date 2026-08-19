@@ -61,8 +61,18 @@ import { data } from '../data/load.js';
               da composição desigual de quem publicou em cada semana. O que isso <strong>não</strong>{' '}
               significa: que o consenso seja não-enviesado em relação à urna. Se todos os
               institutos errarem na mesma direção — como ocorreu no primeiro turno de
-              <Num>2022</Num> — o consenso erra junto, e o modelo não tem como saber. Esta
-              limitação não é letra miúda; é o principal ponto cego do método.
+              <Num>2022</Num>, quando o segundo colocado foi subestimado em cerca de
+              <Num>5</Num> pontos por quase todo mundo — o consenso erra junto, e nenhum instituto
+              a mais no consenso conserta isso. Esta limitação não é letra miúda; é o principal
+              ponto cego do método.
+            </p>
+            <p class="body">
+              A diferença é qual erro a agregação apaga. Juntar muitas pesquisas cancela o
+              <strong>ruído aleatório</strong> — o vaivém de amostra para amostra, que sobe num
+              instituto e desce no outro. Não cancela o <strong>viés comum</strong>: o erro que
+              empurra todo mundo para o mesmo lado ao mesmo tempo. Média de dez pesquisas que
+              erram na mesma direção continua errando naquela direção. Por isso a agregação é
+              mais precisa que uma pesquisa isolada, mas tem um piso que ela não atravessa.
             </p>
             <p class="body">
               Por isso não ancoramos os house effects no erro histórico contra as urnas. Medir
@@ -73,9 +83,14 @@ import { data } from '../data/load.js';
               calculado e exibido como contexto, mas não entra no modelo na versão atual.
             </p>
             <p class="body">
-              A banda de incerteza é a resposta honesta a esse limite: quando o modelo não sabe,
-              a faixa fica larga. Largura honesta é o produto — não um número único fingindo
-              precisão.
+              A banda de incerteza é a resposta honesta a esse limite. Ela soma duas coisas: o
+              erro amostral de sempre e uma reserva para o viés comum — o tanto que todo o
+              consenso pode estar deslocado na mesma direção, calibrado pelo que se viu em
+              <Num>2022</Num>. É por isso que a faixa de <Num>90</Num>% do primeiro turno tem cerca
+              de <Num>11</Num> pontos de largura, uns <Num>5</Num> pontos para cada lado da média,
+              e não os <Num>2</Num> pontos que a conta amostral sozinha sugeriria. Não é imprecisão
+              gratuita: é a resolução real de uma pesquisa de primeiro turno no Brasil. Um número
+              único, com faixa estreita, fingiria uma precisão que a pesquisa eleitoral não tem.
             </p>
           </div>
         </div>

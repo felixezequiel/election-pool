@@ -39,6 +39,12 @@ const hasElectorate = electorate.some((s) => s.points.some((p) => p.band !== nul
       discreta é a média. Os pontos por trás são as pesquisas individuais que alimentam a
       estimativa.
     </p>
+    <p class="body-muted latent-note">
+      A faixa é larga de propósito — cerca de <Num>5</Num> pontos para cada lado. Ela conta não
+      só o erro de amostra, mas a chance de todos os institutos errarem juntos para o mesmo lado,
+      como aconteceu em <Num>2022</Num>. Juntar pesquisas reduz o acaso; não reduz esse erro
+      compartilhado. <a href="/metodologia">Por que a faixa é assim</a>.
+    </p>
   </div>
 
   {
@@ -89,6 +95,10 @@ const hasElectorate = electorate.some((s) => s.points.some((p) => p.band !== nul
     max-width: 24ch;
   }
   .latent-lead {
+    margin-top: calc(var(--rhythm) * 2);
+    max-width: 62ch;
+  }
+  .latent-note {
     margin-top: calc(var(--rhythm) * 2);
     max-width: 62ch;
   }

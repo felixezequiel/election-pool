@@ -53,7 +53,7 @@ const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayNa
   <div class="container">
     <p class="label">Transferência de votos</p>
     <h2 id="transitions-title" class="display-l trans-heading">
-      Para onde o voto foi — sob suposição, não medida.
+      Para onde o voto foi — inconclusivo, e nós dizemos por quê.
     </h2>
 
     {/*
@@ -63,10 +63,11 @@ const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayNa
     */}
     <div class="trans-alert" role="note" aria-labelledby="trans-alert-title">
       <p class="label trans-alert-eyebrow" id="trans-alert-title">
-        Estimativa de modelo — não é medida
+        Inconclusivo — incerteza alta demais
       </p>
       <p class="display-m trans-alert-lead">
-        A maior parte do que aparece aqui vem de uma suposição nossa, não das pesquisas.
+        A incerteza aqui é grande demais para uma estimativa confiável — e a maior parte do que
+        aparece vem de uma suposição nossa, não das pesquisas.
       </p>
       <p class="body trans-alert-body">
         Pesquisa agregada informa o tamanho de cada grupo em cada data; ela nunca entrevista a
@@ -98,10 +99,19 @@ const nameOf = new Map((transitions?.states ?? []).map((s) => [s.id, s.displayNa
       }
 
       <p class="body trans-alert-body">
+        Com o modelo atual, a faixa de incerteza de cada relação ficou larga demais para
+        sustentar um número: não é raro uma mesma transferência caber em algo como
+        <Num>2</Num>% a <Num>88</Num>% do grupo de origem. Uma faixa desse tamanho não é
+        estimativa — é a admissão de que, com pesquisa agregada, <strong>não dá para dizer com
+        confiança para onde o voto foi</strong>. Trate os números abaixo como inconclusivos, não
+        como leitura.
+      </p>
+      <p class="body trans-alert-body">
         Cada relação abaixo aparece com a sua faixa de <Num>90</Num>% em escala real, e o zero
         está marcado: o que o dado não distingue de zero é sinalizado, porque o movimento pode
         não existir. Mas esse selo mede só o ruído amostral — ele <strong>não</strong> diz
-        quanto do valor veio do prior. Relação sem selo não é relação medida.
+        quanto do valor veio do prior. Relação sem selo não é relação medida, e nenhuma delas,
+        com faixa tão larga, é relação confiável.
       </p>
     </div>
 
