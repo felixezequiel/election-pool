@@ -124,7 +124,10 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
   const failureCounter = new AdapterFailureCounter();
   const jobRuns = new JobRunsRepository(db);
   const storage = new RawStorage();
-  const http = new HttpClient();
+  // Proxy de saída (OUTBOUND_PROXY_URL): deploy em datacenter é barrado por WAF das
+  // fontes (403 do TSE em prod). Com o proxy, discovery e harvest saem por um IP
+  // não-datacenter. Ausente ⇒ fetch direto (dev/local segue igual).
+  const http = new HttpClient({ proxyUrl: process.env['OUTBOUND_PROXY_URL'] });
   const paths = resolvePublishPaths(deps.publishBaseDir);
   const webDir = deps.webDir ?? WEB_DIR;
   const alertSink =

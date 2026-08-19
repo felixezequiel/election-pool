@@ -20,6 +20,7 @@
  * injetáveis para teste sem rede e com fake timers.
  */
 
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { PerHostRateLimiter } from './rate-limiter.js';
 import { RobotsCache } from './robots.js';
 import type { RobotsFetcher } from './robots.js';
@@ -130,6 +131,30 @@ interface HttpClientDeps {
   rateLimiter?: PerHostRateLimiter;
   clock?: HttpClientClock;
   userAgent?: string;
+  /**
+   * URL de um proxy de saída (ex.: `http://user:pass@host:porta`). Deploy em
+   * datacenter é barrado por WAF das fontes (403 do TSE observado em prod); com o
+   * proxy, o tráfego sai por um IP não-datacenter. Vazio/ausente ⇒ fetch direto.
+   */
+  proxyUrl?: string | undefined;
+}
+
+/**
+ * Fetch que sai por um PROXY. Usa o `fetch` do PRÓPRIO undici + `ProxyAgent`, não o
+ * `fetch` global do Node: o dispatcher do undici externo é INCOMPATÍVEL com o fetch
+ * global (undici interno ≠ externo — dá "invalid onRequestStart"), então trocamos o
+ * fetch inteiro, não só o dispatcher. Sem proxy configurado, devolve `null` e o
+ * cliente segue no fetch global (comportamento idêntico ao de antes).
+ */
+function buildProxiedFetch(proxyUrl: string | undefined): FetchLike | null {
+  if (proxyUrl === undefined || proxyUrl.length === 0) return null;
+  const dispatcher = new ProxyAgent(proxyUrl);
+  const proxied = (url: string, init: Parameters<FetchLike>[1]): ReturnType<FetchLike> =>
+    undiciFetch(url, {
+      ...init,
+      dispatcher,
+    } as Parameters<typeof undiciFetch>[1]) as unknown as ReturnType<FetchLike>;
+  return proxied;
 }
 
 const isRetryableStatus = (status: number): boolean => status >= 500 && status < 600;
@@ -159,7 +184,9 @@ export class HttpClient {
   constructor(deps: HttpClientDeps = {}) {
     this.clock = deps.clock ?? realClock;
     this.userAgent = deps.userAgent ?? DEFAULT_USER_AGENT;
-    this.fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+    // Precedência: fetch injetado (teste) > fetch via proxy (se configurado) > fetch global.
+    this.fetchImpl =
+      deps.fetchImpl ?? buildProxiedFetch(deps.proxyUrl) ?? (globalThis.fetch as unknown as FetchLike);
     this.rateLimiter = deps.rateLimiter ?? new PerHostRateLimiter();
     // O RobotsCache reusa este mesmo cliente para buscar robots.txt, mas sem
     // recursão de robots (o fetcher abaixo é um GET cru, já com UA + rate limit).
