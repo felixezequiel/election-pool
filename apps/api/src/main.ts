@@ -51,7 +51,7 @@ import { buildHealthSnapshot } from './health/health.js';
 import { isEntrypoint } from './is-entrypoint.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const { Pool } = pg;
 
@@ -338,6 +338,52 @@ const maybeFirstLoad = async (pool: pg.Pool): Promise<void> => {
   }
 };
 
+/**
+ * Telemetria de operação: grava um instantâneo do estado (contagens + último run
+ * de cada job com status/erro/métricas) num arquivo que o nginx serve em
+ * `/_diag.json`. É a ÚNICA janela de diagnóstico do boot em produção — o stdout do
+ * container não é acessível pela API do Coolify (ela só devolve o nginx). Não-fatal
+ * e não é dado de terceiro (R3): é telemetria nossa (contagens + métricas de job).
+ */
+const writeDiag = async (pool: pg.Pool, publishBaseDir: string): Promise<void> => {
+  try {
+    const counts = await pool.query<{
+      poll_results: number;
+      poll_registrations: number;
+      institutos: number;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM public.poll_results)::int                          AS poll_results,
+         (SELECT count(*) FROM public.poll_registrations)::int                    AS poll_registrations,
+         (SELECT count(DISTINCT institute_id) FROM public.poll_registrations)::int AS institutos`,
+    );
+    const jobs = await pool.query<{
+      job: string;
+      status: string;
+      finished_at: string | null;
+      error: string | null;
+      metrics_json: unknown;
+    }>(
+      `SELECT DISTINCT ON (job) job, status, finished_at, error, metrics_json
+         FROM public.job_runs ORDER BY job, started_at DESC`,
+    );
+    const diag = {
+      ts: new Date().toISOString(),
+      gitSha: process.env['GIT_SHA'] ?? null,
+      counts: counts.rows[0] ?? null,
+      jobs: jobs.rows,
+    };
+    writeFileSync(join(publishBaseDir, '_diag.json'), JSON.stringify(diag, null, 2));
+    logJson({ level: 'info', event: 'diag_written', counts: counts.rows[0] });
+  } catch (err) {
+    logJson({
+      level: 'error',
+      event: 'diag_write_failed',
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+};
+
 // --- bootstrap (main real) --------------------------------------------------
 
 const main = async (): Promise<void> => {
@@ -485,6 +531,10 @@ const main = async (): Promise<void> => {
     await orch.runJob(JOB_NAME.model, orch.jobs.model);
     logJson({ level: 'info', event: 'boot_pipeline_done' });
   }
+
+  // Telemetria de boot: grava /_diag.json (servido pelo nginx) com contagens +
+  // último run de cada job. Última coisa do boot, para refletir tudo acima.
+  await writeDiag(pool, publishBaseDir);
 };
 
 // Só executa o bootstrap quando rodado como entrypoint (não ao ser importado por
