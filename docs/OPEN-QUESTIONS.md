@@ -210,6 +210,74 @@ número como evidência. A decisão entre (a)/(b)/(c) é de metodologia.
 
 **Decide:** Felix.
 
+### RESOLUÇÃO (2026-08-19, MODEL_VERSION 0.0.4 ⇒ 0.0.5) — escrita ANTES de rodar (R1)
+
+Escolhida a opção **(c)** na sua forma mínima e estrutural: adicionar ao modelo um
+**estado latente de VIÉS COMUM `b_t`** — não inflar `σ_house_extra` (opção (b), que já
+foi tentada e ABANDONADA: só alargar a variância de observação é LAVADO pela média de
+dezenas de pesquisas, porque essa variância é tratada como ruído INDEPENDENTE por
+pesquisa; ver o diagnóstico abaixo). O erro que reprova o 1º turno de 2022 não é ruído
+por pesquisa: é um deslocamento CORRELACIONADO que atingiu todos os institutos para o
+mesmo lado (~5 p.p. no vice). Um termo independente não representa isso; um estado
+comum, sim.
+
+**Formulação de `b_t` (a documentar em docs/01 §4.5).** A equação de observação passa
+de `y_it = μ_t + h_i + ε_it` para:
+
+```
+y_it = μ_t + h_i + b_t + ε_it
+b_t ~ N(0, σ_common²)   (nível comum a TODOS os institutos no instante t)
+```
+
+`b_t` é UM deslocamento por instante `t`, compartilhado por todas as pesquisas daquele
+momento — distinto do `h_i`, que é por instituto e restrito a `Σ w_i h_i = 0`. O
+soma-zero de `h_i` corrige, por construção, apenas o viés RELATIVO entre institutos;
+por definição ele não vê o componente que é igual para todos (§1.1). Esse componente é
+o `b_t`.
+
+**Por que `b_t` NÃO é lavado pela média (o ponto inteiro).** `b_t` e `μ_t` são
+CONFUNDIDOS exatamente como o problema de identificação de §1.1: somar `c` a todo `b_t`
+e subtrair `c` de todo `μ_t` produz os mesmos `y_it`. Logo NENHUM conjunto de
+pesquisas, por maior que seja, reduz a incerteza sobre onde o nível comum realmente
+está — a variância a posteriori de `b_t` permanece igual à do prior. Como `b_t` entra
+idêntico em todo candidato (correlação = 1), a sua variância se SOMA à variância de
+cada estimativa: `Var(μ̂_t + b̂_t) = Var(μ̂_t) + σ_common²`. É por isso que ela propaga
+para a banda e NÃO encolhe com mais dado. Implementação (pura, sem I/O): o Kalman
+escalar por candidato roda como hoje (estima `μ_t` sob a identificação de §1.1); no
+fechamento da banda somamos `σ_common²` à variância suavizada de cada candidato, de
+modo que `semilargura = z_90 · sqrt(Var_suav + σ_common²)`. É a forma correta E a menos
+invasiva: `μ_t` e `h_i` saem IDÊNTICOS (a mediana/ponto não muda), só a banda alarga —
+não há correção direcional por candidato (R2), o `b_t` é um viés de NÍVEL comum.
+
+**Constante nova e critério do número (princípio, NÃO ajuste para passar).** O erro real
+de nível das pesquisas presidenciais brasileiras de 1º turno é da ordem de **3–5 p.p.**
+(2022 R1: vice subestimado ~5 p.p.; erro médio histórico de nível ~3–4 p.p.). Uma banda
+IC90 honesta deve PLAUSIVELMENTE cobrir um erro desse tamanho VINDO SÓ do termo comum.
+Igualo a semilargura IC90 do termo comum, `z_90 · σ_common`, ao TOPO da faixa (~5 p.p.,
+o caso de 2022): `σ_common = 5 / 1,645 ≈ 3,04` ⇒ arredondado para **`SIGMA_COMMON_BIAS =
+3.0` p.p.** (`packages/contracts/src/constants.ts`), semilargura ~4,93 p.p. só do viés
+comum. Escolho o topo, não o meio, da faixa de propósito: o gate existe para o pior caso
+de viés comum, e 2022 R1 foi o pior caso. Rodo UMA vez por este critério; NÃO itero o
+número até passar.
+
+**`SIGMA_HOUSE_EXTRA` volta ao valor honesto por-instituto.** Fica em **1.0 p.p.** (o
+valor commitado da 0.0.4), NÃO inflado. Com o `b_t` modelando o erro comum, o
+`σ_house_extra` recupera o seu significado original de §4.2 — variância residual
+IDIOSSINCRÁTICA por pesquisa, que legitimamente É lavada pela média. Inflá-lo (a
+tentativa 2.5 p.p. anterior) era usar um termo independente para simular um efeito
+correlacionado: errado por construção. Cada termo passa a modelar a coisa certa: `deff`
+= projeto amostral, `σ_house_extra` = ruído por pesquisa, `h_i` = viés relativo entre
+institutos, `b_t` = viés comum de nível.
+
+**Limitação assumida (honestidade, R1).** `σ_common` é um PRIOR fixo de magnitude do
+viés comum, não estimado dos dados (não é identificável a partir de agregado, pela mesma
+razão de §1.1 — só uma âncora na urna o identificaria, e §1.2 recusa isso na v1). É a
+hipótese defensável mais simples: "existe um viés de nível comum cuja magnitude típica é
+da ordem do erro histórico". Se o backtest passar, é por LARGURA honesta (docs/07 §4.3),
+não porque o modelo "adivinhou" a direção do erro — o `b_t` é simétrico e não sabe para
+que lado 2022 errou. A solução completa (estimar a distribuição de `b_t` num posterior
+bayesiano, Q-01) continua em aberto.
+
 ---
 
 ## Q-08 — EXDEV no deploy: `astro build` cruza filesystem ao publicar (T-14)

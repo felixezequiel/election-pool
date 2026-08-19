@@ -16,7 +16,13 @@
 // séries rastreadas e o modelo ganha estimativa de transferência entre estados. A
 // justificativa e as sete condições que a implementação deve respeitar estão na
 // Q-10, escrita antes desta linha existir.
-export const MODEL_VERSION = '0.0.4';
+// 0.0.5 (docs/OPEN-QUESTIONS.md Q-07 / docs/01 §4.5): o modelo ganha um estado
+// latente de VIÉS COMUM `b_t` — um deslocamento de nível compartilhado por TODOS os
+// institutos que o soma-zero (§1.1) não corrige. Sua variância (SIGMA_COMMON_BIAS²)
+// PROPAGA para a banda sem ser lavada pela média, porque é correlacionada, não ruído
+// por pesquisa. `μ_t`/`h_i` saem idênticos; só a banda alarga. Justificativa e
+// critério do número escritos ANTES de rodar o backtest (R1).
+export const MODEL_VERSION = '0.0.5';
 
 // === Série latente / processo (docs/01 §2) ==================================
 
@@ -38,8 +44,23 @@ export const CI_Z_90 = 1.6448536269514722;
 // cotas com estratificação). Prior fixo.
 export const DEFF = 1.5;
 
-// docs/01 §4.2: σ_house_extra = 1.0 p.p. — variância residual não capturada por h_i.
+// docs/01 §4.2: σ_house_extra = 1.0 p.p. — variância residual IDIOSSINCRÁTICA por
+// pesquisa, não capturada por h_i. É ruído INDEPENDENTE (legitimamente lavado pela
+// média); o viés COMUM a todos os institutos NÃO mora aqui — mora em
+// SIGMA_COMMON_BIAS (docs/01 §4.5). Fica em 1.0 de propósito: inflá-lo para simular
+// viés comum seria usar um termo independente para um efeito correlacionado (errado).
 export const SIGMA_HOUSE_EXTRA = 1.0;
+
+// docs/01 §4.5 (MODEL_VERSION 0.0.5, Q-07): σ_common = 3.0 p.p. — desvio-padrão do
+// estado latente de VIÉS COMUM b_t, o deslocamento de nível compartilhado por TODOS
+// os institutos que o soma-zero (§1.1) não corrige. Prior fixo, calibrado por
+// PRINCÍPIO: a semilargura IC90 vinda só deste termo, CI_Z_90 · 3.0 ≈ 4.9 p.p., cobre
+// o erro real de nível do 1º turno (~3–5 p.p.; 2022 R1 subestimou o vice ~5 p.p.).
+// Escolhido o TOPO da faixa (o gate existe para o pior caso de viés comum). Por ser
+// correlacionado, propaga para a banda sem ser lavado pela média (docs/01 §4.5). NÃO é
+// direcional por candidato (R2): é simétrico e não sabe o lado do erro. Origem do
+// número e critério escritos ANTES de rodar (R1): docs/OPEN-QUESTIONS.md Q-07.
+export const SIGMA_COMMON_BIAS = 3.0;
 
 // === Ponderação por recência (docs/01 §4.4) =================================
 

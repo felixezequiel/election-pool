@@ -1,21 +1,29 @@
 /**
- * Condição 7 da Q-10, provada em vez de prometida.
+ * Condição 7 da Q-10 ("nada de transferência/eleitorado entra em `μ_t` nem nos
+ * house effects; o fluxo LÊ a série latente e não a realimenta") + regressão do
+ * latente.
  *
- * "Nada de transferência entra na estimativa de `μ_t` nem nos house effects. O
- * modelo de fluxo LÊ a série latente e não a realimenta. Assim, um erro no fluxo
- * não contamina o número principal do site."
+ * ATENÇÃO — dois testes que provam COISAS DIFERENTES; não os confunda:
  *
- * Duas provas, porque uma sozinha não basta:
+ *  1. ISOLAMENTO (a prova real da condição 7). Rodar com e sem
+ *     `electorateObservations` tem de dar EXATAMENTE o mesmo `latent.firstRound`,
+ *     `latent.runoffs` e `houseEffects`. É uma comparação de dois runs na MESMA
+ *     versão do modelo, então NÃO depende de nenhum baseline congelado e continua
+ *     válida a cada mudança de modelo. Se a chegada de branco/nulo/não-sabe movesse
+ *     o número principal um bit, aqui quebra.
+ *  2. REGRESSÃO DO LATENTE (baseline congelado). `__fixtures__/pre-v2-latent.json`
+ *     guarda a série latente da versão CORRENTE do modelo para esta entrada fixa.
+ *     Serve para pegar mudança NÃO INTENCIONAL no latente. Uma mudança de modelo
+ *     DELIBERADA (com MODEL_VERSION nova e justificativa, R1) regenera este
+ *     baseline — é o caso da 0.0.5, que somou o viés comum `b_t` e alargou a banda
+ *     de propósito (as MÉDIAS e os house effects continuam idênticos; ver o `note`
+ *     no arquivo). Este teste NÃO prova "não vaza" — isso é o teste 1; ele prova
+ *     "não mudou por acidente".
  *
- *  1. CONTRA O PASSADO. `__fixtures__/pre-v2-latent.json` foi gerado com o código
- *     ANTERIOR ao MODEL_VERSION 0.0.4, rodando esta mesma entrada. Se `μ_t` ou
- *     `h_i` tivessem mudado um bit por causa da v2, a comparação abaixo quebra.
- *     É a única forma de testar "saiu idêntico ao que saía antes": guardar o que
- *     saía antes.
- *  2. CONTRA A ENTRADA NOVA. Rodar com e sem `electorateObservations` tem de dar
- *     exatamente o mesmo `latent.firstRound`, `latent.runoffs` e `houseEffects`.
- *     Branco/nulo e não-sabe são estados rastreados, não uma correção do número
- *     principal.
+ * Antes da 0.0.5 estas duas coisas estavam FUNDIDAS num só teste "saiu idêntico ao
+ * que saía antes", o que fazia uma mudança legítima de modelo parecer violação da
+ * condição 7. Foram separadas: o isolamento (teste 1) é o invariante permanente; a
+ * regressão (teste 2) acompanha a versão.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -33,6 +41,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 interface FrozenBaseline {
+  modelVersion?: string;
   seed: number;
   referenceDate: string;
   firstRound: unknown;
@@ -169,7 +178,11 @@ function electorateObs(day: number, instituteId: string): ElectorateObservation 
 }
 
 describe('isolamento do modelo de transferência (Q-10 condição 7)', () => {
-  it('μ_t e house effects saem IDÊNTICOS ao baseline pré-0.0.4 congelado', () => {
+  it('a série latente e os house effects batem com o baseline congelado da versão corrente', () => {
+    // REGRESSÃO (teste 2 do cabeçalho): pega mudança NÃO INTENCIONAL no latente. O
+    // baseline é da versão corrente do modelo; uma mudança deliberada (nova
+    // MODEL_VERSION + justificativa, R1) regenera o arquivo. NÃO é a prova de "não
+    // vaza" — essa é o teste de dois runs abaixo.
     const frozen = loadFrozen();
     const input: ModelInput = {
       observations: frozenObservations(),
@@ -177,6 +190,11 @@ describe('isolamento do modelo de transferência (Q-10 condição 7)', () => {
       electorateObservations: [],
     };
     const out = runModel(input);
+
+    // Sanidade: o baseline é da MESMA versão do modelo. Se alguém subir a
+    // MODEL_VERSION sem regenerar o arquivo, isto aponta a causa em vez de deixar a
+    // comparação de série falhar com um diff enorme e mudo.
+    expect(out.modelVersion).toBe(frozen.modelVersion);
 
     expect(JSON.stringify(out.latent.firstRound)).toBe(JSON.stringify(frozen.firstRound));
     expect(JSON.stringify(out.latent.runoffs)).toBe(JSON.stringify(frozen.runoffs));

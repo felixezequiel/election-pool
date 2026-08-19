@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import {
   runKalman,
   observationVariance,
+  commonBiasVariance,
   recencyWeight,
   isoToDayNumber,
   dayNumberToIso,
@@ -15,6 +16,7 @@ import {
   SIGMA_PROCESS,
   DEFF,
   SIGMA_HOUSE_EXTRA,
+  SIGMA_COMMON_BIAS,
   TAU_RECENCY_DAYS,
   ACTIVE_WINDOW_DAYS,
   CI_Z_90,
@@ -376,6 +378,85 @@ describe('band uses the 90% z multiplier from contracts', () => {
       const half = (p.hi90 - p.lo90) / 2;
       expect(half).toBeCloseTo(CI_Z_90 * Math.sqrt(p.variance), 6);
     }
+  });
+});
+
+describe('common bias b_t (docs/01 §4.5, Q-07)', () => {
+  it('commonBiasVariance is σ_common² and enters the reported variance', () => {
+    expect(commonBiasVariance()).toBeCloseTo(SIGMA_COMMON_BIAS * SIGMA_COMMON_BIAS, 12);
+
+    // Um único ponto: a variância reportada tem de conter o termo de viés comum,
+    // além da variância suavizada do próprio filtro. Basta que seja ≥ σ_common².
+    const res = runKalman(
+      [obs({ candidateId: 'c', valuePct: 40, fieldMedianDate: isoDay(0), sampleSize: 1000 })],
+      { referenceDate: isoDay(0) },
+    );
+    const p = res.points.find((x) => x.candidateId === 'c');
+    expect(p).toBeDefined();
+    expect(p?.variance ?? 0).toBeGreaterThanOrEqual(commonBiasVariance());
+  });
+
+  it('the common-bias floor is NOT washed out by many polls (the whole point)', () => {
+    // Muitas pesquisas de vários institutos no mesmo dia: o filtro escalar reduz a
+    // variância de μ_t quase a zero. Se b_t fosse ruído independente, a banda
+    // encolheria com o volume; como é viés COMUM correlacionado, a variância
+    // reportada não cai abaixo de σ_common² por mais pesquisas que cheguem.
+    const observations: Observation[] = [];
+    const institutes = ['inst-a', 'inst-b', 'inst-c', 'inst-d', 'inst-e'];
+    for (let day = 0; day < 30; day++) {
+      for (const inst of institutes) {
+        observations.push(
+          obs({
+            candidateId: 'c',
+            instituteId: inst,
+            valuePct: 40,
+            fieldMedianDate: isoDay(day),
+            sampleSize: 2000,
+          }),
+        );
+      }
+    }
+    const res = runKalman(observations, { referenceDate: isoDay(30) });
+    const last = res.points.filter((p) => p.candidateId === 'c').at(-1);
+    expect(last).toBeDefined();
+    // A variância reportada permanece ≥ σ_common²: o piso do viés comum sobrevive.
+    expect(last?.variance ?? 0).toBeGreaterThanOrEqual(commonBiasVariance() - 1e-9);
+    // E a semilargura reflete esse piso: ≥ z_90 · σ_common (a banda não colapsa).
+    const half = ((last?.hi90 ?? 0) - (last?.lo90 ?? 0)) / 2;
+    expect(half).toBeGreaterThanOrEqual(CI_Z_90 * SIGMA_COMMON_BIAS - 1e-6);
+  });
+
+  it('b_t widens the band but does NOT move the mean (same setup as recovery)', () => {
+    // Reusa EXATAMENTE o setup do teste de recuperação (seed 12345, μ=42, n=1500,
+    // 40 dias, 3 institutos), já provado recuperar dentro de 0.5 p.p. Como esse
+    // teste continua passando COM b_t ligado, isto documenta o outro lado da moeda:
+    // b_t só alarga a banda; a média recuperada é a mesma (b_t não é direcional).
+    const rng = makeRng(12345);
+    const trueMu = 42;
+    const n = 1500;
+    const sd = Math.sqrt(observationVariance(trueMu, n));
+    const observations: Observation[] = [];
+    const institutes = ['inst-a', 'inst-b', 'inst-c'];
+    for (let day = 0; day < 40; day++) {
+      const inst = institutes[day % institutes.length] ?? 'inst-a';
+      observations.push(
+        obs({
+          candidateId: 'cand-1',
+          instituteId: inst,
+          valuePct: Math.min(100, Math.max(0, trueMu + sd * rng.gauss())),
+          fieldMedianDate: isoDay(day),
+          sampleSize: n,
+        }),
+      );
+    }
+    const last = runKalman(observations, { referenceDate: isoDay(40) })
+      .points.filter((p) => p.candidateId === 'cand-1')
+      .at(-1);
+    // A média fica dentro de 0.5 p.p. (b_t não desloca o ponto)…
+    expect(Math.abs((last?.mean ?? 0) - trueMu)).toBeLessThan(0.5);
+    // …enquanto a banda carrega o piso do viés comum (semilargura ≥ z_90·σ_common).
+    const half = ((last?.hi90 ?? 0) - (last?.lo90 ?? 0)) / 2;
+    expect(half).toBeGreaterThanOrEqual(CI_Z_90 * SIGMA_COMMON_BIAS - 1e-6);
   });
 });
 

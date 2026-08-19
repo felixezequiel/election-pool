@@ -26,6 +26,7 @@ import {
   SIGMA_PROCESS,
   DEFF,
   SIGMA_HOUSE_EXTRA,
+  SIGMA_COMMON_BIAS,
   TAU_RECENCY_DAYS,
   ACTIVE_WINDOW_DAYS,
   CI_Z_90,
@@ -104,6 +105,22 @@ export function observationVariance(pPct: number, sampleSize: number): number {
   const samplingVar = ((frac * (ONE - frac)) / n) * PCT_MAX * PCT_MAX;
   const v = DEFF * samplingVar + SIGMA_HOUSE_EXTRA * SIGMA_HOUSE_EXTRA;
   return Number.isFinite(v) && v > ZERO ? v : SIGMA_HOUSE_EXTRA * SIGMA_HOUSE_EXTRA;
+}
+
+/**
+ * Variância do estado latente de VIÉS COMUM `b_t` (docs/01 §4.5), em p.p.².
+ *
+ * `b_t` é o deslocamento de NÍVEL comum a TODOS os institutos (distinto do `h_i`,
+ * que é por instituto e soma-zero). Como `b_t` confunde-se com `μ_t` do mesmo modo
+ * que a identificação de §1.1 — somar `c` a `b_t` e subtrair de todo `μ_t` dá os
+ * mesmos `y_it` —, o agregado NÃO reduz a sua incerteza abaixo do prior: a variância
+ * a posteriori de `b_t` permanece `σ_common²`. Por ser correlacionada (correlação = 1
+ * entre candidatos), soma-se à variância de cada estimativa e PROPAGA para a banda
+ * sem ser lavada pela média. Constante de propósito: representa o prior de magnitude,
+ * não uma quantidade que o dado identifica.
+ */
+export function commonBiasVariance(): number {
+  return SIGMA_COMMON_BIAS * SIGMA_COMMON_BIAS;
 }
 
 /** Peso de recência exp(-Δdias/τ) (docs/01 §4.4). Δdias em [0, ∞). */
@@ -197,13 +214,20 @@ export function runKalman(
     }
   }
 
+  // Variância do viés comum b_t (docs/01 §4.5): soma-se à variância suavizada de
+  // CADA candidato antes de fechar a banda. Por ser correlacionada, não é lavada
+  // pela média — é o termo que faz a banda cobrir o viés comum de nível (Q-07).
+  const commonVar = commonBiasVariance();
   const points: SmoothedPoint[] = [];
   for (const candidateId of candidateIds) {
     const series = smoothCandidate(candidateId, nDays, obsByDay);
     for (let i = ZERO; i < nDays; i++) {
       const mean = series.mean[i] ?? ZERO;
-      const variance = series.variance[i] ?? ZERO;
-      const sd = Math.sqrt(variance > ZERO ? variance : ZERO);
+      const smoothedVar = series.variance[i] ?? ZERO;
+      // A variância REPORTADA já inclui o viés comum, para que a invariante
+      // `semilargura = z_90 · sqrt(variance)` continue valendo (docs/01 §4.5).
+      const variance = (smoothedVar > ZERO ? smoothedVar : ZERO) + commonVar;
+      const sd = Math.sqrt(variance);
       const half = CI_Z_90 * sd;
       const date = dates[i] ?? '';
       points.push({

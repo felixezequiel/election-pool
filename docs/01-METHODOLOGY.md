@@ -161,6 +161,49 @@ Observações com `Δdias > 45` são excluídas da janela ativa.
 
 `τ = 14` é um prior. Não ajuste para "melhorar" o gráfico.
 
+### 4.5 Viés comum `b_t` (MODEL_VERSION 0.0.5, Q-07)
+
+A restrição de soma-zero (§1.1) corrige o viés RELATIVO entre institutos, mas por
+construção não vê o componente que é comum a TODOS os institutos no mesmo instante —
+o erro que atinge o consenso inteiro para o mesmo lado, como ocorreu no 1º turno de
+2022. Modelamos esse componente com um estado latente de viés comum `b_t`. A equação
+de observação passa a ser:
+
+```
+y_it = μ_t + h_i + b_t + ε_it
+b_t ~ N(0, σ_common²)   (deslocamento de NÍVEL comum a todos os institutos em t)
+```
+
+- `b_t` é UM único deslocamento por instante `t`, idêntico para todas as pesquisas
+  daquele momento. Distingue-se de `h_i`, que é por instituto e restrito a
+  `Σ w_i·h_i = 0` — o `h_i` é viés relativo, o `b_t` é viés de nível.
+- **`b_t` NÃO é direcional por candidato nem por espectro (R2).** É simétrico em torno
+  de zero e não sabe para que lado o erro cai. Não corrige nada; apenas admite, na
+  banda, que o nível comum pode estar deslocado.
+- **`b_t` NÃO é identificável a partir de agregado.** `b_t` e `μ_t` confundem-se como
+  em §1.1: somar `c` a todo `b_t` e subtrair `c` de todo `μ_t` dá os mesmos `y_it`.
+  Portanto NENHUM volume de pesquisas reduz a incerteza sobre o nível comum abaixo do
+  prior — a variância a posteriori de `b_t` permanece `σ_common²`. Como `b_t` entra
+  idêntico em todo candidato (correlação = 1), a sua variância se SOMA à de cada
+  estimativa e PROPAGA para a banda sem encolher com mais dado. É por isso que apenas
+  alargar `σ_house_extra` (§4.2, ruído independente por pesquisa) não resolvia: aquilo
+  é lavado pela média; isto não.
+- Estimação: `μ_t` e `h_i` são obtidos como antes (§2, §5); no fechamento da banda
+  soma-se `σ_common²` à variância suavizada de cada candidato:
+  `semilargura_90 = z_90 · sqrt(Var_suavizada + σ_common²)`. A média/ponto de `μ_t`
+  não muda — só a banda alarga.
+
+- `σ_common = 3.0` p.p. — desvio-padrão do viés comum de nível. Prior fixo, calibrado
+  por PRINCÍPIO (Q-07): a semilargura IC90 vinda só deste termo, `z_90 · σ_common ≈
+  4,9` p.p., cobre plausivelmente o erro real de nível do 1º turno (~3–5 p.p.; 2022 R1
+  subestimou o vice ~5 p.p.). Escolhido o TOPO da faixa porque o gate existe para o
+  pior caso de viés comum. Escrito ANTES de rodar o backtest (R1); justificativa
+  completa em docs/OPEN-QUESTIONS.md Q-07.
+
+Com o `b_t` no lugar, `σ_house_extra` (§4.2) permanece em 1.0 p.p. — o seu valor
+honesto por-pesquisa. O erro comum agora mora no `b_t`, não num termo independente
+inflado.
+
 ---
 
 ## 5. Estimação de house effect
