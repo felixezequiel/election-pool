@@ -12,6 +12,7 @@ import { RawStorage } from '@election-pool/adapters/base/raw-storage';
 import { configurePgTypes } from '../db/types.js';
 import { createDatabase } from '../db/pool.js';
 import { HarvestJob } from './harvest.job.js';
+import { makePoolTransaction } from './discovery.job.js';
 import { buildRegistry, loadCandidateResolver } from './build-registry.js';
 
 const { Pool } = pg;
@@ -28,7 +29,13 @@ const run = async (): Promise<void> => {
   try {
     const resolveCandidate = await loadCandidateResolver(db);
     const registry = buildRegistry(resolveCandidate, storage);
-    const job = new HarvestJob({ db, http: new HttpClient(), registry, storage });
+    const job = new HarvestJob({
+      db,
+      http: new HttpClient(),
+      registry,
+      storage,
+      withTransaction: makePoolTransaction(pool),
+    });
     const result = await job.run();
     console.log(
       `[harvest] considered=${result.considered} attempted=${result.attempted} ` +

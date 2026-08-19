@@ -16,6 +16,7 @@ import { AdapterFailureCounter } from '@election-pool/adapters/validation/failur
 import { configurePgTypes } from '../db/types.js';
 import { createDatabase } from '../db/pool.js';
 import { HarvestJob } from '../jobs/harvest.job.js';
+import { makePoolTransaction } from '../jobs/discovery.job.js';
 import { buildRegistry, loadCandidateResolver } from '../jobs/build-registry.js';
 import { approve, ApprovalError } from './approve.command.js';
 
@@ -72,6 +73,7 @@ const run = async (): Promise<void> => {
             http: new HttpClient(),
             registry,
             storage,
+            withTransaction: makePoolTransaction(pool), // persistência atômica (R5/R4)
             failureCounter: new AdapterFailureCounter(),
           });
           const result = await job.run();

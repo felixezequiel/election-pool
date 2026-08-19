@@ -51,6 +51,7 @@ import { RawDocumentsRepository } from '../db/raw-documents.repository.js';
 import { PollScenariosRepository } from '../db/poll-scenarios.repository.js';
 import { decideHarvest } from './harvest-eligibility.js';
 import type { HarvestDecision } from './harvest-eligibility.js';
+import type { WithTransaction } from './discovery.job.js';
 
 export const CRON_SCHEDULE = '5 */2 * * *'; // docs/02 §3.2
 
@@ -99,6 +100,17 @@ export interface HarvestDeps {
   storage?: RawStorage;
   now?: () => Date;
   /**
+   * Abre uma transação com conexão dedicada (mesmo helper do DiscoveryJob). A
+   * persistência de UMA divulgação (todos os cenários + resultados + a transição
+   * para `disclosed`) roda dentro dela: ou entra inteira, ou nada entra. Sem
+   * transação injetada (testes/uso direto) cai num modo NÃO-atômico que emula o
+   * comportamento antigo statement-a-statement — os testes de integração passam
+   * uma real. O motivo do contêiner é R4/R5: uma falha no meio da gravação (ex.:
+   * colisão de cenário já existente) não pode deixar a pesquisa meio-escrita nem,
+   * pior ainda, uma divulgação parcial sobrepondo a anterior.
+   */
+  withTransaction?: WithTransaction;
+  /**
    * Contador de falhas de validação por adapter (docs/04 §5). Compartilhe UMA
    * instância entre execuções para que "3 ciclos consecutivos ⇒ alerta" seja
    * medido no tempo real do cron; sem instância injetada o contador é local à
@@ -122,6 +134,7 @@ export class HarvestJob {
   private readonly registry: AdapterRegistry;
   private readonly storage: RawStorage;
   private readonly now: () => Date;
+  private readonly withTransaction: WithTransaction;
   private readonly failureCounter: AdapterFailureCounter;
   private readonly currentLatentByCandidateId:
     | (() => Promise<ReadonlyMap<string, number>>)
@@ -135,6 +148,9 @@ export class HarvestJob {
     this.registry = deps.registry;
     this.storage = deps.storage ?? new RawStorage();
     this.now = deps.now ?? (() => new Date());
+    // Sem transação injetada: modo NÃO-atômico (roda no mesmo `db`). Só o entry de
+    // produção e os testes de integração passam uma transação real de pool.
+    this.withTransaction = deps.withTransaction ?? ((fn) => fn(this.db));
     this.failureCounter = deps.failureCounter ?? new AdapterFailureCounter();
     this.currentLatentByCandidateId = deps.currentLatentByCandidateId;
   }
@@ -385,8 +401,34 @@ export class HarvestJob {
         throw err;
       }
 
-      await this.persistParsed(parsed, raw, resolveCandidate, nowIso);
-      await this.markDisclosed(reg.tseId);
+      // FAIL-SAFE (R5/R4): só chegamos aqui com dado NOVO, parseado e validado EM
+      // MÃOS. Antes de gravar, reafirmamos que não há divulgação anterior para este
+      // registro. `run()` já garante isso pelo gate de elegibilidade
+      // (`hasCanonicalResult` ⇒ `decideHarvest` devolve `skip`), mas repetimos a
+      // checagem à beira do INSERT: se por qualquer caminho (estado inconsistente,
+      // corrida, evolução futura do código) um registro com resultados fosse
+      // reprocessado, NUNCA sobrepomos nem apagamos o que já existe — a colheita é
+      // append-only e a correção de uma divulgação é um passo deliberado à parte,
+      // não um efeito colateral de um novo ciclo de harvest.
+      if (await this.hasCanonicalResult(reg.tseId)) {
+        result.alerts.push({
+          kind: 'validation_failed',
+          tseId: reg.tseId,
+          detail:
+            'registro já possui cenários persistidos; harvest não sobrepõe divulgação existente (R5)',
+        });
+        return;
+      }
+
+      // Persistência ATÔMICA: os cenários, os resultados e a transição para
+      // `disclosed` entram na MESMA transação. Uma falha no meio (ex.: colisão de
+      // cenário) faz rollback — o registro segue `pending`, SEM pesquisa
+      // meio-escrita e SEM tocar em dado anterior. Só há efeito visível após o
+      // COMMIT, quando a divulgação nova está inteira e validada.
+      await this.withTransaction(async (tx) => {
+        await this.persistParsed(parsed, raw, resolveCandidate, nowIso, tx);
+        await this.markDisclosed(reg.tseId, tx);
+      });
       result.disclosed++;
       return; // resultado obtido; não busca as outras URLs candidatas
     }
@@ -536,10 +578,11 @@ export class HarvestJob {
     raw: RawDocument,
     resolveCandidate: CandidateAliasResolver,
     nowIso: string,
+    tx: Database,
   ): Promise<void> {
     // Revalida a fronteira (defesa em profundidade; o adapter já validou).
     const poll = parsedPollSchema.parse(parsed);
-    const repo = new PollScenariosRepository(this.db);
+    const repo = new PollScenariosRepository(tx);
 
     for (const scenario of poll.scenarios) {
       const scenarioId = randomUUID();
@@ -651,8 +694,8 @@ export class HarvestJob {
     return { etag: row?.etag ?? null, lastModified: row?.last_modified ?? null };
   }
 
-  private async markDisclosed(tseId: string): Promise<void> {
-    await this.db.query(`UPDATE poll_registrations SET disclosure_status = $1 WHERE tse_id = $2`, [
+  private async markDisclosed(tseId: string, db: Database = this.db): Promise<void> {
+    await db.query(`UPDATE poll_registrations SET disclosure_status = $1 WHERE tse_id = $2`, [
       DISCLOSURE_STATUS.disclosed,
       tseId,
     ]);

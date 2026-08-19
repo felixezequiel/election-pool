@@ -188,6 +188,7 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
       registry,
       storage,
       now,
+      withTransaction: makePoolTransaction(pool), // persistência atômica (R5/R4)
       failureCounter, // UMA instância compartilhada (LOG T-07)
       currentLatentByCandidateId: makeCurrentLatentProvider(db, RACE_ID), // V5 μ_t (LOG T-07)
     });

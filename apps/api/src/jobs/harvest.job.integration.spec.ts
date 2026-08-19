@@ -111,7 +111,56 @@ const scenarioCount = async (tseId: string): Promise<number> => {
 const makeJob = async (http: HttpClient, storage: RawStorage): Promise<HarvestJob> => {
   const resolveCandidate = await loadCandidateResolver(db);
   const registry = buildRegistry(resolveCandidate, storage);
-  return new HarvestJob({ db, http, registry, storage });
+  return new HarvestJob({ db, http, registry, storage, withTransaction: (fn) => fn(db) });
+};
+
+const resultCount = async (tseId: string): Promise<number> => {
+  const rows = await db.query<{ n: string }>(
+    `SELECT count(*)::text AS n
+       FROM poll_results pr
+       JOIN poll_scenarios ps ON ps.id = pr.scenario_id
+      WHERE ps.tse_id = $1`,
+    [tseId],
+  );
+  return Number(rows[0]!.n);
+};
+
+/**
+ * Semeia uma divulgação PRÉVIA para um registro: um `raw_document`, um cenário e
+ * dois resultados. Deixa o registro em `disclosureStatus` (o teste escolhe se
+ * simula um estado saudável `disclosed` ou um estado inconsistente `pending` com
+ * dado já gravado). É o dado que a colheita re-tentada JAMAIS pode destruir.
+ */
+const seedPriorDisclosure = async (
+  tseId: string,
+  storage: RawStorage,
+  disclosureStatus: 'disclosed' | 'pending',
+): Promise<void> => {
+  await insertRegistration(tseId, 'nexus', 1);
+  await db.query(`UPDATE poll_registrations SET disclosure_status = $1 WHERE tse_id = $2`, [
+    disclosureStatus,
+    tseId,
+  ]);
+  const store = await storage.store(nexusFixture('round.html'), 'text/html');
+  const rawRows = await db.query<{ id: string }>(
+    `INSERT INTO raw_documents (id, url, fetched_at, http_status, content_type, content_hash, storage_path, etag, last_modified)
+     VALUES (gen_random_uuid(), $1, now(), 200, 'text/html', $2, $3, NULL, NULL)
+     RETURNING id`,
+    [`https://nexus.fsb.com.br/estudos-divulgados#${tseId}`, store.contentHash, store.storagePath],
+  );
+  const rawId = rawRows[0]!.id;
+  const scenarioRows = await db.query<{ id: string }>(
+    `INSERT INTO poll_scenarios (id, tse_id, raw_document_id, kind, label, is_canonical, extracted_at)
+     VALUES (gen_random_uuid(), $1, $2, 't1_estimulado', 'ESTIMULADA', true, now())
+     RETURNING id`,
+    [tseId, rawId],
+  );
+  const scenarioId = scenarioRows[0]!.id;
+  await db.query(
+    `INSERT INTO poll_results (scenario_id, candidate_id, value_pct)
+     VALUES ($1, 'lula', 38.80), ($1, 'tarcisio', 29.10)`,
+    [scenarioId],
+  );
 };
 
 describe('HarvestJob (integration)', () => {
@@ -239,5 +288,77 @@ describe('HarvestJob (integration)', () => {
     expect(result.attempted).toBe(0);
     expect(fetched).toBe(false); // parou, não buscou
     expect(await disclosureOf('BR-09912/2026')).toBe('presumed_undisclosed');
+  });
+
+  // === FAIL-SAFE: fonte que falha NUNCA apaga divulgação anterior (R5/R4) ======
+  //
+  // Este é o bug de produção: um harvest que não conseguiu rebuscar (403/WAF,
+  // erro de rede, parse/validação reprovada) NÃO pode reduzir a contagem de
+  // `poll_results` já divulgados. Provamos os três desfechos de falha.
+
+  it('caminho feliz: registro pending SEM dado prévio é colhido normalmente', async () => {
+    await insertRegistration('BR-06591/2026', 'nexus', 1);
+    const storage = tempStorage();
+    const http = makeHttp(() => htmlResponse(nexusFixture('round.html')));
+
+    const before = await resultCount('BR-06591/2026');
+    const job = await makeJob(http, storage);
+    const result = await job.run();
+
+    expect(before).toBe(0);
+    expect(result.disclosed).toBe(1);
+    expect(await resultCount('BR-06591/2026')).toBeGreaterThan(0);
+    expect(await disclosureOf('BR-06591/2026')).toBe('disclosed');
+  });
+
+  it('borda 1: fonte LANÇA (erro de rede/403) e a divulgação anterior fica intacta', async () => {
+    const storage = tempStorage();
+    // Registro pending que JÁ tem dado gravado — o estado inconsistente que em
+    // produção fez a colheita apagar o que não conseguiu rebuscar.
+    await seedPriorDisclosure('BR-06591/2026', storage, 'pending');
+    const before = await resultCount('BR-06591/2026');
+
+    const http = makeHttp(() => Promise.reject(new Error('403 Forbidden (WAF)')));
+    const job = await makeJob(http, storage);
+    const result = await job.run();
+
+    expect(result.disclosed).toBe(0);
+    // Nada foi apagado: os resultados anteriores continuam todos lá.
+    expect(await resultCount('BR-06591/2026')).toBe(before);
+    expect(await scenarioCount('BR-06591/2026')).toBe(1);
+  });
+
+  it('borda 2: fonte responde mas a validação reprova (tse_id errado) — nada é destruído', async () => {
+    const storage = tempStorage();
+    await seedPriorDisclosure('BR-06591/2026', storage, 'pending');
+    const before = await resultCount('BR-06591/2026');
+
+    // Documento de OUTRA rodada: V6 reprova, nenhuma persistência (e nenhuma
+    // remoção do que já existia).
+    const http = makeHttp(() => htmlResponse(nexusFixture('wrong-tse-id.html')));
+    const job = await makeJob(http, storage);
+    const result = await job.run();
+
+    expect(result.disclosed).toBe(0);
+    expect(await resultCount('BR-06591/2026')).toBe(before);
+    expect(await scenarioCount('BR-06591/2026')).toBe(1);
+  });
+
+  it('borda 3: registro disclosed com dado nunca é re-tentado (gate de elegibilidade)', async () => {
+    const storage = tempStorage();
+    await seedPriorDisclosure('BR-06591/2026', storage, 'disclosed');
+    const before = await resultCount('BR-06591/2026');
+
+    let fetched = false;
+    const http = makeHttp(() => {
+      fetched = true;
+      return Promise.reject(new Error('não deveria buscar'));
+    });
+    const job = await makeJob(http, storage);
+    const result = await job.run();
+
+    expect(fetched).toBe(false); // já disclosed: harvest nem tenta
+    expect(result.attempted).toBe(0);
+    expect(await resultCount('BR-06591/2026')).toBe(before);
   });
 });
