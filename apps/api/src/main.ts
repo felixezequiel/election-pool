@@ -303,13 +303,14 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
 // --- carga manual única (FIRST_LOAD_ON_BOOT) --------------------------------
 
 /**
- * Injeta o dado real de pesquisa UMA vez, no boot. Existe porque a VPS é barrada
- * pelos WAFs dos institutos (403 em prod), então o raw é colhido de um IP
- * residencial e versionado em `db/first-load.sql` (TRUNCATE + INSERTs numa
- * transação com `session_replication_role=replica`, que ignora ordem/FK durante a
- * carga). Idempotente: só carrega se `poll_results` estiver vazio — depois disso o
- * discovery/model/render reprocessam a partir do raw (R5) e boots seguintes pulam.
- * Falha alta (R4): se o SQL falhar, o `pool.query` rejeita e o boot sai != 0.
+ * Injeta o dado real de pesquisa no boot. Existe porque a VPS é barrada pelos WAFs
+ * dos institutos (403 em prod), então o raw é colhido de um IP residencial e
+ * versionado em `db/first-load.sql` (TRUNCATE + INSERTs numa transação com
+ * `session_replication_role=replica`, que ignora ordem/FK durante a carga).
+ * AUTORITATIVO: re-aplica a carga a CADA boot com a flag ligada — o SQL trunca+insere
+ * (seguro repetir) e assim RESTAURA o dado caso o harvest, que em prod falha por WAF,
+ * o tenha degradado entre boots. Enquanto o harvest não alcança as fontes, a carga é
+ * a fonte de verdade; quando alcançar, desligue FIRST_LOAD_ON_BOOT.
  */
 const maybeFirstLoad = async (pool: pg.Pool): Promise<void> => {
   // Conexão DEDICADA e descartada no fim. Motivo: o corpo gerado pelo pg_dump
@@ -322,17 +323,23 @@ const maybeFirstLoad = async (pool: pg.Pool): Promise<void> => {
     const before = await client.query<{ n: number }>(
       'SELECT count(*)::int AS n FROM public.poll_results',
     );
-    const existing = before.rows[0]?.n ?? 0;
-    if (existing > 0) {
-      logJson({ level: 'info', event: 'first_load_skipped', reason: 'poll_results não vazio', existing });
-      return;
-    }
     const sql = readFileSync(join(__dirname, 'db', 'first-load.sql'), 'utf8');
+    // AUTORITATIVO (não idempotente-por-skip): re-aplica a carga a CADA boot com a
+    // flag ligada. O SQL faz TRUNCATE + INSERT, então re-aplicar é seguro e RESTAURA
+    // a carga caso o harvest — que em prod falha por WAF e chega a apagar resultado
+    // que não conseguiu rebuscar — a tenha degradado entre boots. Enquanto o harvest
+    // real não alcança as fontes, a carga manual é a fonte de verdade; quando
+    // alcançar, desligue FIRST_LOAD_ON_BOOT para o dado colhido prevalecer.
     await client.query(sql);
     const after = await client.query<{ n: number }>(
       'SELECT count(*)::int AS n FROM public.poll_results',
     );
-    logJson({ level: 'info', event: 'first_load_applied', pollResults: after.rows[0]?.n ?? 0 });
+    logJson({
+      level: 'info',
+      event: 'first_load_applied',
+      before: before.rows[0]?.n ?? 0,
+      pollResults: after.rows[0]?.n ?? 0,
+    });
   } finally {
     client.release(true);
   }
@@ -409,10 +416,11 @@ const main = async (): Promise<void> => {
     logJson({ level: 'info', event: 'reference_seeded' });
   }
 
-  // 3b. Carga manual única (FIRST_LOAD_ON_BOOT): a VPS é barrada pelos WAFs dos
-  //     institutos, então o dado real vem colhido de um IP residencial e é injetado
-  //     aqui — ANTES do pipeline, para o ModelJob já enxergá-lo. Idempotente
-  //     (só carrega com poll_results vazio); o raw depois se regenera sozinho (R5).
+  // 3b. Carga manual (FIRST_LOAD_ON_BOOT): a VPS é barrada pelos WAFs dos institutos,
+  //     então o dado real vem colhido de um IP residencial e é injetado aqui — ANTES
+  //     do pipeline, para o ModelJob já enxergá-lo. AUTORITATIVA: re-aplica a cada
+  //     boot (restaura o dado caso o harvest o tenha degradado). Desligue quando o
+  //     harvest real alcançar as fontes.
   if (envFlag('FIRST_LOAD_ON_BOOT', false)) {
     try {
       await maybeFirstLoad(pool);
