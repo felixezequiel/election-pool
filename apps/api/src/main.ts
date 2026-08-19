@@ -312,16 +312,30 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
  * Falha alta (R4): se o SQL falhar, o `pool.query` rejeita e o boot sai != 0.
  */
 const maybeFirstLoad = async (pool: pg.Pool): Promise<void> => {
-  const before = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM poll_results');
-  const existing = before.rows[0]?.n ?? 0;
-  if (existing > 0) {
-    logJson({ level: 'info', event: 'first_load_skipped', reason: 'poll_results não vazio', existing });
-    return;
+  // Conexão DEDICADA e descartada no fim. Motivo: o corpo gerado pelo pg_dump
+  // aplica SETs de SESSÃO (`search_path=''`, `statement_timeout`…) que persistem
+  // após o COMMIT; se essa conexão voltasse ao pool, queries sem schema quebrariam
+  // ("relation does not exist"). Rodamos tudo aqui e destruímos a conexão
+  // (`release(true)`). As contagens são schema-qualificadas pelo mesmo motivo.
+  const client = await pool.connect();
+  try {
+    const before = await client.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM public.poll_results',
+    );
+    const existing = before.rows[0]?.n ?? 0;
+    if (existing > 0) {
+      logJson({ level: 'info', event: 'first_load_skipped', reason: 'poll_results não vazio', existing });
+      return;
+    }
+    const sql = readFileSync(join(__dirname, 'db', 'first-load.sql'), 'utf8');
+    await client.query(sql);
+    const after = await client.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM public.poll_results',
+    );
+    logJson({ level: 'info', event: 'first_load_applied', pollResults: after.rows[0]?.n ?? 0 });
+  } finally {
+    client.release(true);
   }
-  const sql = readFileSync(join(__dirname, 'db', 'first-load.sql'), 'utf8');
-  await pool.query(sql);
-  const after = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM poll_results');
-  logJson({ level: 'info', event: 'first_load_applied', pollResults: after.rows[0]?.n ?? 0 });
 };
 
 // --- bootstrap (main real) --------------------------------------------------

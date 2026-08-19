@@ -9,7 +9,6 @@ TRUNCATE public.poll_results, public.poll_scenarios, public.poll_registrations C
 -- PostgreSQL database dump
 --
 
-\restrict rSFG06wPgimeyKW7X4Nkcw03h09VErqgaRmknGggAodDPHl1QPJg77EPWQudDq3
 
 -- Dumped from database version 17.10
 -- Dumped by pg_dump version 17.10
@@ -282,6 +281,5 @@ INSERT INTO public.poll_results (scenario_id, candidate_id, value_pct) VALUES ('
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rSFG06wPgimeyKW7X4Nkcw03h09VErqgaRmknGggAodDPHl1QPJg77EPWQudDq3
 
 COMMIT;
