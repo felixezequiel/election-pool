@@ -51,6 +51,7 @@ import { buildHealthSnapshot } from './health/health.js';
 import { isEntrypoint } from './is-entrypoint.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const { Pool } = pg;
 
@@ -299,6 +300,30 @@ export const createOrchestrator = (deps: OrchestratorDeps): Orchestrator => {
   };
 };
 
+// --- carga manual única (FIRST_LOAD_ON_BOOT) --------------------------------
+
+/**
+ * Injeta o dado real de pesquisa UMA vez, no boot. Existe porque a VPS é barrada
+ * pelos WAFs dos institutos (403 em prod), então o raw é colhido de um IP
+ * residencial e versionado em `db/first-load.sql` (TRUNCATE + INSERTs numa
+ * transação com `session_replication_role=replica`, que ignora ordem/FK durante a
+ * carga). Idempotente: só carrega se `poll_results` estiver vazio — depois disso o
+ * discovery/model/render reprocessam a partir do raw (R5) e boots seguintes pulam.
+ * Falha alta (R4): se o SQL falhar, o `pool.query` rejeita e o boot sai != 0.
+ */
+const maybeFirstLoad = async (pool: pg.Pool): Promise<void> => {
+  const before = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM poll_results');
+  const existing = before.rows[0]?.n ?? 0;
+  if (existing > 0) {
+    logJson({ level: 'info', event: 'first_load_skipped', reason: 'poll_results não vazio', existing });
+    return;
+  }
+  const sql = readFileSync(join(__dirname, 'db', 'first-load.sql'), 'utf8');
+  await pool.query(sql);
+  const after = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM poll_results');
+  logJson({ level: 'info', event: 'first_load_applied', pollResults: after.rows[0]?.n ?? 0 });
+};
+
 // --- bootstrap (main real) --------------------------------------------------
 
 const main = async (): Promise<void> => {
@@ -322,6 +347,14 @@ const main = async (): Promise<void> => {
   if (envFlag('SEED_REFERENCE_ON_BOOT', false)) {
     await seedReference(db);
     logJson({ level: 'info', event: 'reference_seeded' });
+  }
+
+  // 3b. Carga manual única (FIRST_LOAD_ON_BOOT): a VPS é barrada pelos WAFs dos
+  //     institutos, então o dado real vem colhido de um IP residencial e é injetado
+  //     aqui — ANTES do pipeline, para o ModelJob já enxergá-lo. Idempotente
+  //     (só carrega com poll_results vazio); o raw depois se regenera sozinho (R5).
+  if (envFlag('FIRST_LOAD_ON_BOOT', false)) {
+    await maybeFirstLoad(pool);
   }
 
   const orch = createOrchestrator({ db, pool, publishBaseDir });
