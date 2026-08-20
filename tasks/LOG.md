@@ -1867,3 +1867,10 @@ fazia **loop de redirecionamento interno → 500** (e o relatório nem existe an
 goaccess escrever, o que garantiria o loop). Troquei por `try_files $uri $uri/ =404`.
 Validado ponta a ponta num container: 401 sem senha, 401 senha errada, 200 + conteúdo
 com senha certa. Envs: `STATS_USER`/`STATS_PASS` (texto puro); `STATS_BASICAUTH` deletada.
+
+Terceiro ato: no navegador o dashboard travou em "AUTHORIZING WEBSOCKET SESSION". Causa:
+o navegador NÃO reenvia a credencial do Basic Auth no handshake do WebSocket (confirmado
+pelo mantenedor do GoAccess; embutir cred na ws-url também não cola — browsers removem).
+Fix: `auth_basic off` no `location /ws` (a página HTML segue protegida; o WS fica limitado
+pela checagem `--origin` do goaccess + obscuridade). Hardening futuro se precisar fechar o
+stream: `--ws-auth` (JWT nativo) ou `--anonymize-ip`. Ver docs/02 §8.

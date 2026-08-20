@@ -163,6 +163,14 @@ Acesso e requisitos operacionais:
   não instancia neste Coolify (o router passa a referenciar um middleware inexistente
   e o Traefik responde **503**). As envs são texto puro **sem `$`** — `$` em valor de
   env é mastigado na interpolação do docker compose.
+- **O `/ws` (WebSocket) NÃO tem Basic Auth** (`auth_basic off`). O navegador não
+  reenvia a credencial do Basic Auth no handshake do WebSocket (confirmado pelo
+  mantenedor do GoAccess), então com auth o dashboard travava em "AUTHORIZING WEBSOCKET
+  SESSION". A página HTML (o dashboard) segue protegida; o stream do WS é limitado pela
+  checagem de `Origin` (`--origin`) e pela obscuridade do host. **Follow-up de
+  hardening** (se o stream do WS precisar ser fechado de verdade): JWT nativo do
+  GoAccess via `--ws-auth`, ou anonimizar IPs no próprio goaccess (`--anonymize-ip`),
+  o que também tira a sensibilidade do stream aberto.
 - Exige um registro **A `eleicao-status.fgti.cloud` → 31.97.243.112** no DNS antes
   do Traefik emitir o TLS (não há wildcard `*.fgti.cloud`).
 - Follow-up de ops: o `access_log` no volume cresce sem limite. Para o tráfego atual
