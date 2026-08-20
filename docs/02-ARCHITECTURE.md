@@ -155,10 +155,14 @@ Como funciona (só no deploy Coolify, `docker-compose.coolify.yml`):
 
 Acesso e requisitos operacionais:
 
-- **Fechado por Basic Auth** no Traefik (middleware `electionpool-statsauth`). Não é
-  login de produto — é infra de ops, como o painel do próprio Coolify. O par
-  `usuário:hash` vive na env **`STATS_BASICAUTH`** do Coolify (runtime), NUNCA no
-  repo. Gerar com `htpasswd -nbB <user> <senha>` (bcrypt) ou `openssl passwd -apr1`.
+- **Fechado por Basic Auth no nginx** (`auth_basic`, no server block do host). Não é
+  login de produto — é infra de ops, como o painel do próprio Coolify. As credenciais
+  vêm das envs **`STATS_USER`/`STATS_PASS`** do Coolify (runtime), NUNCA no repo; o
+  `40-htpasswd.sh` gera o `.htpasswd` (bcrypt) no boot do container. Ficou no nginx e
+  não no Traefik de propósito: o middleware basicauth do Traefik via `${VAR}` em label
+  não instancia neste Coolify (o router passa a referenciar um middleware inexistente
+  e o Traefik responde **503**). As envs são texto puro **sem `$`** — `$` em valor de
+  env é mastigado na interpolação do docker compose.
 - Exige um registro **A `eleicao-status.fgti.cloud` → 31.97.243.112** no DNS antes
   do Traefik emitir o TLS (não há wildcard `*.fgti.cloud`).
 - Follow-up de ops: o `access_log` no volume cresce sem limite. Para o tráfego atual

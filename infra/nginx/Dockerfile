@@ -14,7 +14,9 @@ FROM nginx:1.27-alpine
 # tzdata + TZ: o `$time_local` do access_log (que o GoAccess parseia e exibe) sai
 # em America/Sao_Paulo, não em UTC. Consistente com a regra de fuso do projeto
 # (CLAUDE.md). A imagem alpine não traz tzdata por padrão.
-RUN apk add --no-cache tzdata
+# apache2-utils: fornece o `htpasswd`, usado no boot para gerar o Basic Auth do
+# dashboard a partir das envs STATS_USER/STATS_PASS (ver 40-htpasswd.sh, docs/02 §8).
+RUN apk add --no-cache tzdata apache2-utils
 ENV TZ=America/Sao_Paulo
 
 # Config do site (docs/02 §2/§7): serve <PUBLISH_BASE_DIR>/dist, segue o symlink do
@@ -24,3 +26,9 @@ COPY infra/nginx/election-pool.conf /etc/nginx/conf.d/default.conf
 # Página de fallback (offline.html) — fora de `dist`, existe mesmo antes da 1ª
 # publicação. O .conf a serve via `error_page` a partir de /usr/share/nginx/fallback.
 COPY infra/nginx/fallback/ /usr/share/nginx/fallback/
+
+# Basic Auth do dashboard (docs/02 §8): gera /etc/nginx/.htpasswd no boot a partir
+# das envs STATS_USER/STATS_PASS. A imagem oficial roda /docker-entrypoint.d/*.sh
+# (como root) antes de iniciar o nginx.
+COPY infra/nginx/40-htpasswd.sh /docker-entrypoint.d/40-htpasswd.sh
+RUN chmod +x /docker-entrypoint.d/40-htpasswd.sh

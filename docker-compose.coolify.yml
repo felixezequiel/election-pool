@@ -99,6 +99,13 @@ services:
       - api
     expose:
       - '80'
+    environment:
+      # Credenciais do Basic Auth do dashboard (docs/02 §8). Passthrough POR NOME
+      # (sem `${...}`): o valor vem do Coolify e é copiado direto pro container, sem
+      # passar pela interpolação do compose. Texto puro, SEM `$` — `$` em env quebra
+      # nessa interpolação. O hash é gerado no boot pelo 40-htpasswd.sh.
+      - STATS_USER
+      - STATS_PASS
     volumes:
       - publish_data:/var/lib/election-pool:ro
       # access_log em arquivo lido pelo goaccess (nginx ESCREVE aqui).
@@ -141,10 +148,10 @@ services:
       - traefik.http.services.electionpool.loadbalancer.server.port=80
       # ── Dashboard de tráfego GoAccess em eleicao-status.fgti.cloud ──
       # Mesmo serviço nginx (port 80); o `server_name` do nginx separa o conteúdo.
-      # Acesso fechado por Basic Auth (middleware abaixo). O par user:hash vem da env
-      # STATS_BASICAUTH (fora do repo — ver docs/02 §8). EXIGE registro A
-      # eleicao-status.fgti.cloud -> 31.97.243.112 antes de emitir TLS.
-      - 'traefik.http.middlewares.electionpool-statsauth.basicauth.users=${STATS_BASICAUTH}'
+      # O Basic Auth é feito no NGINX (auth_basic), não aqui: o middleware basicauth
+      # do Traefik via `${VAR}` em label não instancia neste Coolify (router referencia
+      # middleware inexistente → 503). EXIGE registro A eleicao-status.fgti.cloud ->
+      # 31.97.243.112 antes de emitir TLS.
       - 'traefik.http.routers.electionpool-stats-http.entryPoints=http'
       - 'traefik.http.routers.electionpool-stats-http.rule=Host(`eleicao-status.fgti.cloud`)'
       - traefik.http.routers.electionpool-stats-http.middlewares=redirect-to-https
@@ -153,7 +160,7 @@ services:
       - 'traefik.http.routers.electionpool-stats-https.rule=Host(`eleicao-status.fgti.cloud`)'
       - traefik.http.routers.electionpool-stats-https.tls=true
       - traefik.http.routers.electionpool-stats-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.electionpool-stats-https.middlewares=gzip,electionpool-statsauth
+      - traefik.http.routers.electionpool-stats-https.middlewares=gzip
       - traefik.http.routers.electionpool-stats-https.service=electionpool
     # SEM healthcheck de conteúdo de propósito: o Traefik NÃO registra o backend de um
     # container cujo healthcheck do Docker não está "healthy", e o nginx responde 404

@@ -1846,3 +1846,24 @@ O que o PRÓXIMO (ou o Felix) precisa saber para ir ao ar:
   do repo). Gotcha em aberto: se o Coolify mexer no `$` do hash, dobrar para `$$`.
 - Sem persistência de DB de propósito: o `access_log` no volume é a fonte; num
   restart o goaccess re-parseia. Follow-up: rotação do log quando crescer.
+
+### addendum — o dashboard dava 503, depois 500; Basic Auth foi pro nginx · 2026-08-20
+
+No ar, o subdomínio deu **503** em tudo (inclusive sem senha). Diagnóstico: o router
+HTTP redirecionava ok, mas o HTTPS 503-ava → o middleware `basicauth` do Traefik não
+instanciava. Tentei os dois escapes de `$` do hash apr1 na env (`is_literal` com aspas
+simples; e `$$` dobrado sem aspas) — **os dois deram 503**. Conclusão: neste Coolify o
+label `traefik.http.middlewares.*.basicauth.users=${VAR}` não resolve, o router passa
+a referenciar um middleware inexistente e o Traefik responde 503. Parei de brigar com
+isso.
+
+Decisão: **Basic Auth no nginx** (`auth_basic`), não no Traefik. Credenciais viajam
+como **texto puro sem `$`** (`STATS_USER`/`STATS_PASS`, passthrough por nome no compose,
+sem `${...}`); o `40-htpasswd.sh` gera o `.htpasswd` (bcrypt) no boot. Isso remove de
+vez a fragilidade de `$`+interpolação do compose.
+
+No teste local achei um segundo bug: `try_files $uri /index.html` no server do dashboard
+fazia **loop de redirecionamento interno → 500** (e o relatório nem existe antes do
+goaccess escrever, o que garantiria o loop). Troquei por `try_files $uri $uri/ =404`.
+Validado ponta a ponta num container: 401 sem senha, 401 senha errada, 200 + conteúdo
+com senha certa. Envs: `STATS_USER`/`STATS_PASS` (texto puro); `STATS_BASICAUTH` deletada.
