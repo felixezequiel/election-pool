@@ -173,6 +173,11 @@ Acesso e requisitos operacionais:
   autenticada tem token válido, e forjar exige o secret. `--ws-auth-expire=8760h` (1
   ano) evita expiração no meio do uso; o token é reassinado a cada boot do goaccess.
   `--origin` segue como defesa extra.
+- **O `--ws-url` PRECISA incluir a porta pública `:443`** (`wss://host:443/ws`). Sem a
+  porta, o client do goaccess monta a URL do WebSocket com a porta INTERNA (`--port=7890`)
+  e o navegador trava em "AUTHORIZING WEBSOCKET SESSION" (7890 não é exposto; só o 443 via
+  Traefik). Diagnosticado abrindo a página no navegador e lendo `socket.url` — dava
+  `wss://host:7890/ws` com readyState CONNECTING pra sempre.
 - Exige um registro **A `eleicao-status.fgti.cloud` → 31.97.243.112** no DNS antes
   do Traefik emitir o TLS (não há wildcard `*.fgti.cloud`).
 - Follow-up de ops: o `access_log` no volume cresce sem limite. Para o tráfego atual

@@ -194,6 +194,9 @@ services:
     volumes:
       - goaccess_logs:/var/log/goaccess:ro
       - goaccess_report:/report
+    # NB: o `--ws-url` PRECISA da porta pública `:443`. Sem ela, o client do goaccess
+    # usa a porta interna (--port=7890) na URL do WebSocket e o navegador fica preso
+    # em "AUTHORIZING WEBSOCKET SESSION" (7890 não é exposto; só 443 via Traefik).
     entrypoint:
       - /bin/sh
       - -c
@@ -208,7 +211,7 @@ services:
           -o /report/index.html \
           --real-time-html \
           --log-format=COMBINED \
-          --ws-url=wss://eleicao-status.fgti.cloud/ws \
+          --ws-url=wss://eleicao-status.fgti.cloud:443/ws \
           --port=7890 \
           --addr=0.0.0.0 \
           --origin=https://eleicao-status.fgti.cloud \

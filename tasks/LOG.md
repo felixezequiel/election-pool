@@ -1881,3 +1881,11 @@ O goaccess embute o JWT assinado no HTML (atrás do Basic Auth) e valida no hand
 `/ws`; sem token válido a conexão é recusada. `/ws` segue com `auth_basic off` (o JWT é a
 auth agora — o browser não manda Basic Auth no WS). Expiração de 1 ano + reassinatura a
 cada boot evita quebra no meio do uso.
+
+Quinto ato (o de verdade): mesmo assim travava em "AUTHORIZING WEBSOCKET SESSION". Abri a
+página no navegador (Playwright) e li o `socket.url`: o client do goaccess montava
+`wss://host:7890/ws?token=...` — a porta INTERNA. O `--ws-url` sem porta faz o client usar
+`--port` (7890), que não é exposta → readyState CONNECTING pra sempre. Fix: `--ws-url=wss://
+eleicao-status.fgti.cloud:443/ws` (porta pública). Testado na mão no navegador: `:7890` →
+ERROR/pendurado, `:443?access_token=<jwt>` → OPEN. Moral: server-side 101 no curl não prova
+o client — o bug estava na URL que o próprio client monta.
