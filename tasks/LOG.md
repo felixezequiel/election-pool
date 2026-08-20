@@ -1819,3 +1819,30 @@ igual ao `ElectorateSeriesChart`: `charts.css` só anima `.band`/`.center-line`/
 hidratar. Se alguém for orquestrar animação nesses dois gráficos, faça nos dois
 juntos — eles aparecem lado a lado na página e animar um só chama atenção para o
 gráfico errado.
+
+## Ops — analytics de tráfego com GoAccess (tempo real) · 2026-08-20
+
+Montei um dashboard de tráfego para responder "o site está sendo acessado?" sem
+usar Google Analytics nem script no navegador do leitor. Escolha deliberada:
+GoAccess lendo o `access_log` do nginx — **zero JS no cliente, zero terceiro, zero
+cookie/`localStorage`** (compatível com R3 e com "não existe usuário logado").
+Documentado em docs/02 §8.
+
+Só toca o deploy Coolify (`docker-compose.coolify.yml`, `infra/nginx/*`) — nada de
+TS, modelo, contrato ou UI; o backtest e o `pnpm verify` não se aplicam. Mudanças:
+(1) o nginx agora resolve o IP real do visitante via `X-Forwarded-For` (atrás do
+Traefik, sem isso todo hit vinha com o IP do proxy) e grava o `access_log` também
+num arquivo (volume `goaccess_logs`, formato `combined`), além do stdout do Coolify;
+(2) serviço novo `goaccess` (`allinurl/goaccess:1.11`) mantém um HTML que atualiza
+via WebSocket; (3) o HTML é servido e o WS é proxied pelo próprio nginx num host
+separado `eleicao-status.fgti.cloud`; (4) tzdata no nginx para o log sair em
+America/Sao_Paulo. Validei local: `nginx -t` OK na imagem buildada, `docker compose
+config` OK, fuso `-03`.
+
+O que o PRÓXIMO (ou o Felix) precisa saber para ir ao ar:
+- **DNS**: criar registro A `eleicao-status.fgti.cloud → 31.97.243.112` (não há
+  wildcard `*.fgti.cloud`); o Traefik só emite TLS depois que resolver.
+- **Env**: setar `STATS_BASICAUTH` no Coolify (par `user:hash` do Basic Auth; fora
+  do repo). Gotcha em aberto: se o Coolify mexer no `$` do hash, dobrar para `$$`.
+- Sem persistência de DB de propósito: o `access_log` no volume é a fonte; num
+  restart o goaccess re-parseia. Follow-up: rotação do log quando crescer.

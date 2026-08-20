@@ -11,6 +11,12 @@
 # caminhos do COPY começam em `infra/`.
 FROM nginx:1.27-alpine
 
+# tzdata + TZ: o `$time_local` do access_log (que o GoAccess parseia e exibe) sai
+# em America/Sao_Paulo, não em UTC. Consistente com a regra de fuso do projeto
+# (CLAUDE.md). A imagem alpine não traz tzdata por padrão.
+RUN apk add --no-cache tzdata
+ENV TZ=America/Sao_Paulo
+
 # Config do site (docs/02 §2/§7): serve <PUBLISH_BASE_DIR>/dist, segue o symlink do
 # swap atômico (T-13), fallback de marca, headers de cache/CORS do /data.json.
 COPY infra/nginx/election-pool.conf /etc/nginx/conf.d/default.conf

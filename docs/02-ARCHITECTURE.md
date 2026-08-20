@@ -132,3 +132,34 @@ O que importa monitorar aqui não é uptime — é **staleness e falha silencios
 `/var/lib/election-pool/dist`. Build da imagem em CI, deploy por `docker compose pull && up -d`.
 
 Migrations rodam no boot do `api`, antes dos jobs. Falha de migration impede o boot.
+
+## 8. Analytics de tráfego (GoAccess)
+
+Para saber se — e como — o site está sendo acessado, sem trair a privacidade do
+leitor. **Zero JavaScript no navegador do visitante, zero terceiro, zero cookie /
+`localStorage`.** A fonte é o próprio `access_log` do nginx; o visitante nem sabe
+que existe. Compatível com R3 e com "não existe usuário logado" (docs/00).
+
+Como funciona (só no deploy Coolify, `docker-compose.coolify.yml`):
+
+- O nginx grava o `access_log` num arquivo (volume `goaccess_logs`), em formato
+  `combined`, além do stdout que o Coolify já captura. Antes disso ele resolve o
+  **IP real** do visitante via `X-Forwarded-For` (`real_ip_*`) — atrás do Traefik,
+  sem isso todo acesso apareceria com o IP do proxy.
+- O serviço `goaccess` lê esse arquivo e mantém um relatório HTML que se atualiza
+  **em tempo real via WebSocket** (`--real-time-html`). Nada de rodar script: é só
+  abrir a URL. Sem persistência de DB — num restart ele re-parseia o arquivo, que é
+  a fonte da verdade.
+- Servido em `https://eleicao-status.fgti.cloud`, host **separado** do site (o
+  `server_name` do nginx separa o conteúdo; o WS é proxied para `goaccess:7890`).
+
+Acesso e requisitos operacionais:
+
+- **Fechado por Basic Auth** no Traefik (middleware `electionpool-statsauth`). Não é
+  login de produto — é infra de ops, como o painel do próprio Coolify. O par
+  `usuário:hash` vive na env **`STATS_BASICAUTH`** do Coolify (runtime), NUNCA no
+  repo. Gerar com `htpasswd -nbB <user> <senha>` (bcrypt) ou `openssl passwd -apr1`.
+- Exige um registro **A `eleicao-status.fgti.cloud` → 31.97.243.112** no DNS antes
+  do Traefik emitir o TLS (não há wildcard `*.fgti.cloud`).
+- Follow-up de ops: o `access_log` no volume cresce sem limite. Para o tráfego atual
+  demora, mas em algum momento precisa de rotação (logrotate ou cap de tamanho).

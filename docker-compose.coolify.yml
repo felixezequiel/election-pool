@@ -101,6 +101,10 @@ services:
       - '80'
     volumes:
       - publish_data:/var/lib/election-pool:ro
+      # access_log em arquivo lido pelo goaccess (nginx ESCREVE aqui).
+      - goaccess_logs:/var/log/goaccess
+      # relatório HTML gerado pelo goaccess (nginx só LÊ para servir).
+      - goaccess_report:/usr/share/nginx/goaccess-report:ro
     # Labels do Traefik ESCRITAS À MÃO. A variável mágica SERVICE_FQDN do Coolify não
     # anexou router ao serviço neste app compose (o nginx ficava sem nenhum label
     # traefik.* e o Traefik devolvia 404), então declaramos os routers explicitamente
@@ -135,12 +139,67 @@ services:
       - traefik.http.routers.electionpool-eleicoes-https.middlewares=gzip
       - traefik.http.routers.electionpool-eleicoes-https.service=electionpool
       - traefik.http.services.electionpool.loadbalancer.server.port=80
+      # ── Dashboard de tráfego GoAccess em eleicao-status.fgti.cloud ──
+      # Mesmo serviço nginx (port 80); o `server_name` do nginx separa o conteúdo.
+      # Acesso fechado por Basic Auth (middleware abaixo). O par user:hash vem da env
+      # STATS_BASICAUTH (fora do repo — ver docs/02 §8). EXIGE registro A
+      # eleicao-status.fgti.cloud -> 31.97.243.112 antes de emitir TLS.
+      - 'traefik.http.middlewares.electionpool-statsauth.basicauth.users=${STATS_BASICAUTH}'
+      - 'traefik.http.routers.electionpool-stats-http.entryPoints=http'
+      - 'traefik.http.routers.electionpool-stats-http.rule=Host(`eleicao-status.fgti.cloud`)'
+      - traefik.http.routers.electionpool-stats-http.middlewares=redirect-to-https
+      - traefik.http.routers.electionpool-stats-http.service=electionpool
+      - 'traefik.http.routers.electionpool-stats-https.entryPoints=https'
+      - 'traefik.http.routers.electionpool-stats-https.rule=Host(`eleicao-status.fgti.cloud`)'
+      - traefik.http.routers.electionpool-stats-https.tls=true
+      - traefik.http.routers.electionpool-stats-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.electionpool-stats-https.middlewares=gzip,electionpool-statsauth
+      - traefik.http.routers.electionpool-stats-https.service=electionpool
     # SEM healthcheck de conteúdo de propósito: o Traefik NÃO registra o backend de um
     # container cujo healthcheck do Docker não está "healthy", e o nginx responde 404
     # (a página de marca offline.html, com status preservado) enquanto o `api` ainda não
     # publicou o `dist`. Um healthcheck em `GET /` reprovaria esse estado VÁLIDO e
     # deixaria o Traefik sem backend ("no available server" + sem desafio ACME → sem
     # TLS). nginx é PID 1: se cair, o container cai e o restart cuida.
+
+  # ── goaccess: dashboard de tráfego em tempo real ────────────────────────────
+  # Lê o access_log que o nginx escreve em `goaccess_logs` e mantém um relatório
+  # HTML em `goaccess_report` que se atualiza sozinho via WebSocket (nada de rodar
+  # script). O nginx serve o HTML e faz proxy do WS (ver election-pool.conf). NÃO
+  # expõe porta nem tem label Traefik: só é alcançado através do nginx.
+  #
+  # Sem persistência de DB de propósito: o próprio access_log no volume é a fonte
+  # da verdade; num restart o goaccess re-parseia o arquivo inteiro e reconstrói o
+  # mesmo histórico. (Follow-up de ops: rotação do access_log quando crescer.)
+  goaccess:
+    image: allinurl/goaccess:1.11
+    restart: unless-stopped
+    networks: [coolify]
+    depends_on:
+      - nginx
+    environment:
+      TZ: America/Sao_Paulo
+    volumes:
+      - goaccess_logs:/var/log/goaccess:ro
+      - goaccess_report:/report
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        # O nginx cria o access.log ao subir; espera existir antes de parsear
+        # (o goaccess aborta se o arquivo não existe no start).
+        until [ -f /var/log/goaccess/access.log ]; do
+          echo "[goaccess] aguardando /var/log/goaccess/access.log ..."; sleep 1;
+        done
+        exec goaccess /var/log/goaccess/access.log \
+          -o /report/index.html \
+          --real-time-html \
+          --log-format=COMBINED \
+          --ws-url=wss://eleicao-status.fgti.cloud/ws \
+          --port=7890 \
+          --addr=0.0.0.0 \
+          --origin=https://eleicao-status.fgti.cloud
 
 networks:
   # Rede gerenciada pelo Coolify onde o Traefik e o Postgres compartilhado vivem.
@@ -157,3 +216,7 @@ volumes:
   # Fotos de candidatura — INSUMO do build, não saída; volume próprio (a árvore de
   # publicação é trocada por symlink a cada render).
   candidate_photos:
+  # access_log em arquivo (nginx escreve, goaccess lê) — fonte da verdade do dashboard.
+  goaccess_logs:
+  # Relatório HTML do goaccess (goaccess escreve, nginx serve).
+  goaccess_report:
