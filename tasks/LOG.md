@@ -1874,3 +1874,10 @@ pelo mantenedor do GoAccess; embutir cred na ws-url também não cola — browse
 Fix: `auth_basic off` no `location /ws` (a página HTML segue protegida; o WS fica limitado
 pela checagem `--origin` do goaccess + obscuridade). Hardening futuro se precisar fechar o
 stream: `--ws-auth` (JWT nativo) ou `--anonymize-ip`. Ver docs/02 §8.
+
+Quarto ato: o Felix pediu pra fechar o WS de verdade → ativei o **JWT nativo do GoAccess**
+(`--ws-auth=jwt`, secret HS256 na env `GOACCESS_WSAUTH_SECRET`, `--ws-auth-expire=8760h`).
+O goaccess embute o JWT assinado no HTML (atrás do Basic Auth) e valida no handshake do
+`/ws`; sem token válido a conexão é recusada. `/ws` segue com `auth_basic off` (o JWT é a
+auth agora — o browser não manda Basic Auth no WS). Expiração de 1 ano + reassinatura a
+cada boot evita quebra no meio do uso.

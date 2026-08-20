@@ -185,7 +185,12 @@ services:
     depends_on:
       - nginx
     environment:
-      TZ: America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      # Secret p/ assinar o JWT do WebSocket (--ws-auth=jwt). Passthrough por nome
+      # (sem `${...}`), texto puro sem `$`. Vem do Coolify (fora do repo). O goaccess
+      # embute o JWT assinado no HTML (que está atrás do Basic Auth) e valida no
+      # handshake do /ws — só quem carregou a página autenticada tem token válido.
+      - GOACCESS_WSAUTH_SECRET
     volumes:
       - goaccess_logs:/var/log/goaccess:ro
       - goaccess_report:/report
@@ -206,7 +211,9 @@ services:
           --ws-url=wss://eleicao-status.fgti.cloud/ws \
           --port=7890 \
           --addr=0.0.0.0 \
-          --origin=https://eleicao-status.fgti.cloud
+          --origin=https://eleicao-status.fgti.cloud \
+          --ws-auth=jwt \
+          --ws-auth-expire=8760h
 
 networks:
   # Rede gerenciada pelo Coolify onde o Traefik e o Postgres compartilhado vivem.
